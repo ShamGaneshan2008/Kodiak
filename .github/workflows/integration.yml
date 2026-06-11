@@ -1,0 +1,362 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main, develop]
+  schedule:
+    # Run nightly at 02:00 UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: "Target repository to run integration against (owner/repo)"
+        required: false
+        type: string
+        default: "kodiak-dev/integration-test-repo"
+      test_suite:
+        description: "Test suite to run"
+        required: false
+        type: choice
+        options:
+          - all
+          - github
+          - rag
+          - agents
+          - memory
+        default: all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false  # Never cancel integration tests mid-run
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_VERSION: "0.4.0"
+  TEST_TIMEOUT: 300
+
+jobs:
+  # ─── GitHub Integration Tests ───────────────────────────────────────────────
+  test-github-integration:
+    name: GitHub Integration
+    runs-on: ubuntu-latest
+    if: >
+      github.event.inputs.test_suite == 'all' ||
+      github.event.inputs.test_suite == 'github' ||
+      github.event.inputs.test_suite == ''
+
+    environment: integration-test
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: kodiak_integration
+          POSTGRES_USER: kodiak
+          POSTGRES_PASSWORD: ${{ secrets.TEST_DB_PASSWORD }}
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Run database migrations
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://kodiak:${{ secrets.TEST_DB_PASSWORD }}@localhost:5432/kodiak_integration
+
+      - name: Run GitHub integration tests
+        run: |
+          pytest tests/integration/test_github_integration.py \
+            -v \
+            --timeout=${{ env.TEST_TIMEOUT }} \
+            --junitxml=reports/junit-github.xml \
+            -m "integration and github"
+        env:
+          KODIAK_ENV: test
+          DATABASE_URL: postgresql+asyncpg://kodiak:${{ secrets.TEST_DB_PASSWORD }}@localhost:5432/kodiak_integration
+          REDIS_URL: redis://localhost:6379/0
+          GITHUB_APP_ID: ${{ secrets.TEST_GITHUB_APP_ID }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_APP_PRIVATE_KEY }}
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.TEST_GITHUB_WEBHOOK_SECRET }}
+          TEST_REPOSITORY: ${{ github.event.inputs.repository || 'kodiak-dev/integration-test-repo' }}
+          OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: github-integration-results
+          path: reports/junit-github.xml
+
+  # ─── RAG Pipeline Integration Tests ─────────────────────────────────────────
+  test-rag-pipeline:
+    name: RAG Pipeline
+    runs-on: ubuntu-latest
+    if: >
+      github.event.inputs.test_suite == 'all' ||
+      github.event.inputs.test_suite == 'rag' ||
+      github.event.inputs.test_suite == ''
+
+    services:
+      chromadb:
+        image: chromadb/chroma:latest
+        ports: ["8001:8000"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Prepare test repository fixture
+        run: |
+          git clone --depth=1 https://github.com/kodiak-dev/integration-test-repo.git \
+            /tmp/test-repo
+
+      - name: Run RAG pipeline tests
+        run: |
+          pytest tests/integration/test_rag_pipeline.py \
+            -v \
+            --timeout=${{ env.TEST_TIMEOUT }} \
+            --junitxml=reports/junit-rag.xml \
+            -m "integration and rag"
+        env:
+          KODIAK_ENV: test
+          CHROMA_HOST: localhost
+          CHROMA_PORT: 8001
+          OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
+          TEST_REPO_PATH: /tmp/test-repo
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rag-integration-results
+          path: reports/junit-rag.xml
+
+  # ─── Agent End-to-End Tests ──────────────────────────────────────────────────
+  test-agent-e2e:
+    name: Agent E2E
+    runs-on: ubuntu-latest
+    if: >
+      github.event.inputs.test_suite == 'all' ||
+      github.event.inputs.test_suite == 'agents' ||
+      github.event.inputs.test_suite == ''
+
+    environment: integration-test
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: kodiak_integration
+          POSTGRES_USER: kodiak
+          POSTGRES_PASSWORD: ${{ secrets.TEST_DB_PASSWORD }}
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+
+      chromadb:
+        image: chromadb/chroma:latest
+        ports: ["8001:8000"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Run migrations
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://kodiak:${{ secrets.TEST_DB_PASSWORD }}@localhost:5432/kodiak_integration
+
+      - name: Start Kodiak API server
+        run: |
+          uvicorn kodiak.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          curl --retry 5 --retry-delay 2 http://localhost:8000/health
+        env:
+          KODIAK_ENV: test
+          DATABASE_URL: postgresql+asyncpg://kodiak:${{ secrets.TEST_DB_PASSWORD }}@localhost:5432/kodiak_integration
+          REDIS_URL: redis://localhost:6379/0
+          CHROMA_HOST: localhost
+          CHROMA_PORT: 8001
+          OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
+
+      - name: Run agent E2E tests
+        run: |
+          pytest tests/e2e/ \
+            -v \
+            --timeout=600 \
+            --junitxml=reports/junit-e2e.xml \
+            -m "e2e"
+        env:
+          KODIAK_API_URL: http://localhost:8000
+          KODIAK_API_TOKEN: ${{ secrets.TEST_API_TOKEN }}
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-results
+          path: reports/junit-e2e.xml
+
+  # ─── Memory System Tests ─────────────────────────────────────────────────────
+  test-memory:
+    name: Memory System
+    runs-on: ubuntu-latest
+    if: >
+      github.event.inputs.test_suite == 'all' ||
+      github.event.inputs.test_suite == 'memory' ||
+      github.event.inputs.test_suite == ''
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: kodiak_integration
+          POSTGRES_USER: kodiak
+          POSTGRES_PASSWORD: ${{ secrets.TEST_DB_PASSWORD }}
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+
+      chromadb:
+        image: chromadb/chroma:latest
+        ports: ["8001:8000"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Run migrations
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://kodiak:${{ secrets.TEST_DB_PASSWORD }}@localhost:5432/kodiak_integration
+
+      - name: Run memory integration tests
+        run: |
+          pytest tests/integration/test_memory.py \
+            -v \
+            --timeout=${{ env.TEST_TIMEOUT }} \
+            --junitxml=reports/junit-memory.xml \
+            -m "integration and memory"
+        env:
+          KODIAK_ENV: test
+          DATABASE_URL: postgresql+asyncpg://kodiak:${{ secrets.TEST_DB_PASSWORD }}@localhost:5432/kodiak_integration
+          REDIS_URL: redis://localhost:6379/0
+          CHROMA_HOST: localhost
+          CHROMA_PORT: 8001
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: memory-integration-results
+          path: reports/junit-memory.xml
+
+  # ─── Integration Summary ─────────────────────────────────────────────────────
+  integration-summary:
+    name: Integration Summary
+    runs-on: ubuntu-latest
+    needs: [test-github-integration, test-rag-pipeline, test-agent-e2e, test-memory]
+    if: always()
+
+    steps:
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          path: reports/
+
+      - name: Publish test summary
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: "reports/**/*.xml"
+          check_name: "Integration Test Results"
+          fail_on_failure: true
+          include_passed: true
+
+      - name: Post summary
+        run: |
+          echo "## Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Suite | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| GitHub Integration | ${{ needs.test-github-integration.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| RAG Pipeline       | ${{ needs.test-rag-pipeline.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Agent E2E          | ${{ needs.test-agent-e2e.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Memory System      | ${{ needs.test-memory.result }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: contains(needs.*.result, 'failure')
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          status: failure
+          title: "❌ Kodiak Integration Tests Failed"
+          description: "One or more integration test suites failed. Check the workflow for details."
+          color: 0xff4444
+          url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

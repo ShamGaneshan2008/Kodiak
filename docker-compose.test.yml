@@ -1,0 +1,55 @@
+services:
+
+  postgres_test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kodiak
+      POSTGRES_PASSWORD: kodiak
+      POSTGRES_DB: kodiak_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kodiak -d kodiak_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+    networks:
+      - kodiak_test
+
+  redis_test:
+    image: redis:7-alpine
+    command: redis-server --save "" --loglevel warning
+    ports:
+      - "6380:6379"
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    networks:
+      - kodiak_test
+
+  chroma_test:
+    image: chromadb/chroma:latest
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+      ALLOW_RESET: "true"
+    ports:
+      - "8001:8000"
+    tmpfs:
+      - /chroma/chroma
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/api/v1/heartbeat || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks:
+      - kodiak_test
+
+networks:
+  kodiak_test:
+    driver: bridge

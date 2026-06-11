@@ -1,0 +1,254 @@
+from pathlib import Path
+
+folders = [
+    ".github/workflows",
+    ".github/ISSUE_TEMPLATE",
+    "docker/sandbox",
+    "k8s/base",
+    "k8s/overlays",
+    "alembic/versions",
+
+    "kodiak/config",
+    "kodiak/api/middleware",
+    "kodiak/api/routers/webhooks",
+    "kodiak/api/schemas",
+
+    "kodiak/auth",
+
+    "kodiak/db/models",
+
+    "kodiak/orchestration",
+
+    "kodiak/agents",
+
+    "kodiak/llm/providers",
+    "kodiak/llm/prompts",
+
+    "kodiak/memory",
+
+    "kodiak/rag/parsers",
+
+    "kodiak/sandbox",
+
+    "kodiak/github",
+
+    "kodiak/workers/tasks",
+
+    "kodiak/events/handlers",
+
+    "kodiak/plugins/builtin",
+
+    "kodiak/learning",
+
+    "kodiak/evaluation/benchmarks",
+
+    "kodiak/monitoring",
+
+    "kodiak/security",
+
+    "kodiak/utils",
+
+    "tests/unit",
+    "tests/integration",
+    "tests/e2e",
+    "tests/fixtures",
+
+    "docs/architecture",
+    "docs/api",
+    "docs/runbooks",
+    "docs/adr",
+]
+
+files = [
+    "pyproject.toml",
+    "Makefile",
+    ".env.example",
+    ".env.test",
+    "docker-compose.yml",
+    "docker-compose.test.yml",
+    "README.md",
+    "ARCHITECTURE.md",
+
+    ".github/CODEOWNERS",
+    ".github/pull_request_template.md",
+
+    ".github/workflows/ci.yml",
+    ".github/workflows/security.yml",
+    ".github/workflows/release.yml",
+    ".github/workflows/integration.yml",
+
+    "docker/Dockerfile.api",
+    "docker/Dockerfile.worker",
+    "docker/Dockerfile.sandbox",
+    "docker/Dockerfile.indexer",
+
+    "alembic/env.py",
+    "alembic/script.py.mako",
+
+    "kodiak/__init__.py",
+    "kodiak/main.py",
+
+    "kodiak/config/settings.py",
+    "kodiak/config/logging.py",
+    "kodiak/config/tracing.py",
+    "kodiak/config/metrics.py",
+    "kodiak/config/feature_flags.py",
+
+    "kodiak/api/dependencies.py",
+
+    "kodiak/api/middleware/auth.py",
+    "kodiak/api/middleware/rate_limit.py",
+    "kodiak/api/middleware/request_id.py",
+    "kodiak/api/middleware/cors.py",
+    "kodiak/api/middleware/audit.py",
+
+    "kodiak/api/routers/health.py",
+    "kodiak/api/routers/auth.py",
+    "kodiak/api/routers/tasks.py",
+    "kodiak/api/routers/repositories.py",
+    "kodiak/api/routers/agents.py",
+    "kodiak/api/routers/memory.py",
+    "kodiak/api/routers/plugins.py",
+    "kodiak/api/routers/approvals.py",
+    "kodiak/api/routers/webhooks/github.py",
+
+    "kodiak/auth/jwt.py",
+    "kodiak/auth/oauth.py",
+    "kodiak/auth/permissions.py",
+    "kodiak/auth/api_keys.py",
+    "kodiak/auth/audit.py",
+
+    "kodiak/db/session.py",
+    "kodiak/db/base.py",
+
+    "kodiak/db/models/user.py",
+    "kodiak/db/models/repository.py",
+    "kodiak/db/models/task.py",
+    "kodiak/db/models/agent_run.py",
+    "kodiak/db/models/memory.py",
+    "kodiak/db/models/pull_request.py",
+    "kodiak/db/models/approval.py",
+    "kodiak/db/models/plugin.py",
+    "kodiak/db/models/learning.py",
+    "kodiak/db/models/audit.py",
+
+    "kodiak/orchestration/supervisor.py",
+    "kodiak/orchestration/state.py",
+    "kodiak/orchestration/task_planner.py",
+    "kodiak/orchestration/scheduler.py",
+    "kodiak/orchestration/approval_gate.py",
+    "kodiak/orchestration/reflection_loop.py",
+    "kodiak/orchestration/context_manager.py",
+    "kodiak/orchestration/tool_router.py",
+
+    "kodiak/agents/base.py",
+    "kodiak/agents/planner.py",
+    "kodiak/agents/research.py",
+    "kodiak/agents/coder.py",
+    "kodiak/agents/reviewer.py",
+    "kodiak/agents/tester.py",
+    "kodiak/agents/debugger.py",
+    "kodiak/agents/reflection.py",
+    "kodiak/agents/repository.py",
+    "kodiak/agents/retrieval.py",
+    "kodiak/agents/git.py",
+    "kodiak/agents/memory_agent.py",
+    "kodiak/agents/learning.py",
+    "kodiak/agents/evaluation.py",
+
+    "kodiak/llm/client.py",
+    "kodiak/llm/router.py",
+    "kodiak/llm/structured_output.py",
+    "kodiak/llm/token_counter.py",
+
+    "kodiak/llm/providers/openai.py",
+    "kodiak/llm/providers/qwen.py",
+    "kodiak/llm/providers/deepseek.py",
+    "kodiak/llm/providers/local.py",
+
+    "kodiak/memory/working.py",
+    "kodiak/memory/episodic.py",
+    "kodiak/memory/semantic.py",
+    "kodiak/memory/procedural.py",
+    "kodiak/memory/consolidation.py",
+
+    "kodiak/rag/indexer.py",
+    "kodiak/rag/chunker.py",
+    "kodiak/rag/embedder.py",
+    "kodiak/rag/vector_store.py",
+    "kodiak/rag/symbol_index.py",
+    "kodiak/rag/call_graph.py",
+    "kodiak/rag/dependency_graph.py",
+    "kodiak/rag/retriever.py",
+    "kodiak/rag/reranker.py",
+    "kodiak/rag/context_packer.py",
+
+    "kodiak/rag/parsers/base.py",
+    "kodiak/rag/parsers/python.py",
+    "kodiak/rag/parsers/javascript.py",
+    "kodiak/rag/parsers/java.py",
+    "kodiak/rag/parsers/go.py",
+    "kodiak/rag/parsers/rust.py",
+    "kodiak/rag/parsers/markdown.py",
+
+    "kodiak/sandbox/executor.py",
+    "kodiak/sandbox/docker_backend.py",
+    "kodiak/sandbox/resource_limits.py",
+    "kodiak/sandbox/output_parser.py",
+    "kodiak/sandbox/file_sync.py",
+
+    "kodiak/github/client.py",
+    "kodiak/github/webhook_handler.py",
+    "kodiak/github/issue_parser.py",
+    "kodiak/github/pr_manager.py",
+    "kodiak/github/code_review.py",
+    "kodiak/github/installation.py",
+
+    "kodiak/workers/celery_app.py",
+    "kodiak/workers/beat_schedule.py",
+
+    "kodiak/events/bus.py",
+    "kodiak/events/types.py",
+    "kodiak/events/publishers.py",
+
+    "kodiak/plugins/loader.py",
+    "kodiak/plugins/registry.py",
+    "kodiak/plugins/interface.py",
+    "kodiak/plugins/sandbox.py",
+
+    "kodiak/learning/feedback_collector.py",
+    "kodiak/learning/pattern_extractor.py",
+    "kodiak/learning/pattern_store.py",
+    "kodiak/learning/reward_model.py",
+    "kodiak/learning/cross_repo_sync.py",
+
+    "kodiak/evaluation/harness.py",
+    "kodiak/evaluation/metrics.py",
+    "kodiak/evaluation/reporter.py",
+
+    "kodiak/monitoring/health.py",
+    "kodiak/monitoring/metrics_registry.py",
+    "kodiak/monitoring/traces.py",
+    "kodiak/monitoring/alerts.py",
+
+    "kodiak/security/secrets.py",
+    "kodiak/security/code_scanner.py",
+    "kodiak/security/output_filter.py",
+    "kodiak/security/policy.py",
+    "kodiak/security/threat_model.py",
+
+    "kodiak/utils/retry.py",
+    "kodiak/utils/pagination.py",
+    "kodiak/utils/diff.py",
+    "kodiak/utils/git_utils.py",
+    "kodiak/utils/async_utils.py",
+]
+
+for folder in folders:
+    Path(folder).mkdir(parents=True, exist_ok=True)
+
+for file in files:
+    Path(file).parent.mkdir(parents=True, exist_ok=True)
+    Path(file).touch(exist_ok=True)
+
+print(f"Created {len(folders)} folders and {len(files)} files.")
