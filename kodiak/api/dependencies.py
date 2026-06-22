@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any
+from typing import Annotated
 
 import structlog
 from fastapi import Depends, Header, HTTPException, Query, status
@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from kodiak.auth.api_keys import lookup_api_key
 from kodiak.auth.jwt import verify_access_token
-from kodiak.config.settings import get_settings
 from kodiak.db.models.user import User
 from kodiak.db.session import get_db_session
 
@@ -25,7 +24,6 @@ async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
     x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
 ) -> User:
-    settings = get_settings()
 
     if x_api_key:
         api_key = await lookup_api_key(session, x_api_key)

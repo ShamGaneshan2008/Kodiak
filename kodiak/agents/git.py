@@ -61,7 +61,9 @@ def build_commit_plan(changes: GitChangeSet, task_title: str) -> dict[str, str |
         ]
     )
     footers = []
-    if any(change.area in {"auth", "security", "db", "docker", ".github"} for change in changes.files):
+    if any(
+        change.area in {"auth", "security", "db", "docker", ".github"} for change in changes.files
+    ):
         footers.append("Review-sensitive: true")
     return {"subject": subject, "body": body, "footer": footers}
 

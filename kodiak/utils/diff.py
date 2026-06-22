@@ -4,7 +4,6 @@ from collections import Counter
 
 from kodiak.utils.git_utils import GitChangeSet, GitFileChange
 
-
 RISKY_AREAS = {
     ".github": "automation",
     "alembic": "database migration",

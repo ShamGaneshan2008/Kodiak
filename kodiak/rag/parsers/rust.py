@@ -1,5 +1,5 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 from kodiak.rag.parsers.base import CodeSymbol, Parser
 
@@ -13,5 +13,7 @@ class RustParser(Parser):
         for index, line in enumerate(source.splitlines(), start=1):
             match = self.pattern.match(line)
             if match:
-                symbols.append(CodeSymbol(name=match.group(1), kind="symbol", path=str(path), line=index))
+                symbols.append(
+                    CodeSymbol(name=match.group(1), kind="symbol", path=str(path), line=index)
+                )
         return symbols

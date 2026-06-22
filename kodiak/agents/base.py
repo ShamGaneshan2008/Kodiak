@@ -111,8 +111,7 @@ class BaseAgent(ABC):
             task_duration_seconds.labels(agent=self.role).observe(time.monotonic() - start)
 
     @abstractmethod
-    async def _run(self, input_: AgentInput) -> AgentOutput:
-        ...
+    async def _run(self, input_: AgentInput) -> AgentOutput: ...
 
     def _make_output(
         self,

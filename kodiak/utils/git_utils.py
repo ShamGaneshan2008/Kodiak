@@ -56,8 +56,7 @@ def run_git(args: list[str], cwd: str | Path = ".") -> str:
         cwd=Path(cwd),
         check=True,
         text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     return result.stdout.strip()
 

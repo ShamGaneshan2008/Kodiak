@@ -45,9 +45,7 @@ class StructuredOutputParser:
                     {"role": "assistant", "content": last_raw},
                     {
                         "role": "user",
-                        "content": _RETRY_PROMPT.format(
-                            previous=last_raw[:500], error=last_error
-                        ),
+                        "content": _RETRY_PROMPT.format(previous=last_raw[:500], error=last_error),
                     },
                 ]
 
@@ -78,9 +76,7 @@ class StructuredOutputParser:
         )
 
 
-def _try_parse(
-    raw: str, required_keys: list[str] | None
-) -> tuple[dict[str, Any] | None, str]:
+def _try_parse(raw: str, required_keys: list[str] | None) -> tuple[dict[str, Any] | None, str]:
     clean = raw.strip()
     if clean.startswith("```"):
         parts = clean.split("\n", 1)

@@ -36,4 +36,9 @@ def run() -> None:
     import uvicorn
 
     settings = get_settings()
-    uvicorn.run("kodiak.main:app", host=settings.api_host, port=settings.api_port, reload=not settings.is_test)
+    uvicorn.run(
+        "kodiak.main:app",
+        host=settings.api_host,
+        port=settings.api_port,
+        reload=not settings.is_test,
+    )

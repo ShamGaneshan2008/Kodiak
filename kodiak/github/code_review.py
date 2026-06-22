@@ -38,5 +38,7 @@ def summarize_review(changes: GitChangeSet) -> dict:
     findings = review_changes(changes)
     return {
         "findings": [asdict(finding) for finding in findings],
-        "requires_human_attention": any(finding.severity in {"high", "medium"} for finding in findings),
+        "requires_human_attention": any(
+            finding.severity in {"high", "medium"} for finding in findings
+        ),
     }

@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import secrets
 import uuid
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
+from kodiak.api.schemas.user import RefreshRequest, TokenResponse, UserCreate, UserResponse
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kodiak.api.dependencies import CurrentUser, get_db_session
-from kodiak.api.schemas.user import RefreshRequest, TokenResponse, UserCreate, UserResponse
 from kodiak.auth.jwt import create_access_token, create_refresh_token, verify_refresh_token
 from kodiak.auth.oauth import exchange_code, fetch_github_user, fetch_primary_email
 from kodiak.db.models.user import User
@@ -48,7 +47,11 @@ async def login(
     result = await session.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
-    if user is None or not user.hashed_password or not _pwd.verify(body.password, user.hashed_password):
+    if (
+        user is None
+        or not user.hashed_password
+        or not _pwd.verify(body.password, user.hashed_password)
+    ):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Account disabled")
@@ -97,9 +100,7 @@ async def github_callback(
         logger.warning("github_oauth.failed", error=str(exc))
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="GitHub OAuth failed") from exc
 
-    result = await session.execute(
-        select(User).where(User.github_user_id == gh_user["id"])
-    )
+    result = await session.execute(select(User).where(User.github_user_id == gh_user["id"]))
     user = result.scalar_one_or_none()
 
     if user is None:

@@ -5,6 +5,10 @@ from functools import lru_cache
 from typing import Any
 
 import structlog
+from kodiak.llm.cost_optimizer import CostOptimizer
+from kodiak.llm.fallback import FallbackChain
+from kodiak.llm.providers.anthropic import AnthropicProvider
+from kodiak.llm.providers.base import LLMMessage, ModelTier
 
 from kodiak.config.feature_flags import get_feature_flags
 from kodiak.config.metrics import (
@@ -13,10 +17,6 @@ from kodiak.config.metrics import (
     llm_tokens_used_total,
 )
 from kodiak.config.settings import LLMProvider, get_settings
-from kodiak.llm.cost_optimizer import CostOptimizer
-from kodiak.llm.fallback import FallbackChain
-from kodiak.llm.providers.anthropic import AnthropicProvider
-from kodiak.llm.providers.base import LLMMessage, ModelTier
 from kodiak.llm.providers.openai import OpenAIProvider
 
 logger = structlog.get_logger(__name__)

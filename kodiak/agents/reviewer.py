@@ -92,7 +92,11 @@ class ReviewerAgent(BaseAgent):
     ) -> str:
         parts = [f"## Original task\n{instruction}"]
         if task_plan:
-            parts.append(f"## Acceptance criteria\n{json.dumps(task_plan.get('acceptance_criteria', []), indent=2)}")
+            criteria = json.dumps(
+                task_plan.get("acceptance_criteria", []),
+                indent=2,
+            )
+            parts.append(f"## Acceptance criteria\n{criteria}")
         if diff:
             parts.append(f"## Diff\n```diff\n{diff}\n```")
         if code_changes:

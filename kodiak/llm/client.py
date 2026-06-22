@@ -52,7 +52,6 @@ class LLMClient:
         temperature: float = 0.2,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        from kodiak.llm.providers.base import ModelTier
 
         tier = _resolve_tier(model_preference)
         llm_messages = _coerce_messages(messages)

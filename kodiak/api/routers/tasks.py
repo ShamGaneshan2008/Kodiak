@@ -3,10 +3,6 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from kodiak.api.dependencies import CurrentUser, PaginationDep, get_db_session
 from kodiak.api.schemas.common import PaginatedResponse
 from kodiak.api.schemas.task import (
     TaskApprove,
@@ -16,6 +12,10 @@ from kodiak.api.schemas.task import (
     TaskUpdate,
 )
 from kodiak.db.models.project import Project
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from kodiak.api.dependencies import CurrentUser, PaginationDep, get_db_session
 from kodiak.db.models.task import Task, TaskStatus
 
 router = APIRouter(prefix="/projects/{project_id}/tasks", tags=["tasks"])
@@ -45,6 +45,7 @@ async def create_task(
     # Dispatch to Celery — import here to avoid circular at module load
     try:
         from kodiak.workers.tasks.run_task import run_task_async
+
         celery_result = run_task_async.delay(str(task.id), str(project_id))
         task.celery_task_id = celery_result.id
     except Exception:

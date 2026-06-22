@@ -14,13 +14,14 @@ class PullRequestDraft:
     draft: bool = True
 
 
-def draft_pull_request(changes: GitChangeSet, commit_subject: str, testing: list[str] | None = None) -> PullRequestDraft:
+def draft_pull_request(
+    changes: GitChangeSet, commit_subject: str, testing: list[str] | None = None
+) -> PullRequestDraft:
     testing = testing or ["Not run"]
     findings = review_changes(changes)
-    risk_lines = [
-        f"- `{finding.path}`: {finding.message}"
-        for finding in findings
-    ] or ["- Low: no sensitive areas detected by local heuristics."]
+    risk_lines = [f"- `{finding.path}`: {finding.message}" for finding in findings] or [
+        "- Low: no sensitive areas detected by local heuristics."
+    ]
 
     body = "\n".join(
         [
