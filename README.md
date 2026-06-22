@@ -1,7 +1,6 @@
 <div align="center">
 
-<img src="Kodiak_logo.jpeg" alt="Kodiak" width="160" />
-
+<img src="images/kodiaklogo-removebg-preview.png" alt="Kodiak" width="300" />
 <h1>
   <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=700&size=40&pause=1000&color=E8E8E8&center=true&vCenter=true&width=500&lines=kodiak" alt="kodiak" />
 </h1>
