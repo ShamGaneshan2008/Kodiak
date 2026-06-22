@@ -1,0 +1,5 @@
+FROM python:3.12-slim
+RUN useradd -m sandbox
+USER sandbox
+WORKDIR /workspace
+CMD ["python", "--version"]
