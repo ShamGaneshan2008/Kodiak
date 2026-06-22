@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset=" images/kodiaklogo.png">
-  <img src="Kodiak_logo.jpeg" alt="Kodiak" width="1" />
+  <source media="(prefers-color-scheme: dark)" srcset="images/kodiaklogo.png">
+  <img src="Kodiak_logo.jpeg" alt="Kodiak" width="400" />
 </picture>
 
 <br/><br/>
