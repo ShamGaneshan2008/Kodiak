@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/kodiaklogo.png">
-  <img src="Kodiak_logo.jpeg" alt="Kodiak" width="400" />
+  <img src="Kodiak_logo.jpeg" alt="Kodiak" width="200" />
 </picture>
 
 <br/><br/>
