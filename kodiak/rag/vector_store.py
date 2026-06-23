@@ -21,10 +21,7 @@ from kodiak.rag.chunker import Chunk
 
 logger = structlog.get_logger(__name__)
 
-# ---------------------------------------------------------------------------
 # Data types
-# ---------------------------------------------------------------------------
-
 
 @dataclass
 class SearchResult:
@@ -46,12 +43,7 @@ class UpsertStats:
     skipped: int
     collection: str
 
-
-# ---------------------------------------------------------------------------
 # Vector Store
-# ---------------------------------------------------------------------------
-
-
 class VectorStore:
     """
     Async wrapper around ChromaDB for storing and retrieving code chunk embeddings.
@@ -79,9 +71,8 @@ class VectorStore:
         self._loop = asyncio.get_event_loop()
         self._collections: dict[str, chromadb.Collection] = {}
 
-    # ------------------------------------------------------------------
+
     # Collection management
-    # ------------------------------------------------------------------
 
     def _collection_name(self, repo_id: str) -> str:
         # ChromaDB collection names must be 3-63 chars, alphanumeric + underscores
@@ -102,9 +93,7 @@ class VectorStore:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
 
-    # ------------------------------------------------------------------
     # Upsert
-    # ------------------------------------------------------------------
 
     async def upsert_chunks(
         self,
@@ -161,9 +150,7 @@ class VectorStore:
             collection=collection.name,
         )
 
-    # ------------------------------------------------------------------
     # Search
-    # ------------------------------------------------------------------
 
     async def search(
         self,
@@ -243,9 +230,7 @@ class VectorStore:
         merged.sort(key=lambda r: r.score, reverse=True)
         return merged[:top_k]
 
-    # ------------------------------------------------------------------
     # Deletion
-    # ------------------------------------------------------------------
 
     async def delete_file(self, repo_id: str, file_path: str) -> int:
         """Delete all chunks belonging to a specific file."""
@@ -272,9 +257,7 @@ class VectorStore:
         except Exception as exc:
             logger.warning("vector_store_delete_repo_failed", repo_id=repo_id, error=str(exc))
 
-    # ------------------------------------------------------------------
     # Stats / Health
-    # ------------------------------------------------------------------
 
     async def count(self, repo_id: str) -> int:
         collection = self._get_or_create_collection(repo_id)
@@ -292,9 +275,7 @@ class VectorStore:
             logger.error("vector_store_health_check_failed", error=str(exc))
             return False
 
-    # ------------------------------------------------------------------
     # Helpers
-    # ------------------------------------------------------------------
 
     def _build_where(self, filters: dict[str, Any]) -> dict:
         """Convert simple key=value filter dict to ChromaDB where clause."""
