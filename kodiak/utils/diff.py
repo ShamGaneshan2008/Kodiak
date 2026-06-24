@@ -1,56 +1,74 @@
-from __future__ import annotations
+import difflib
+from dataclasses import dataclass, field
 
-from collections import Counter
-
-from kodiak.utils.git_utils import GitChangeSet, GitFileChange
-
-RISKY_AREAS = {
-    ".github": "automation",
-    "alembic": "database migration",
-    "auth": "authentication",
-    "config": "configuration",
-    "db": "database",
-    "docker": "container/runtime",
-    "security": "security",
-}
+from pydantic import BaseModel
 
 
-def summarize_changes(changes: GitChangeSet) -> dict:
-    area_counts = Counter(change.area for change in changes.files)
-    return {
-        "branch": changes.branch,
-        "files_changed": len(changes.files),
-        "additions": changes.total_additions,
-        "deletions": changes.total_deletions,
-        "areas": dict(area_counts.most_common()),
-        "risky_files": risky_files(changes.files),
-    }
+@dataclass(frozen=True)
+class DiffStatistics:
+    added_lines: int = 0
+    removed_lines: int = 0
+    changed_files: int = 0
 
 
-def risky_files(files: tuple[GitFileChange, ...] | list[GitFileChange]) -> list[dict[str, str]]:
-    risks: list[dict[str, str]] = []
-    for change in files:
-        area = change.area
-        if area in RISKY_AREAS:
-            risks.append({"path": change.path, "reason": RISKY_AREAS[area]})
-    return risks
+class DiffResult(BaseModel):
+    is_different: bool
+    statistics: DiffStatistics = field(default_factory=DiffStatistics)
+    unified_diff: str = ""
 
 
-def human_summary(changes: GitChangeSet) -> str:
-    if changes.is_empty:
-        return "No local changes."
-    areas = ", ".join(changes.areas[:6])
-    if len(changes.areas) > 6:
-        areas += f", and {len(changes.areas) - 6} more"
-    return (
-        f"{len(changes.files)} files changed across {areas}; "
-        f"+{changes.total_additions}/-{changes.total_deletions}."
+def unified_diff(
+    old_text: str,
+    new_text: str,
+    old_name: str = "original",
+    new_name: str = "modified",
+    context_lines: int = 3,
+) -> DiffResult:
+    """Generate a unified diff between two strings."""
+    old_lines = old_text.splitlines(keepends=True)
+    new_lines = new_text.splitlines(keepends=True)
+
+    diff_lines = list(
+        difflib.unified_diff(
+            old_lines,
+            new_lines,
+            fromfile=old_name,
+            tofile=new_name,
+            n=context_lines,
+        )
+    )
+
+    diff_text = "".join(diff_lines)
+    stats = diff_statistics(old_text, new_text)
+
+    return DiffResult(
+        is_different=len(diff_lines) > 0,
+        statistics=stats,
+        unified_diff=diff_text,
     )
 
 
-def changed_files(diff: str) -> list[str]:
-    files: list[str] = []
-    for line in diff.splitlines():
-        if line.startswith("diff --git") and " b/" in line:
-            files.append(line.split(" b/", 1)[1])
-    return files
+def compare_text(old_text: str, new_text: str) -> bool:
+    """Check if two text strings are exactly different."""
+    return old_text != new_text
+
+
+def diff_statistics(old_text: str, new_text: str) -> DiffStatistics:
+    """Calculate line-level addition and removal statistics."""
+    old_lines = old_text.splitlines()
+    new_lines = new_text.splitlines()
+
+    matcher = difflib.SequenceMatcher(None, old_lines, new_lines)
+    added = 0
+    removed = 0
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "replace":
+            removed += i2 - i1
+            added += j2 - j1
+        elif tag == "delete":
+            removed += i2 - i1
+        elif tag == "insert":
+            added += j2 - j1
+
+    return DiffStatistics(added_lines=added, removed_lines=removed, changed_files=1)
