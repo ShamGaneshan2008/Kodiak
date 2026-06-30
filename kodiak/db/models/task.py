@@ -13,7 +13,12 @@ from sqlalchemy import Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from kodiak.db.base import KodiakBase, SoftDeleteMixin
+from kodiak.db.base import (
+    KodiakBase,
+    SoftDeleteMixin,
+    UUIDMixin,
+    TimestampMixin,
+)
 
 
 class TaskStatus(str, enum.Enum):
@@ -43,7 +48,7 @@ class TaskSource(str, enum.Enum):
     WEBHOOK = "webhook"
 
 
-class Task(SoftDeleteMixin, KodiakBase):
+class Task(KodiakBase, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "tasks"
 
     # Ownership
@@ -53,6 +58,7 @@ class Task(SoftDeleteMixin, KodiakBase):
         nullable=False,
         index=True,
     )
+
     created_by: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), nullable=True, index=True
     )
@@ -60,18 +66,29 @@ class Task(SoftDeleteMixin, KodiakBase):
     # Description
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    source: Mapped[TaskSource] = mapped_column(
-        Enum(TaskSource), nullable=False, default=TaskSource.API
-    )
-    source_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)  # e.g. "issue#42"
 
-    # Status & scheduling
+    source: Mapped[TaskSource] = mapped_column(
+        Enum(TaskSource),
+        nullable=False,
+        default=TaskSource.API,
+    )
+
+    source_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
+    # Status
     status: Mapped[TaskStatus] = mapped_column(
-        Enum(TaskStatus), nullable=False, default=TaskStatus.PENDING, index=True
+        Enum(TaskStatus),
+        nullable=False,
+        default=TaskStatus.PENDING,
+        index=True,
     )
+
     priority: Mapped[TaskPriority] = mapped_column(
-        Enum(TaskPriority), nullable=False, default=TaskPriority.MEDIUM
+        Enum(TaskPriority),
+        nullable=False,
+        default=TaskPriority.MEDIUM,
     )
+
     retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_retries: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
 
@@ -80,7 +97,7 @@ class Task(SoftDeleteMixin, KodiakBase):
     pr_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     branch_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
-    # Rich state (plan, context, final summary, error details)
+    # State
     plan: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     context: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     result: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
@@ -90,17 +107,21 @@ class Task(SoftDeleteMixin, KodiakBase):
     total_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_cost_usd: Mapped[float | None] = mapped_column(nullable=True)
 
-    # Celery task id for cancellation
     celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Relationships
-    repository: Mapped["Repository"] = relationship(  # noqa: F821
+    repository: Mapped["Repository"] = relationship(
         "Repository", back_populates="tasks", lazy="raise"
     )
-    agent_runs: Mapped[list["AgentRun"]] = relationship(  # noqa: F821
-        "AgentRun", back_populates="task", lazy="raise", cascade="all, delete-orphan"
+
+    agent_runs: Mapped[list["AgentRun"]] = relationship(
+        "AgentRun",
+        back_populates="task",
+        lazy="raise",
+        cascade="all, delete-orphan",
     )
-    feedbacks: Mapped[list["Feedback"]] = relationship(  # noqa: F821
+
+    feedbacks: Mapped[list["Feedback"]] = relationship(
         "Feedback", back_populates="task", lazy="raise"
     )
 

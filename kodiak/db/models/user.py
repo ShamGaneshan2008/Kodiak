@@ -11,7 +11,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from kodiak.db.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
+from kodiak.db.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 
 
 class User(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):

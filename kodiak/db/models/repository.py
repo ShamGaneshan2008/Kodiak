@@ -11,7 +11,7 @@ from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from kodiak.db.models.base import Base, TimestampMixin, UUIDMixin
+from kodiak.db.base import Base, TimestampMixin, UUIDMixin
 
 
 class GitHubInstallation(UUIDMixin, TimestampMixin, Base):

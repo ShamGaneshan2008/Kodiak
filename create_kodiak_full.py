@@ -79,7 +79,7 @@ files = [
     "kodiak/api/routers/repositories.py",
     "kodiak/api/routers/agents.py",
     "kodiak/api/routers/memory.py",
-    "kodiak/api/routers/plugins.py",
+    "kodiak/api/routers/plugin.py",
     "kodiak/api/routers/approvals.py",
     "kodiak/api/routers/webhooks/github.py",
     "kodiak/auth/jwt.py",

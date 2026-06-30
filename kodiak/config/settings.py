@@ -37,6 +37,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    db_echo: bool = False
+    db_use_null_pool: bool = False
+
+    db_pool_size: int = 10
+    db_max_overflow: int = 20
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 1800
+
     # ── Application ──────────────────────────────────────────────────────────
     APP_NAME: str = "Kodiak"
     APP_VERSION: str = "0.1.0"
@@ -171,3 +179,5 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return cached settings instance. Import and call this everywhere."""
     return Settings()
+
+settings = Settings()

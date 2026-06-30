@@ -1,6 +1,8 @@
 """
-Shared SQLAlchemy declarative base and reusable column mixins.
-All domain models inherit from ``Base`` and compose mixins as needed.
+Shared SQLAlchemy base and reusable mixins for all database models.
+
+Every model in the project should inherit from KodiakBase and reuse
+these mixins instead of redefining common fields like id, timestamps, etc.
 """
 
 from __future__ import annotations
@@ -13,19 +15,34 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+# ─────────────────────────────────────────────
+# Base class
+# ─────────────────────────────────────────────
 
-
-class Base(DeclarativeBase):
-    """Project-wide declarative base. Import this into every model module."""
+class KodiakBase(DeclarativeBase):
+    """Base class for all ORM models in Kodiak."""
     pass
 
 
-# ── Mixins ────────────────────────────────────────────────────────────────────
+# IMPORTANT: many files expect this name
+Base = KodiakBase
+
+
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
+
+def utcnow() -> datetime:
+    """Timezone-aware UTC timestamp."""
+    return datetime.now(timezone.utc)
+
+
+# ─────────────────────────────────────────────
+# Mixins
+# ─────────────────────────────────────────────
 
 class UUIDMixin:
-    """Primary key as UUID v4."""
+    """Adds a UUID primary key column."""
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
@@ -35,24 +52,25 @@ class UUIDMixin:
 
 
 class TimestampMixin:
-    """Automatic created_at / updated_at columns."""
+    """Adds created_at and updated_at timestamps."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=_utcnow,
+        default=utcnow,
         server_default=func.now(),
         nullable=False,
     )
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=_utcnow,
-        onupdate=_utcnow,
+        default=utcnow,
+        onupdate=utcnow,
         server_default=func.now(),
         nullable=False,
     )
 
 
 class SoftDeleteMixin:
-    """Logical delete — set deleted_at instead of hard-deleting rows."""
+    """Soft delete support using deleted_at field."""
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -65,5 +83,15 @@ class SoftDeleteMixin:
 
 
 class SlugMixin:
-    """Human-readable URL slug."""
-    slug: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    """
+    Adds a human-readable unique identifier (slug).
+
+    Useful for URLs like:
+    /projects/my-project-name
+    """
+    slug: Mapped[str] = mapped_column(
+        String(255),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
