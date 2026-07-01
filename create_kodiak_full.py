@@ -85,7 +85,7 @@ files = [
     "kodiak/auth/jwt.py",
     "kodiak/auth/oauth.py",
     "kodiak/auth/permissions.py",
-    "kodiak/auth/api_keys.py",
+    "kodiak/auth/api_key.py",
     "kodiak/auth/audit.py",
     "kodiak/db/session.py",
     "kodiak/db/base.py",

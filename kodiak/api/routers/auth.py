@@ -9,7 +9,7 @@ from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kodiak.api.dependencies import CurrentUser, get_db_session
+from kodiak.api.dependencies import CurrentUser, get_db
 from kodiak.auth.jwt import create_access_token, create_refresh_token, verify_refresh_token
 from kodiak.auth.oauth import exchange_code, fetch_github_user, fetch_primary_email
 from kodiak.db.models.user import User
@@ -22,7 +22,7 @@ _pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     body: UserCreate,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> User:
     existing = await session.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
@@ -42,7 +42,7 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     body: UserCreate,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     result = await session.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
@@ -65,7 +65,7 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
     body: RefreshRequest,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     try:
         user_id_str = verify_refresh_token(body.refresh_token)
@@ -89,7 +89,7 @@ async def refresh(
 async def github_callback(
     code: str,
     state: str,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     try:
         token_data = await exchange_code(code)

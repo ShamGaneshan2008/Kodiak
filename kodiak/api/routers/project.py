@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kodiak.api.dependencies import CurrentUser, PaginationDep, get_db_session
+from kodiak.api.dependencies import CurrentUser, PaginationDep
+from kodiak.db.session import get_db
 from kodiak.api.schemas.common import PaginatedResponse
 from kodiak.api.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 from kodiak.db.models.project import Project
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 async def create_project(
     body: ProjectCreate,
     current_user: CurrentUser,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> Project:
     project = Project(
         owner_id=current_user.id,
@@ -39,7 +40,7 @@ async def create_project(
 async def list_projects(
     current_user: CurrentUser,
     pagination: PaginationDep,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[ProjectResponse]:
     base = select(Project).where(
         Project.owner_id == current_user.id,
@@ -58,7 +59,7 @@ async def list_projects(
 async def get_project(
     project_id: uuid.UUID,
     current_user: CurrentUser,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> Project:
     return await _get_project(session, project_id, current_user.id)
 
@@ -68,7 +69,7 @@ async def update_project(
     project_id: uuid.UUID,
     body: ProjectUpdate,
     current_user: CurrentUser,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> Project:
     project = await _get_project(session, project_id, current_user.id)
     for field, value in body.model_dump(exclude_none=True).items():
@@ -80,7 +81,7 @@ async def update_project(
 async def delete_project(
     project_id: uuid.UUID,
     current_user: CurrentUser,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> None:
     project = await _get_project(session, project_id, current_user.id)
     from datetime import datetime, timezone

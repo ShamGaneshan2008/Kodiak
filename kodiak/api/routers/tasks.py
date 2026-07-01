@@ -15,7 +15,7 @@ from kodiak.db.models.project import Project
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kodiak.api.dependencies import CurrentUser, PaginationDep, get_db_session
+from kodiak.api.dependencies import CurrentUser, PaginationDep, get_db
 from kodiak.db.models.task import Task, TaskStatus
 
 router = APIRouter(prefix="/projects/{project_id}/tasks", tags=["tasks"])
@@ -26,7 +26,7 @@ async def create_task(
     project_id: uuid.UUID,
     body: TaskCreate,
     current_user: CurrentUser,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> Task:
     await _assert_project_access(session, project_id, current_user.id)
     task = Task(
@@ -59,7 +59,7 @@ async def list_tasks(
     project_id: uuid.UUID,
     current_user: CurrentUser,
     pagination: PaginationDep,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
     status_filter: TaskStatus | None = None,
 ) -> PaginatedResponse[TaskResponse]:
     await _assert_project_access(session, project_id, current_user.id)
@@ -84,7 +84,7 @@ async def get_task(
     project_id: uuid.UUID,
     task_id: uuid.UUID,
     current_user: CurrentUser,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> Task:
     return await _get_task(session, task_id, project_id, current_user.id)
 
@@ -94,7 +94,7 @@ async def get_task_status(
     project_id: uuid.UUID,
     task_id: uuid.UUID,
     current_user: CurrentUser,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> Task:
     return await _get_task(session, task_id, project_id, current_user.id)
 
@@ -105,7 +105,7 @@ async def update_task(
     task_id: uuid.UUID,
     body: TaskUpdate,
     current_user: CurrentUser,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> Task:
     task = await _get_task(session, task_id, project_id, current_user.id)
     for field, value in body.model_dump(exclude_none=True).items():
@@ -119,7 +119,7 @@ async def approve_task(
     task_id: uuid.UUID,
     body: TaskApprove,
     current_user: CurrentUser,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> Task:
     task = await _get_task(session, task_id, project_id, current_user.id)
 
@@ -144,7 +144,7 @@ async def cancel_task(
     project_id: uuid.UUID,
     task_id: uuid.UUID,
     current_user: CurrentUser,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db),
 ) -> None:
     task = await _get_task(session, task_id, project_id, current_user.id)
     if not task.can_transition_to(TaskStatus.CANCELLED):

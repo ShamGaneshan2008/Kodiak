@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kodiak.auth.api_keys import lookup_api_key
 from kodiak.auth.jwt import verify_access_token
 from kodiak.db.models.user import User
-from kodiak.db.session import get_db_session
+from kodiak.db.session import get_db
 
 logger = structlog.get_logger(__name__)
 
@@ -20,7 +20,7 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    session: Annotated[AsyncSession, Depends(get_db)],
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
     x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
 ) -> User:

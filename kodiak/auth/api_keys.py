@@ -1,5 +1,5 @@
 """
-kodiak/auth/api_keys.py
+kodiak/auth/api_key.py
 
 Long-lived API keys for programmatic access (CI pipelines, CLI, the GitHub
 Actions integration, third-party plugins). Unlike JWTs, these are meant to be
@@ -167,3 +167,39 @@ def require_api_key_scope(scope: Scope):
         return principal
 
     return dependency
+
+async def lookup_api_key(
+    session: AsyncSession,
+    raw_key: str,
+) -> APIKey | None:
+    """
+    Resolve a raw API key to its corresponding active APIKey record.
+
+    Returns:
+        APIKey if found and active, otherwise None.
+    """
+    if not raw_key:
+        return None
+
+    key_hash = _hash_secret(raw_key)
+
+    stmt = select(APIKey).where(
+        APIKey.key_hash == key_hash,
+        APIKey.revoked_at.is_(None),
+    )
+
+    result = await session.execute(stmt)
+    record = result.scalar_one_or_none()
+
+    if record is None:
+        return None
+
+    now = datetime.now(timezone.utc)
+
+    if record.expires_at is not None and record.expires_at < now:
+        return None
+
+    record.last_used_at = now
+    await session.commit()
+
+    return record
