@@ -121,9 +121,11 @@ class Task(KodiakBase, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         cascade="all, delete-orphan",
     )
 
-    feedbacks: Mapped[list["Feedback"]] = relationship(
-        "Feedback", back_populates="task", lazy="raise"
-    )
+    # feedbacks: Mapped[list["Feedback"]] = relationship(
+    #     "Feedback",
+    #     back_populates="task",
+    #     lazy="raise"
+    # )
 
     def __repr__(self) -> str:
         return f"<Task id={self.id!r} status={self.status!r} title={self.title[:40]!r}>"

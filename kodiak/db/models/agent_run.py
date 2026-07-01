@@ -14,7 +14,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from kodiak.db.base import KodiakBase
+from kodiak.db.base import(KodiakBase, UUIDMixin, TimestampMixin)
 
 
 class AgentType(str, enum.Enum):
@@ -42,7 +42,7 @@ class RunStatus(str, enum.Enum):
     SKIPPED = "skipped"
 
 
-class AgentRun(KodiakBase):
+class AgentRun(KodiakBase, UUIDMixin, TimestampMixin):
     __tablename__ = "agent_runs"
 
     # Parent task

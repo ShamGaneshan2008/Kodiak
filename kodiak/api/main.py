@@ -7,6 +7,8 @@ from pathlib import Path
 import structlog
 from fastapi import FastAPI
 
+import kodiak.db.models
+
 logger = structlog.get_logger(__name__)
 
 

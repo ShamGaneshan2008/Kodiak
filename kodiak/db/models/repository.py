@@ -70,8 +70,8 @@ class Repository(UUIDMixin, TimestampMixin, Base):
     installation: Mapped[GitHubInstallation] = relationship(
         "GitHubInstallation", back_populates="repositories"
     )
-    tasks: Mapped[list["AgentTask"]] = relationship(  # noqa: F821
-        "AgentTask", back_populates="repository"
+    tasks: Mapped[list["Task"]] = relationship(  # noqa: F821
+        "Task", back_populates="repository"
     )
 
     def __repr__(self) -> str:

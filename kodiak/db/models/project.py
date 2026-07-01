@@ -37,9 +37,6 @@ class Project(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         Enum(ProjectStatus), nullable=False, default=ProjectStatus.ACTIVE
     )
 
-    tasks: Mapped[list["Task"]] = relationship(  # noqa: F821
-        "Task", back_populates="project", cascade="all, delete-orphan"
-    )
 
     def __repr__(self) -> str:
         return f"<Project id={self.id} name={self.name!r}>"
