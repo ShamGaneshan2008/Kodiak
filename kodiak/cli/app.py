@@ -288,3 +288,37 @@ def get_platform_identifier() -> str:
     if system in {"windows", "darwin", "linux"}:
         return system
     return "unknown"
+
+import typer
+
+APP_NAME = "kodiak"
+APP_HELP = "Kodiak — an autonomous AI software engineer."
+
+
+def create_app() -> typer.Typer:
+    app = typer.Typer(
+        name=APP_NAME,
+        help=APP_HELP,
+        add_completion=True,
+        no_args_is_help=True,
+    )
+    return app
+
+
+app = create_app()
+
+APP_NAME = "kodiak"
+APP_HELP = "Kodiak — an autonomous AI software engineer."
+
+
+def create_app() -> typer.Typer:
+    app = typer.Typer(
+        name=APP_NAME,
+        help=APP_HELP,
+        add_completion=True,
+        no_args_is_help=True,
+    )
+    return app
+
+
+app = create_app()
