@@ -1,14 +1,13 @@
-"""Public API for the Kodiak CLI utility package.
+"""Public API for the Kodiak CLI package.
 
-Re-exports the root Typer application factory and the CLI configuration
-primitives so consumers can depend on `kodiak.cli.utils` directly instead
-of reaching into individual submodules.
+Re-exports the root Typer application factory and CLI configuration
+primitives so consumers can import from ``kodiak.cli`` directly.
 """
 
 from __future__ import annotations
 
-from kodiak.cli.utils.app import create_app
-from kodiak.cli.utils.config import CLIConfig, ConfigError, ConfigManager
+from kodiak.cli import create_app
+from kodiak.cli.config import CLIConfig, ConfigError, ConfigManager
 
 __all__ = [
     "create_app",
