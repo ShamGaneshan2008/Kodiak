@@ -15,9 +15,16 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from kodiak.schemas.analysis import AnalysisResult
-from kodiak.services.analyze_service import AnalyzeService
-from kodiak.services.exceptions import AnalysisError
+
+from kodiak.agents.repository import (
+    RepositoryAnalyzerAgent,
+    RepositoryAnalysis,
+)
+from kodiak.cli.services.analyze_service import (
+    AnalyzeService,
+    InvalidRepositoryPathError,
+    RepositoryAnalysisFailedError,
+)
 
 console = Console()
 error_console = Console(stderr=True)
@@ -72,7 +79,7 @@ def analyze(
 
     try:
         result = asyncio.run(_run_analysis(service, resolved_path, deep))
-    except AnalysisError as exc:
+    except RepositoryAnalysis as exc:
         _render_error(str(exc))
         raise typer.Exit(code=1)
     except Exception as exc:  # noqa: BLE001
@@ -89,7 +96,7 @@ def analyze(
 
 async def _run_analysis(
     service: AnalyzeService, path: Path, deep: bool
-) -> AnalysisResult:
+) -> RepositoryAnalysis:
     """Run the analysis while displaying a Rich spinner.
 
     Args:
@@ -113,7 +120,7 @@ async def _run_analysis(
         return await service.analyze(path, deep=deep)
 
 
-def _render_result(result: AnalysisResult, path: Path) -> None:
+def _render_result(result: RepositoryAnalysis, path: Path) -> None:
     """Render an analysis result as Rich tables.
 
     Args:
