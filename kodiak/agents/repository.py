@@ -15,16 +15,20 @@ class FileNode(BaseModel):
     size: int = 0
 
 
-class RepoOutput(AgentOutput):
+class RepositoryAnalysis(AgentOutput):
     result: list[FileNode] = Field(default_factory=list)
     summary: str = ""
 
 
-class RepositoryAgent(BaseAgent):
+class RepositoryAnalyzerAgent(BaseAgent):
     def __init__(self, llm: LLMClient) -> None:
-        super().__init__(llm, name="repository", description="Understands repository structure")
+        super().__init__(
+            llm,
+            name="repository",
+            description="Understands repository structure",
+        )
 
-    async def execute(self, input_data: AgentInput) -> RepoOutput:
+    async def execute(self, input_data: AgentInput) -> RepositoryAnalysis:
         self._logger.info("analyzing_repository", task=input_data.task)
         repo_path = input_data.context.get("repo_path", ".")
         tree = await self._scan_directory(Path(repo_path))
@@ -34,7 +38,9 @@ class RepositoryAgent(BaseAgent):
             f"{json.dumps([t.model_dump() for t in tree])}\n\nTask: {input_data.task}"
         )
         summary = await self._run_with_timing(prompt)
-        return RepoOutput(success=True, result=tree, summary=summary)
+        return RepositoryAnalysis(success=True,
+                                  result=tree,
+                                  summary=summary)
 
     async def _scan_directory(self, path: Path, depth: int = 2) -> list[FileNode]:
         nodes: list[FileNode] = []
