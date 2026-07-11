@@ -4,98 +4,89 @@ from pathlib import Path
 
 import structlog
 
-from kodiak.agents.repository_analyzer_agent import RepositoryAnalyzerAgent
-from kodiak.agents.models.analysis import RepositoryAnalysis
+from kodiak.agents.base import AgentInput
+from kodiak.agents.repository import (
+    RepositoryAnalysis,
+    RepositoryAnalyzerAgent,
+)
 
 logger = structlog.get_logger(__name__)
 
 
 class InvalidRepositoryPathError(Exception):
-    """Raised when the provided repository path is not a valid, accessible directory."""
+    """Raised when a repository path is invalid."""
 
 
 class RepositoryAnalysisFailedError(Exception):
-    """Raised when the RepositoryAnalyzerAgent fails to complete an analysis."""
+    """Raised when repository analysis fails."""
 
 
 class AnalyzeService:
-    """Coordinates repository analysis by delegating to the RepositoryAnalyzerAgent.
+    """CLI service that orchestrates repository analysis."""
 
-    This service is a thin orchestration layer. It validates the repository
-    path, invokes the analyzer agent, and returns the resulting model. It
-    performs no filesystem scanning, parsing, or analysis logic itself.
+    def __init__(self) -> None:
+        self._agent = RepositoryAnalyzerAgent()
 
-    Attributes:
-        _analyzer_agent: The agent responsible for performing repository analysis.
-    """
+    async def analyze_repository(
+        self,
+        repository_path: str | Path,
+        *,
+        deep: bool = False,
+    ) -> RepositoryAnalysis:
+        path = self._validate_repository_path(repository_path)
 
-    def __init__(self, analyzer_agent: RepositoryAnalyzerAgent) -> None:
-        """Initializes the AnalyzeService.
+        logger.info(
+            "repository_analysis.started",
+            path=str(path),
+            deep=deep,
+        )
 
-        Args:
-            analyzer_agent: An instance of RepositoryAnalyzerAgent used to
-                perform the actual repository analysis.
-        """
-        self._analyzer_agent = analyzer_agent
+        agent_input = AgentInput(
+            task_id="cli-analyze",
+            project_id="local",
+            instruction="Analyze repository",
+            context={
+                "repository_path": path,
+                "deep": deep,
+            },
+        )
 
-    async def analyze_repository(self, repository_path: str | Path) -> RepositoryAnalysis:
-        """Validates a repository path and coordinates its analysis.
+        output = await self._agent.run(agent_input)
 
-        Args:
-            repository_path: The filesystem path to the repository to analyze.
-
-        Returns:
-            A RepositoryAnalysis model produced by the RepositoryAnalyzerAgent.
-
-        Raises:
-            InvalidRepositoryPathError: If the path does not exist or is not
-                a directory.
-            RepositoryAnalysisFailedError: If the analyzer agent fails to
-                complete the analysis.
-        """
-        validated_path = self._validate_repository_path(repository_path)
-
-        logger.info("analyze_service.analysis_started", path=str(validated_path))
-
-        try:
-            analysis = await self._analyzer_agent.analyze(validated_path)
-        except Exception as exc:
-            logger.error(
-                "analyze_service.analysis_failed",
-                path=str(validated_path),
-                error=str(exc),
-            )
+        if not output.success:
             raise RepositoryAnalysisFailedError(
-                f"Repository analysis failed for path: {validated_path}"
-            ) from exc
+                output.error or "Repository analysis failed."
+            )
 
-        logger.info("analyze_service.analysis_completed", path=str(validated_path))
+        analysis = output.result.get("analysis")
+
+        if not isinstance(analysis, RepositoryAnalysis):
+            raise RepositoryAnalysisFailedError(
+                "Repository agent returned an invalid analysis object."
+            )
+
+        logger.info(
+            "repository_analysis.completed",
+            files=analysis.file_count,
+            directories=analysis.directory_count,
+        )
 
         return analysis
 
-    def _validate_repository_path(self, repository_path: str | Path) -> Path:
-        """Validates that the given path exists and is a directory.
+    @staticmethod
+    def _validate_repository_path(
+        repository_path: str | Path,
+    ) -> Path:
+        path = Path(repository_path).expanduser().resolve()
 
-        Args:
-            repository_path: The path to validate.
-
-        Returns:
-            The validated path resolved to an absolute Path instance.
-
-        Raises:
-            InvalidRepositoryPathError: If the path does not exist or is not
-                a directory.
-        """
-        resolved_path = Path(repository_path).resolve()
-
-        if not resolved_path.exists():
+        if not path.exists():
             raise InvalidRepositoryPathError(
-                f"Repository path does not exist: {resolved_path}"
+                f"Repository path does not exist: {path}"
             )
 
-        if not resolved_path.is_dir():
+        if not path.is_dir():
             raise InvalidRepositoryPathError(
-                f"Repository path is not a directory: {resolved_path}"
+                f"Repository path is not a directory: {path}"
             )
 
-        return resolved_path
+        return path
