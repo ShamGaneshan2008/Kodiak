@@ -7,7 +7,6 @@ counters, histograms, and gauges used across Kodiak.
 
 from __future__ import annotations
 
-from typing import Any
 
 try:
     from prometheus_client import (
@@ -37,8 +36,6 @@ REQUESTS_TOTAL = (
     if Counter is not None
     else None
 )
-
-from __future__ import annotations
 
 from typing import Any
 
@@ -234,3 +231,11 @@ def metrics_response() -> tuple[bytes, str]:
         body = generate_latest(REGISTRY)
 
     return body, CONTENT_TYPE_LATEST
+
+# ============================================================================
+# Compatibility aliases for BaseAgent
+# ============================================================================
+
+tasks_total = AGENT_TASKS_TOTAL
+task_duration_seconds = AGENT_TASK_DURATION_SECONDS
+active_tasks = ACTIVE_AGENT_TASKS
