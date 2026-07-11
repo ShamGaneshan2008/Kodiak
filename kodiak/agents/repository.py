@@ -1,57 +1,154 @@
-import json
+from __future__ import annotations
+
+import os
+from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
-import structlog
-from pydantic import BaseModel, Field
+from kodiak.agents.base import (
+    AgentInput,
+    AgentOutput,
+    AgentRole,
+    BaseAgent,
+)
 
-from kodiak.agents.base import AgentInput, AgentOutput, BaseAgent, LLMClient
+_LANGUAGE_EXTENSION_MAP = {
+    ".py": "Python",
+    ".js": "JavaScript",
+    ".ts": "TypeScript",
+    ".tsx": "TypeScript",
+    ".jsx": "JavaScript",
+    ".java": "Java",
+    ".kt": "Kotlin",
+    ".go": "Go",
+    ".rs": "Rust",
+    ".cpp": "C++",
+    ".c": "C",
+    ".h": "C",
+    ".hpp": "C++",
+    ".cs": "C#",
+    ".php": "PHP",
+    ".rb": "Ruby",
+    ".swift": "Swift",
+    ".html": "HTML",
+    ".css": "CSS",
+    ".json": "JSON",
+    ".toml": "TOML",
+    ".yaml": "YAML",
+    ".yml": "YAML",
+    ".md": "Markdown",
+    ".sql": "SQL",
+    ".sh": "Shell",
+}
 
-logger = structlog.get_logger(__name__)
+_IGNORED_DIRECTORIES = {
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".idea",
+    ".vscode",
+    "node_modules",
+    "dist",
+    "build",
+}
 
 
-class FileNode(BaseModel):
+@dataclass(slots=True)
+class FileNode:
     path: str
-    type: str
-    size: int = 0
+    extension: str
+    size_bytes: int
+    language: str | None
 
 
-class RepositoryAnalysis(AgentOutput):
-    result: list[FileNode] = Field(default_factory=list)
-    summary: str = ""
+@dataclass(slots=True)
+class RepositoryAnalysis:
+    root_path: Path
+    files: list[FileNode]
+    extension_counts: dict[str, int]
+    language_stats: dict[str, int]
+    total_size_bytes: int
+    file_count: int
+    directory_count: int
 
 
 class RepositoryAnalyzerAgent(BaseAgent):
-    def __init__(self, llm: LLMClient) -> None:
-        super().__init__(
-            llm,
-            name="repository",
-            description="Understands repository structure",
+    """Repository scanner agent compatible with BaseAgent."""
+
+    role = AgentRole.REPOSITORY
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    async def _run(self, input_: AgentInput) -> AgentOutput:
+        repository = input_.context.get("repository_path")
+
+        if repository is None:
+            return self._make_error(
+                input_,
+                "repository_path missing from AgentInput.context",
+            )
+
+        analysis = self._scan(Path(repository).resolve())
+
+        return self._make_output(
+            input_,
+            {"analysis": analysis},
         )
 
-    async def execute(self, input_data: AgentInput) -> RepositoryAnalysis:
-        self._logger.info("analyzing_repository", task=input_data.task)
-        repo_path = input_data.context.get("repo_path", ".")
-        tree = await self._scan_directory(Path(repo_path))
+    def _scan(self, root: Path) -> RepositoryAnalysis:
+        if not root.exists():
+            raise FileNotFoundError(root)
+        if not root.is_dir():
+            raise NotADirectoryError(root)
 
-        prompt = (
-            f"Analyze this repository structure:\n"
-            f"{json.dumps([t.model_dump() for t in tree])}\n\nTask: {input_data.task}"
+        files: list[FileNode] = []
+        extensions: Counter[str] = Counter()
+        languages: Counter[str] = Counter()
+        total_size = 0
+        directory_count = 0
+
+        for current, dirs, filenames in os.walk(root):
+            dirs[:] = [d for d in dirs if d not in _IGNORED_DIRECTORIES]
+
+            if Path(current) != root:
+                directory_count += 1
+
+            for filename in filenames:
+                file_path = Path(current) / filename
+
+                try:
+                    size = file_path.stat().st_size
+                except OSError:
+                    size = 0
+
+                extension = file_path.suffix.lower()
+                language = _LANGUAGE_EXTENSION_MAP.get(extension)
+
+                node = FileNode(
+                    path=str(file_path.relative_to(root)),
+                    extension=extension,
+                    size_bytes=size,
+                    language=language,
+                )
+
+                files.append(node)
+                total_size += size
+                extensions[extension or "<none>"] += 1
+
+                if language:
+                    languages[language] += 1
+
+        return RepositoryAnalysis(
+            root_path=root,
+            files=files,
+            extension_counts=dict(extensions),
+            language_stats=dict(languages),
+            total_size_bytes=total_size,
+            file_count=len(files),
+            directory_count=directory_count,
         )
-        summary = await self._run_with_timing(prompt)
-        return RepositoryAnalysis(success=True,
-                                  result=tree,
-                                  summary=summary)
-
-    async def _scan_directory(self, path: Path, depth: int = 2) -> list[FileNode]:
-        nodes: list[FileNode] = []
-        if depth == 0 or not path.exists():
-            return nodes
-        for p in path.iterdir():
-            if p.name.startswith("."):
-                continue
-            node_type = "dir" if p.is_dir() else "file"
-            size = p.stat().st_size if p.is_file() else 0
-            nodes.append(FileNode(path=str(p.relative_to(path)), type=node_type, size=size))
-            if p.is_dir():
-                nodes.extend(await self._scan_directory(p, depth - 1))
-        return nodes
