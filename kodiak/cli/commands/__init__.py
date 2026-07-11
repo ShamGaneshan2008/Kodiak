@@ -1,20 +1,9 @@
 """
-Kodiak CLI commands.
+Kodiak CLI commands package.
 
-Each module defines one Typer application that is registered
-by the top-level CLI.
+Each command module exposes its own Typer application.
+This package intentionally performs no eager imports to avoid
+loading unrelated command dependencies.
 """
 
-from . import init
-from . import logs
-from . import doctor
-from . import auth
-from . import task
-
-__all__ = [
-    "init",
-    "logs",
-    "doctor",
-    "auth",
-    "task",
-]
+__all__: list[str] = []
