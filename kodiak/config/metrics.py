@@ -1,15 +1,42 @@
-try:
-    from prometheus_client import Counter
-except Exception:  # pragma: no cover
-    Counter = None
-
-
-REQUESTS_TOTAL = Counter("kodiak_requests_total", "Total API requests") if Counter else None
 """
 Application metrics via Prometheus.
+
 Exposes a /metrics endpoint and provides typed helpers for
 counters, histograms, and gauges used across Kodiak.
 """
+
+from __future__ import annotations
+
+from typing import Any
+
+try:
+    from prometheus_client import (
+        CONTENT_TYPE_LATEST,
+        REGISTRY,
+        Counter,
+        Gauge,
+        Histogram,
+        Info,
+        CollectorRegistry,
+        generate_latest,
+        multiprocess,
+    )
+except ImportError:
+    Counter = None
+    Gauge = None
+    Histogram = None
+    Info = None
+    CollectorRegistry = None
+    CONTENT_TYPE_LATEST = None
+    REGISTRY = None
+    generate_latest = None
+    multiprocess = None
+
+REQUESTS_TOTAL = (
+    Counter("kodiak_requests_total", "Total API requests")
+    if Counter is not None
+    else None
+)
 
 from __future__ import annotations
 

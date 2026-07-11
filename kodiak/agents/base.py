@@ -9,7 +9,11 @@ from typing import Any
 
 import structlog
 
-from kodiak.config.metrics import active_tasks, task_duration_seconds, tasks_total
+from kodiak.config.metrics import (
+    ACTIVE_AGENT_TASKS,
+    AGENT_TASK_DURATION_SECONDS,
+    AGENT_TASKS_TOTAL,
+)
 from kodiak.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
@@ -55,16 +59,23 @@ class AgentOutput:
 
     @property
     def total_tokens(self) -> int:
-        return self.token_usage.get("input_tokens", 0) + self.token_usage.get("output_tokens", 0)
+        return (
+            self.token_usage.get("input_tokens", 0)
+            + self.token_usage.get("output_tokens", 0)
+        )
 
 
 class BaseAgent(ABC):
     """
-    Base class for all Kodiak agents.
+    Base class for every Kodiak agent.
 
-    Subclasses implement `_run()`. This base handles timing, metrics,
-    structured logging, and error normalisation so each agent stays focused
-    on its own logic.
+    Handles:
+        • timing
+        • logging
+        • Prometheus metrics
+        • exception handling
+
+    Child classes only implement `_run()`.
     """
 
     role: AgentRole
@@ -79,26 +90,47 @@ class BaseAgent(ABC):
             task_id=input_.task_id,
             run_id=input_.run_id,
         )
+
         log.info("agent.start")
-        active_tasks.labels(agent=self.role).inc()
+
+        ACTIVE_AGENT_TASKS.labels(agent=self.role).inc()
+
         start = time.monotonic()
 
         try:
             output = await self._run(input_)
+
             output.duration_seconds = time.monotonic() - start
+
             status = "success" if output.success else "failure"
-            tasks_total.labels(agent=self.role, status=status).inc()
+
+            AGENT_TASKS_TOTAL.labels(
+                agent=self.role,
+                status=status,
+            ).inc()
+
             log.info(
                 "agent.complete",
                 success=output.success,
+                duration=output.duration_seconds,
                 tokens=output.total_tokens,
-                duration=f"{output.duration_seconds:.2f}s",
             )
+
             return output
+
         except Exception as exc:
             duration = time.monotonic() - start
-            tasks_total.labels(agent=self.role, status="error").inc()
-            log.exception("agent.error", error=str(exc), duration=f"{duration:.2f}s")
+
+            AGENT_TASKS_TOTAL.labels(
+                agent=self.role,
+                status="error",
+            ).inc()
+
+            log.exception(
+                "agent.error",
+                error=str(exc),
+            )
+
             return AgentOutput(
                 run_id=input_.run_id,
                 agent=self.role,
@@ -106,12 +138,19 @@ class BaseAgent(ABC):
                 error=str(exc),
                 duration_seconds=duration,
             )
+
         finally:
-            active_tasks.labels(agent=self.role).dec()
-            task_duration_seconds.labels(agent=self.role).observe(time.monotonic() - start)
+            ACTIVE_AGENT_TASKS.labels(agent=self.role).dec()
+
+            AGENT_TASK_DURATION_SECONDS.labels(
+                agent=self.role,
+            ).observe(time.monotonic() - start)
 
     @abstractmethod
-    async def _run(self, input_: AgentInput) -> AgentOutput: ...
+    async def _run(self, input_: AgentInput) -> AgentOutput:
+        """
+        Implemented by every agent.
+        """
 
     def _make_output(
         self,
@@ -129,7 +168,11 @@ class BaseAgent(ABC):
             metadata=metadata or {},
         )
 
-    def _make_error(self, input_: AgentInput, error: str) -> AgentOutput:
+    def _make_error(
+        self,
+        input_: AgentInput,
+        error: str,
+    ) -> AgentOutput:
         return AgentOutput(
             run_id=input_.run_id,
             agent=self.role,
