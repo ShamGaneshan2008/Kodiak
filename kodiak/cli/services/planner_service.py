@@ -2,99 +2,143 @@ from __future__ import annotations
 
 import structlog
 
-from kodiak.agents.planning_agent import PlanningAgent
-from kodiak.agents.models.issue import GitHubIssue
-from kodiak.agents.models.plan import ImplementationPlan
+from kodiak.agents.base import AgentInput
+from kodiak.agents.planning_agent import PlannerAgent, SubTask, TaskPlan
 
 logger = structlog.get_logger(__name__)
 
 
 class InvalidIssueError(Exception):
-    """Raised when the provided GitHub issue is missing required information."""
+    """Raised when the provided AgentInput is missing required information."""
 
 
 class PlanGenerationFailedError(Exception):
-    """Raised when the PlanningAgent fails to produce an implementation plan."""
+    """Raised when the PlannerAgent fails to produce an implementation plan."""
 
 
 class PlannerService:
-    """Coordinates implementation planning by delegating to the PlanningAgent.
+    """Coordinates implementation planning by delegating to the PlannerAgent.
 
     This service is a thin orchestration layer. It validates the incoming
-    GitHub issue, invokes the planning agent, and returns the resulting
-    ordered implementation plan. It performs no planning logic itself.
+    AgentInput, invokes the planning agent via its standard BaseAgent.run()
+    contract, and returns the resulting TaskPlan. It performs no planning
+    logic itself.
 
     Attributes:
         _planning_agent: The agent responsible for generating implementation plans.
     """
 
-    def __init__(self, planning_agent: PlanningAgent) -> None:
+    def __init__(self, planning_agent: PlannerAgent) -> None:
         """Initializes the PlannerService.
 
         Args:
-            planning_agent: An instance of PlanningAgent used to generate
-                implementation plans from GitHub issues.
+            planning_agent: An instance of PlannerAgent used to generate
+                implementation plans.
         """
         self._planning_agent = planning_agent
 
-    async def create_plan(self, issue: GitHubIssue) -> ImplementationPlan:
-        """Validates a GitHub issue and coordinates generation of its implementation plan.
+    async def create_plan(self, input_: AgentInput) -> TaskPlan:
+        """Validates an AgentInput and coordinates generation of its implementation plan.
 
         Args:
-            issue: The GitHub issue to plan an implementation for.
+            input_: The AgentInput describing the planning task.
 
         Returns:
-            An ImplementationPlan model produced by the PlanningAgent.
+            A TaskPlan produced by the PlannerAgent.
 
         Raises:
-            InvalidIssueError: If the issue is missing required information.
+            InvalidIssueError: If the input is missing required information.
             PlanGenerationFailedError: If the planning agent fails to
                 complete plan generation.
         """
-        self._validate_issue(issue)
+        self._validate_input(input_)
 
         logger.info(
             "planner_service.plan_generation_started",
-            issue_number=issue.number,
-            repository=issue.repository,
+            task_id=input_.task_id,
+            project_id=input_.project_id,
         )
 
-        try:
-            plan = await self._planning_agent.plan(issue)
-        except Exception as exc:
+        output = await self._planning_agent.run(input_)
+
+        if not output.success:
             logger.error(
                 "planner_service.plan_generation_failed",
-                issue_number=issue.number,
-                repository=issue.repository,
-                error=str(exc),
+                task_id=input_.task_id,
+                project_id=input_.project_id,
+                error=output.error,
             )
             raise PlanGenerationFailedError(
-                f"Plan generation failed for issue #{issue.number} in {issue.repository}"
-            ) from exc
+                f"Plan generation failed for task {input_.task_id}: {output.error}"
+            )
+
+        plan_dict = output.result.get("plan")
+        if plan_dict is None:
+            logger.error(
+                "planner_service.plan_generation_failed",
+                task_id=input_.task_id,
+                project_id=input_.project_id,
+                error="Agent output did not contain a plan.",
+            )
+            raise PlanGenerationFailedError(
+                f"Plan generation failed for task {input_.task_id}: "
+                "agent output did not contain a plan."
+            )
+
+        plan = self._dict_to_plan(plan_dict)
 
         logger.info(
             "planner_service.plan_generation_completed",
-            issue_number=issue.number,
-            repository=issue.repository,
-            step_count=len(plan.steps),
+            task_id=input_.task_id,
+            project_id=input_.project_id,
+            step_count=len(plan.subtasks),
         )
 
         return plan
 
-    def _validate_issue(self, issue: GitHubIssue) -> None:
-        """Validates that the GitHub issue contains the information required for planning.
+    def _validate_input(self, input_: AgentInput) -> None:
+        """Validates that the AgentInput contains the information required for planning.
 
         Args:
-            issue: The issue to validate.
+            input_: The input to validate.
 
         Raises:
-            InvalidIssueError: If the issue number, repository, or title is missing.
+            InvalidIssueError: If the task id, project id, or instruction is missing.
         """
-        if not issue.number:
-            raise InvalidIssueError("GitHub issue must have a valid issue number.")
+        if not input_.task_id:
+            raise InvalidIssueError("AgentInput must have a valid task_id.")
 
-        if not issue.repository:
-            raise InvalidIssueError("GitHub issue must specify a repository.")
+        if not input_.project_id:
+            raise InvalidIssueError("AgentInput must specify a project_id.")
 
-        if not issue.title or not issue.title.strip():
-            raise InvalidIssueError("GitHub issue must have a non-empty title.")
+        if not input_.instruction or not input_.instruction.strip():
+            raise InvalidIssueError("AgentInput must have a non-empty instruction.")
+
+    def _dict_to_plan(self, plan_dict: dict) -> TaskPlan:
+        """Reconstructs a TaskPlan from the dict produced by PlannerAgent._plan_to_dict.
+
+        Args:
+            plan_dict: The plan dictionary from AgentOutput.result["plan"].
+
+        Returns:
+            The equivalent TaskPlan dataclass instance.
+        """
+        subtasks = [
+            SubTask(
+                id=st["id"],
+                title=st["title"],
+                description=st["description"],
+                type=st["type"],
+                complexity=st["complexity"],
+                depends_on=st["depends_on"],
+                likely_files=st["likely_files"],
+            )
+            for st in plan_dict.get("subtasks", [])
+        ]
+        return TaskPlan(
+            goal=plan_dict.get("goal", ""),
+            acceptance_criteria=plan_dict.get("acceptance_criteria", []),
+            subtasks=subtasks,
+            estimated_total_complexity=plan_dict.get("estimated_total_complexity", "medium"),
+            requires_architecture_review=plan_dict.get("requires_architecture_review", False),
+        )
