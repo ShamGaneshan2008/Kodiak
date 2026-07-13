@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from kodiak.services.auth_service import AuthService, CredentialStorageError
+from kodiak.cli.services.auth_service import AuthService, CredentialStorageError
 
 app = typer.Typer(
     name="logout",
