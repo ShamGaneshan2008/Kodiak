@@ -16,8 +16,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from kodiak.services.config_service import ConfigService
-from kodiak.services.exceptions import ConfigKeyError, ConfigValidationError
+from kodiak.cli.services.config_service import ConfigService
+from kodiak.cli.services.exceptions import ConfigKeyError, ConfigValidationError
 
 console = Console()
 error_console = Console(stderr=True)
