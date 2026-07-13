@@ -22,10 +22,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.tree import Tree
 
-from kodiak.services.plan_service import (
-    PlanGenerationError,
-    PlanService,
-    PlanServiceError,
+from kodiak.cli.services.planner_service import (
+    PlannerService,
+    InvalidIssueError,
+    PlanGenerationFailedError,
 )
 
 app = typer.Typer(name="plan", help="Generate an implementation plan for an issue or task.")
