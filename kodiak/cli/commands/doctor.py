@@ -15,8 +15,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from kodiak.schemas.doctor import CheckResult, CheckStatus, DoctorReport
-from kodiak.services.doctor_service import DoctorService
+from kodiak.cli.schemas.doctor import CheckResult, CheckStatus, DoctorReport
+from kodiak.cli.services.doctor_service import DoctorService
 
 console = Console()
 error_console = Console(stderr=True)
