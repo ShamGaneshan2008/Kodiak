@@ -9,7 +9,7 @@ from typing import Any, Final, Protocol, runtime_checkable
 import structlog
 
 from .episodic import Episode, EpisodeRepository, EpisodicMemory
-from .error import MemoryNotFoundError, MemoryServiceError
+from .errors import MemoryNotFoundError, MemoryServiceError
 from .models import Memory, MemoryType, SearchResult
 from .procedural import (
     Procedure,
