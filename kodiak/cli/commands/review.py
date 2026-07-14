@@ -51,9 +51,8 @@ app = typer.Typer(
     add_completion=False,
 )
 
-# --------------------------------------------------------------------------- #
 # Presentation constants
-# --------------------------------------------------------------------------- #
+
 
 _SEVERITY_ORDER = [
     Severity.CRITICAL,
@@ -80,10 +79,7 @@ _SECTION_SPECS: list[tuple[str, str, str]] = [
     ("best_practices_issues", "Best Practices", "No best-practice violations found."),
 ]
 
-
-# --------------------------------------------------------------------------- #
 # Command
-# --------------------------------------------------------------------------- #
 
 
 @app.callback(invoke_without_command=True)
@@ -164,9 +160,8 @@ def review(
         raise typer.Exit(code=1)
 
 
-# --------------------------------------------------------------------------- #
 # Helpers
-# --------------------------------------------------------------------------- #
+
 
 
 def _build_target(
