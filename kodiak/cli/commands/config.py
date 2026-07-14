@@ -1,13 +1,17 @@
-"""CLI command group for viewing and modifying Kodiak configuration.
+"""CLI command group for viewing Kodiak configuration.
 
-This module contains presentation logic only. All configuration reads,
-writes, and validation are delegated to
-:class:`kodiak.services.config_service.ConfigService`.
+This module contains presentation logic only. Configuration is read
+directly from :func:`kodiak.config.settings.get_settings`, a cached,
+environment-driven ``pydantic_settings.BaseSettings`` instance. The
+current backend exposes no configuration service, no key-level setter,
+no reset mechanism, and no persisted/mutable config store -- settings
+are resolved once from the environment/``.env`` file and cached for the
+lifetime of the process. Accordingly, this CLI only supports viewing
+configuration, not modifying it.
 """
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -16,29 +20,34 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from kodiak.cli.services.config_service import ConfigService
-from kodiak.cli.services.exceptions import ConfigKeyError, ConfigValidationError
+from kodiak.config.settings import get_settings
 
 console = Console()
 error_console = Console(stderr=True)
 
-app = typer.Typer(help="View and modify Kodiak configuration.")
+app = typer.Typer(help="View Kodiak configuration.")
+
+_SENSITIVE_KEYS = {
+    "SECRET_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "DATABASE_URL",
+    "REDIS_URL",
+}
 
 
 @app.command("show")
 def show() -> None:
     """Display the full active configuration as a table.
 
-    Nested configuration sections are flattened into dot-notation keys
-    (for example ``llm.model``) for readability.
+    Sensitive fields (API keys, secrets, and connection URLs that embed
+    credentials) are masked.
 
     Example:
         kodiak config show
     """
-    service = ConfigService()
-
     try:
-        snapshot = asyncio.run(service.get_all())
+        snapshot = get_settings().model_dump(mode="json")
     except Exception as exc:  # noqa: BLE001
         _render_error(f"Failed to load configuration: {exc}")
         raise typer.Exit(code=2)
@@ -51,179 +60,84 @@ def show() -> None:
 def get(
     key: str = typer.Argument(
         ...,
-        help="Dot-notation configuration key, e.g. llm.model",
+        help="Configuration field name, e.g. APP_NAME or JWT_ALGORITHM",
     ),
 ) -> None:
-    """Display the value of a single configuration key.
+    """Display the value of a single configuration field.
 
     Args:
-        key: Dot-notation configuration key to look up.
+        key: Configuration field name to look up (case-insensitive).
 
     Example:
-        kodiak config get llm.model
+        kodiak config get APP_NAME
     """
-    service = ConfigService()
+    settings = get_settings()
+    field_name = key.upper()
 
-    try:
-        value = asyncio.run(service.get(key))
-    except ConfigKeyError as exc:
-        _render_error(str(exc))
+    if field_name not in type(settings).model_fields:
+        _render_error(f"Unknown configuration key: '{key}'")
         raise typer.Exit(code=1)
-    except Exception as exc:  # noqa: BLE001
-        _render_error(f"Failed to read configuration: {exc}")
-        raise typer.Exit(code=2)
 
-    console.print(f"[bold]{key}[/bold] = {value}")
-    raise typer.Exit(code=0)
+    value = getattr(settings, field_name)
+    if field_name in _SENSITIVE_KEYS:
+        value = _mask(value)
 
-
-@app.command("set")
-def set_command(
-    key: str = typer.Argument(
-        ...,
-        help="Dot-notation configuration key, e.g. llm.model",
-    ),
-    value: str = typer.Argument(
-        ...,
-        help="New value to assign to the key.",
-    ),
-) -> None:
-    """Set a configuration key to a new value.
-
-    The value is validated by ConfigService before being persisted; no
-    validation or type coercion happens in this command.
-
-    Args:
-        key: Dot-notation configuration key to update.
-        value: New value, as a raw string, to assign.
-
-    Example:
-        kodiak config set llm.model claude-sonnet-5
-    """
-    service = ConfigService()
-
-    try:
-        updated = asyncio.run(service.set(key, value))
-    except ConfigKeyError as exc:
-        _render_error(str(exc))
-        raise typer.Exit(code=1)
-    except ConfigValidationError as exc:
-        _render_error(f"Invalid value for '{key}': {exc}")
-        raise typer.Exit(code=1)
-    except Exception as exc:  # noqa: BLE001
-        _render_error(f"Failed to update configuration: {exc}")
-        raise typer.Exit(code=2)
-
-    console.print(
-        Panel(
-            f"[bold]{key}[/bold] set to [green]{updated}[/green]",
-            title="Configuration Updated",
-            border_style="green",
-        )
-    )
-    raise typer.Exit(code=0)
-
-
-@app.command("reset")
-def reset(
-    yes: bool = typer.Option(
-        False,
-        "--yes",
-        "-y",
-        help="Skip the confirmation prompt.",
-    ),
-) -> None:
-    """Reset configuration to its default values.
-
-    This is a destructive operation. Unless ``--yes`` is passed, the user
-    is prompted for confirmation before any changes are made.
-
-    Args:
-        yes: If True, skip the interactive confirmation prompt.
-
-    Example:
-        kodiak config reset
-        kodiak config reset --yes
-    """
-    if not yes:
-        confirmed = typer.confirm(
-            "This will overwrite your current configuration with defaults. Continue?"
-        )
-        if not confirmed:
-            console.print("[dim]Reset cancelled.[/dim]")
-            raise typer.Exit(code=0)
-
-    service = ConfigService()
-
-    try:
-        asyncio.run(service.reset())
-    except Exception as exc:  # noqa: BLE001
-        _render_error(f"Failed to reset configuration: {exc}")
-        raise typer.Exit(code=2)
-
-    console.print(
-        Panel(
-            "Configuration has been reset to defaults.",
-            title="Configuration Reset",
-            border_style="green",
-        )
-    )
+    console.print(f"[bold]{field_name}[/bold] = {value}")
     raise typer.Exit(code=0)
 
 
 @app.command("path")
 def path() -> None:
-    """Display the filesystem path to the active configuration file.
+    """Display the configured environment file used to load settings.
+
+    This reflects ``Settings.model_config['env_file']`` and is resolved
+    relative to the current working directory. It does not guarantee the
+    file exists -- ``pydantic-settings`` falls back to process
+    environment variables if it does not.
 
     Example:
         kodiak config path
     """
-    service = ConfigService()
+    env_file = get_settings().model_config.get("env_file")
+    if not env_file:
+        console.print("[dim]No env file configured; using process environment only.[/dim]")
+        raise typer.Exit(code=0)
 
-    try:
-        config_path: Path = asyncio.run(service.get_config_path())
-    except Exception as exc:  # noqa: BLE001
-        _render_error(f"Failed to resolve configuration path: {exc}")
-        raise typer.Exit(code=2)
-
-    console.print(str(config_path))
+    console.print(str(Path(str(env_file)).resolve()))
     raise typer.Exit(code=0)
 
 
 def _render_table(snapshot: dict[str, Any]) -> None:
-    """Render a flattened configuration snapshot as a Rich table.
+    """Render a configuration snapshot as a Rich table, masking secrets.
 
     Args:
-        snapshot: Nested configuration data as returned by ConfigService.
+        snapshot: Flat configuration data as returned by ``Settings.model_dump``.
     """
     table = Table(title="Kodiak Configuration")
     table.add_column("Key", style="bold")
     table.add_column("Value")
 
-    for key, value in _flatten(snapshot).items():
-        table.add_row(key, str(value))
+    for key, value in snapshot.items():
+        display_value = _mask(value) if key in _SENSITIVE_KEYS else value
+        table.add_row(key, str(display_value))
 
     console.print(table)
 
 
-def _flatten(data: dict[str, Any], prefix: str = "") -> dict[str, Any]:
-    """Flatten a nested dictionary into dot-notation keys.
+def _mask(value: Any) -> str:
+    """Mask a sensitive value for display, showing only a short suffix.
 
     Args:
-        data: Nested dictionary to flatten.
-        prefix: Key prefix accumulated from parent levels.
+        value: The raw sensitive value.
 
     Returns:
-        A single-level dictionary mapping dot-notation keys to values.
+        A masked string, or ``"(unset)"`` if the value is empty.
     """
-    flattened: dict[str, Any] = {}
-    for key, value in data.items():
-        full_key = f"{prefix}.{key}" if prefix else key
-        if isinstance(value, dict):
-            flattened.update(_flatten(value, full_key))
-        else:
-            flattened[full_key] = value
-    return flattened
+    text = str(value) if value is not None else ""
+    if not text:
+        return "(unset)"
+    tail = text[-4:] if len(text) > 4 else text
+    return f"{'*' * 8}{tail}"
 
 
 def _render_error(message: str) -> None:
