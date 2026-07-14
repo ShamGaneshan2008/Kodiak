@@ -3,7 +3,7 @@ from __future__ import annotations
 import structlog
 
 from kodiak.agents.base import AgentInput
-from kodiak.agents.planning_agent import PlannerAgent, SubTask, TaskPlan
+from kodiak.agents.planner import PlannerAgent, SubTask, TaskPlan
 
 logger = structlog.get_logger(__name__)
 
