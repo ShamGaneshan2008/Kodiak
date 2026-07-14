@@ -25,7 +25,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from kodiak.memory.error import MemoryNotFoundError, MemoryServiceError
+from kodiak.memory.errors import MemoryNotFoundError, MemoryServiceError
 from kodiak.memory.models import Memory, SearchResult
 from kodiak.memory.service import MemoryService
 
