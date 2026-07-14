@@ -1,4 +1,3 @@
-
 """Service layer for local Kodiak authentication state.
 
 This module owns the on-disk storage of the CLI's authentication
