@@ -61,9 +61,7 @@ _JSON_OPTION = typer.Option(
 )
 
 
-# --------------------------------------------------------------------------- #
 # kodiak memory add
-# --------------------------------------------------------------------------- #
 
 
 @app.command("add")
@@ -96,9 +94,9 @@ async def _add(*, content: str, tags: Optional[list[str]]) -> Memory:
     return await service.add(content=content, tags=tags or [])
 
 
-# --------------------------------------------------------------------------- #
+
 # kodiak memory search
-# --------------------------------------------------------------------------- #
+
 
 
 @app.command("search")
@@ -151,9 +149,7 @@ async def _search(*, query: str, tags: Optional[list[str]], limit: int) -> list[
     return await service.search(query=query, tags=tags or [], limit=limit)
 
 
-# --------------------------------------------------------------------------- #
 # kodiak memory list
-# --------------------------------------------------------------------------- #
 
 
 @app.command("list")
@@ -207,9 +203,7 @@ async def _list(*, tags: Optional[list[str]], limit: int) -> list[Memory]:
     return await service.list(tags=tags or [], limit=limit)
 
 
-# --------------------------------------------------------------------------- #
 # kodiak memory delete
-# --------------------------------------------------------------------------- #
 
 
 @app.command("delete")
@@ -272,9 +266,7 @@ async def _delete_by_tag(tags: list[str]) -> int:
     return await service.delete_by_tags(tags)
 
 
-# --------------------------------------------------------------------------- #
 # Shared rendering helpers
-# --------------------------------------------------------------------------- #
 
 
 def _memory_body(memory: Memory) -> Table:
