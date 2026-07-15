@@ -137,7 +137,7 @@ def search(
     for result in results:
         table.add_row(
             _short_id(result.memory.id),
-            _score_text(result.score),
+            _score_text(result.relevance_score),
             _truncate(result.memory.content),
             _tags_text(result.memory.tags),
             _format_dt(result.memory.created_at),
