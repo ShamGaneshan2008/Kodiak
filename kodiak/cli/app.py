@@ -21,8 +21,8 @@ from kodiak.cli.commands.analyze import app as analyze_app
 from kodiak.cli.commands.logout import app as logout_app
 from kodiak.cli.commands.memory import app as memory_app
 from kodiak.cli.commands.plan import app as plan_app
-from kodiak.cli.commands.review import app as review_app
-from kodiak.cli.commands.status import app as status_app
+# from kodiak.cli.commands.review import app as review_app
+# from kodiak.cli.commands.status import app as status_app
 from kodiak.cli.commands.task import app as task_app
 from kodiak.cli.commands.version import app as version_app
 
@@ -85,8 +85,8 @@ app.add_typer(analyze_app, name="analyze")
 app.add_typer(logout_app, name="logout")
 app.add_typer(memory_app, name="memory")
 app.add_typer(plan_app, name="plan")
-app.add_typer(review_app, name="review")
-app.add_typer(status_app, name="status")
+# app.add_typer(review_app, name="review")
+# app.add_typer(status_app, name="status")
 app.add_typer(task_app, name="task")
 app.add_typer(version_app, name="version")
 
