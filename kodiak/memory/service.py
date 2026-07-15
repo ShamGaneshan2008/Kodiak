@@ -1,23 +1,18 @@
 # kodiak/memory/service.py
-"""Unified facade over Kodiak's episodic, semantic, and procedural memory stores."""
+"""Unified facade over Kodiak's episodic, semantic, and procedural memories."""
 
 from __future__ import annotations
 
 import uuid
-from typing import Any, Final, Protocol, runtime_checkable
+from typing import Any, Final
 
 import structlog
 
-from .episodic import Episode, EpisodeRepository, EpisodicMemory
+from .episodic import Episode
 from .errors import MemoryNotFoundError, MemoryServiceError
 from .models import Memory, MemoryType, SearchResult
-from .procedural import (
-    Procedure,
-    ProcedureRepository,
-    ProcedureStep,
-    ProceduralMemory,
-)
-from .semantic import SemanticEntity, SemanticRepository, SemanticMemory
+from .procedural import Procedure, ProcedureStep
+from .semantic import SemanticEntity
 
 logger = structlog.get_logger(__name__)
 
@@ -27,55 +22,19 @@ _DEFAULT_SEARCH_LIMIT: Final[int] = 10
 _DEFAULT_LIST_LIMIT: Final[int] = 100
 
 
-@runtime_checkable
-class ListableEpisodeRepository(EpisodeRepository, Protocol):
-    """Episode repository extended with listing and deletion support."""
-
-    async def list_all(self, limit: int = 100, offset: int = 0) -> list[Episode]: ...
-
-    async def delete(self, episode_id: uuid.UUID) -> bool: ...
-
-
-@runtime_checkable
-class ListableSemanticRepository(SemanticRepository, Protocol):
-    """Semantic repository extended with listing support."""
-
-    async def list_all(self, limit: int = 100, offset: int = 0) -> list[SemanticEntity]: ...
-
-
-@runtime_checkable
-class TaggableProcedureRepository(ProcedureRepository, Protocol):
-    """Procedure repository extended with listing, deletion, and tag lookup."""
-
-    async def list_all(self, limit: int = 100, offset: int = 0) -> list[Procedure]: ...
-
-    async def delete(self, procedure_id: uuid.UUID) -> bool: ...
-
-    async def list_by_tags(self, tags: list[str]) -> list[Procedure]: ...
-
-
 class MemoryService:
-    """Unified CRUD and search interface over Kodiak's long-term memory stores.
+    """Unified CRUD and search interface over Kodiak's memory models.
 
-    Working memory is intentionally excluded: it is task-scoped and transient,
-    managed exclusively through consolidation rather than direct CRUD.
+    The repository contains domain models for episodic, semantic, and
+    procedural memory, but no concrete repository implementations. This service
+    therefore owns the in-process stores directly instead of requiring
+    repository objects that do not exist in the project.
     """
 
-    def __init__(
-        self,
-        episodic_memory: EpisodicMemory,
-        episodic_repository: ListableEpisodeRepository,
-        semantic_memory: SemanticMemory,
-        semantic_repository: ListableSemanticRepository,
-        procedural_memory: ProceduralMemory,
-        procedural_repository: TaggableProcedureRepository,
-    ) -> None:
-        self._episodic = episodic_memory
-        self._episodic_repo = episodic_repository
-        self._semantic = semantic_memory
-        self._semantic_repo = semantic_repository
-        self._procedural = procedural_memory
-        self._procedural_repo = procedural_repository
+    def __init__(self) -> None:
+        self._episodes: dict[uuid.UUID, Episode] = {}
+        self._entities: dict[uuid.UUID, SemanticEntity] = {}
+        self._procedures: dict[uuid.UUID, Procedure] = {}
 
     async def add(
         self,
@@ -84,38 +43,21 @@ class MemoryService:
         tags: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Memory:
-        """Add a new memory record.
-
-        Args:
-            content: Primary text of the memory. Interpreted as a semantic
-                fact, an episode goal, or a procedure description depending
-                on `memory_type`.
-            memory_type: Which store to write the memory into.
-            tags: Only persisted for procedural memories; episodic and
-                semantic records have no native tag field.
-            metadata: Type-specific extras. Recognized keys:
-                episodic - `outcome`, `task_id`, `steps`, `context`.
-                semantic - `category`, `source_task_id`, `confidence`.
-                procedural - `name`, `steps`.
-
-        Returns:
-            The normalized `Memory` record that was created.
-
-        Raises:
-            MemoryServiceError: If the underlying store rejects the write.
-        """
+        """Add a new memory record."""
         tags = tags or []
         metadata = metadata or {}
 
         try:
             if memory_type is MemoryType.EPISODIC:
-                episode = await self._episodic.create_episode(
+                episode = Episode(
                     goal=content,
                     outcome=str(metadata.get("outcome", "")),
-                    task_id=metadata.get("task_id"),
-                    context=metadata.get("context"),
-                    steps=metadata.get("steps"),
+                    task_id=self._coerce_uuid(metadata.get("task_id")),
+                    context=dict(metadata.get("context") or {}),
+                    steps=[str(step) for step in metadata.get("steps", [])],
                 )
+                self._episodes[episode.id] = episode
+                logger.info("episode_created", episode_id=str(episode.id))
                 return self._episode_to_memory(episode)
 
             if memory_type is MemoryType.PROCEDURAL:
@@ -124,20 +66,29 @@ class MemoryService:
                     ProcedureStep(step_number=i + 1, action=str(step))
                     for i, step in enumerate(raw_steps)
                 ]
-                procedure = await self._procedural.create_procedure(
+                procedure = Procedure(
                     name=str(metadata.get("name", content[:80])),
                     description=content,
                     steps=steps,
                     tags=tags,
                 )
+                self._procedures[procedure.id] = procedure
+                logger.info("procedure_created", procedure_id=str(procedure.id))
                 return self._procedure_to_memory(procedure)
 
-            entity = await self._semantic.store_fact(
+            entity = SemanticEntity(
                 content=content,
                 category=str(metadata.get("category", "general")),
-                source_task_id=metadata.get("source_task_id"),
+                source_task_id=self._coerce_uuid(metadata.get("source_task_id")),
                 confidence=float(metadata.get("confidence", 1.0)),
+                metadata={
+                    str(key): str(value)
+                    for key, value in metadata.items()
+                    if key not in {"category", "source_task_id", "confidence"}
+                },
             )
+            self._entities[entity.id] = entity
+            logger.info("fact_stored", entity_id=str(entity.id))
             return self._semantic_to_memory(entity)
         except Exception as exc:
             logger.exception("memory_add_failed", memory_type=str(memory_type))
@@ -148,46 +99,41 @@ class MemoryService:
         query: str,
         memory_type: MemoryType | None = None,
         limit: int = _DEFAULT_SEARCH_LIMIT,
+        tags: list[str] | None = None,
     ) -> list[SearchResult]:
-        """Search across one or all memory stores.
-
-        Args:
-            query: Free-text search query.
-            memory_type: Restrict the search to a single store. Searches all
-                stores when omitted.
-            limit: Maximum number of results to return overall.
-
-        Returns:
-            Results sorted by descending relevance score, truncated to `limit`.
-        """
+        """Search across one or all memory stores."""
+        wanted_tags = set(tags or [])
         results: list[SearchResult] = []
 
         if memory_type in (None, MemoryType.EPISODIC):
-            for r in await self._episodic.search_episodes(query, limit=limit):
-                results.append(
-                    SearchResult(
-                        memory=self._episode_to_memory(r.episode),
-                        relevance_score=r.relevance_score,
-                    )
-                )
+            for episode in self._episodes.values():
+                memory = self._episode_to_memory(episode)
+                if self._matches_tags(memory, wanted_tags):
+                    score = self._score(query, episode.goal, episode.outcome, *episode.steps)
+                    if score > 0:
+                        results.append(SearchResult(memory=memory, relevance_score=score))
 
         if memory_type in (None, MemoryType.SEMANTIC):
-            for r in await self._semantic.search_facts(query, limit=limit):
-                results.append(
-                    SearchResult(
-                        memory=self._semantic_to_memory(r.entity),
-                        relevance_score=r.relevance_score,
-                    )
-                )
+            for entity in self._entities.values():
+                memory = self._semantic_to_memory(entity)
+                if self._matches_tags(memory, wanted_tags):
+                    score = self._score(query, entity.content, entity.category)
+                    if score > 0:
+                        results.append(SearchResult(memory=memory, relevance_score=score))
 
         if memory_type in (None, MemoryType.PROCEDURAL):
-            for r in await self._procedural.search_procedures(query, limit=limit):
-                results.append(
-                    SearchResult(
-                        memory=self._procedure_to_memory(r.procedure),
-                        relevance_score=r.relevance_score,
+            for procedure in self._procedures.values():
+                memory = self._procedure_to_memory(procedure)
+                if self._matches_tags(memory, wanted_tags):
+                    score = self._score(
+                        query,
+                        procedure.name,
+                        procedure.description,
+                        *procedure.tags,
+                        *(step.action for step in procedure.steps),
                     )
-                )
+                    if score > 0:
+                        results.append(SearchResult(memory=memory, relevance_score=score))
 
         results.sort(key=lambda r: r.relevance_score, reverse=True)
         return results[:limit]
@@ -199,73 +145,44 @@ class MemoryService:
         limit: int = _DEFAULT_LIST_LIMIT,
         offset: int = 0,
     ) -> list[Memory]:
-        """List memories, optionally filtered by store and tags.
-
-        Args:
-            memory_type: Restrict to a single store. Lists all stores when omitted.
-            tags: Only return memories containing at least one of these tags.
-                Only procedural memories carry native tags; semantic memories
-                are matched against their `category` as a pseudo-tag.
-            limit: Maximum number of records to return per store.
-            offset: Number of records to skip per store.
-
-        Returns:
-            Normalized memory records, newest first.
-        """
+        """List memories, optionally filtered by store and tags."""
         memories: list[Memory] = []
 
         if memory_type in (None, MemoryType.EPISODIC):
-            episodes = await self._episodic_repo.list_all(limit=limit, offset=offset)
-            memories.extend(self._episode_to_memory(e) for e in episodes)
+            memories.extend(self._episode_to_memory(e) for e in self._episodes.values())
 
         if memory_type in (None, MemoryType.SEMANTIC):
-            entities = await self._semantic_repo.list_all(limit=limit, offset=offset)
-            memories.extend(self._semantic_to_memory(e) for e in entities)
+            memories.extend(self._semantic_to_memory(e) for e in self._entities.values())
 
         if memory_type in (None, MemoryType.PROCEDURAL):
-            procedures = await self._procedural_repo.list_all(limit=limit, offset=offset)
-            memories.extend(self._procedure_to_memory(p) for p in procedures)
+            memories.extend(self._procedure_to_memory(p) for p in self._procedures.values())
 
-        if tags:
-            wanted = set(tags)
-            memories = [m for m in memories if wanted & set(m.tags)]
-
+        wanted = set(tags or [])
+        memories = [m for m in memories if self._matches_tags(m, wanted)]
         memories.sort(key=lambda m: m.created_at, reverse=True)
-        return memories[:limit]
+        return memories[offset : offset + limit]
 
     async def delete(
         self,
-        memory_id: uuid.UUID,
+        memory_id: uuid.UUID | str,
         memory_type: MemoryType | None = None,
     ) -> bool:
-        """Delete a single memory by id.
+        """Delete a single memory by id."""
+        parsed_id = self._coerce_uuid(memory_id)
+        if parsed_id is None:
+            raise MemoryNotFoundError(str(memory_id), memory_type=str(memory_type) if memory_type else None)
 
-        Args:
-            memory_id: Identifier of the memory to remove.
-            memory_type: Store to delete from. All stores are tried in turn
-                when omitted.
+        if memory_type in (None, MemoryType.EPISODIC) and self._episodes.pop(parsed_id, None):
+            logger.info("memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.EPISODIC))
+            return True
 
-        Returns:
-            True once the memory has been deleted.
+        if memory_type in (None, MemoryType.SEMANTIC) and self._entities.pop(parsed_id, None):
+            logger.info("memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.SEMANTIC))
+            return True
 
-        Raises:
-            MemoryNotFoundError: If no matching memory exists in the target store(s).
-        """
-        stores: list[tuple[MemoryType, Any]] = []
-        if memory_type in (None, MemoryType.EPISODIC):
-            stores.append((MemoryType.EPISODIC, self._episodic_repo))
-        if memory_type in (None, MemoryType.SEMANTIC):
-            stores.append((MemoryType.SEMANTIC, self._semantic_repo))
-        if memory_type in (None, MemoryType.PROCEDURAL):
-            stores.append((MemoryType.PROCEDURAL, self._procedural_repo))
-
-        for m_type, repo in stores:
-            deleted = await repo.delete(memory_id)
-            if deleted:
-                logger.info(
-                    "memory_deleted", memory_id=str(memory_id), memory_type=str(m_type)
-                )
-                return True
+        if memory_type in (None, MemoryType.PROCEDURAL) and self._procedures.pop(parsed_id, None):
+            logger.info("memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.PROCEDURAL))
+            return True
 
         raise MemoryNotFoundError(str(memory_id), memory_type=str(memory_type) if memory_type else None)
 
@@ -274,37 +191,48 @@ class MemoryService:
         tags: list[str],
         memory_type: MemoryType | None = None,
     ) -> int:
-        """Delete every memory matching any of the given tags.
-
-        Args:
-            tags: Tags to match. Only procedural memories carry native tags;
-                semantic memories are matched against their `category`.
-                Episodic memories have no tag concept and are never affected.
-            memory_type: Restrict deletion to a single store.
-
-        Returns:
-            The number of memories deleted.
-        """
+        """Delete every memory matching any of the given tags."""
         if not tags:
             return 0
 
+        wanted = set(tags)
         deleted_count = 0
 
-        if memory_type in (None, MemoryType.PROCEDURAL):
-            matches = await self._procedural_repo.list_by_tags(tags)
-            for procedure in matches:
-                if await self._procedural_repo.delete(procedure.id):
+        if memory_type in (None, MemoryType.SEMANTIC):
+            for entity_id, entity in list(self._entities.items()):
+                if entity.category in wanted:
+                    del self._entities[entity_id]
                     deleted_count += 1
 
-        if memory_type in (None, MemoryType.SEMANTIC):
-            wanted = set(tags)
-            entities = await self._semantic_repo.list_all(limit=_DEFAULT_LIST_LIMIT)
-            for entity in entities:
-                if entity.category in wanted and await self._semantic_repo.delete(entity.id):
+        if memory_type in (None, MemoryType.PROCEDURAL):
+            for procedure_id, procedure in list(self._procedures.items()):
+                if wanted & set(procedure.tags):
+                    del self._procedures[procedure_id]
                     deleted_count += 1
 
         logger.info("memories_deleted_by_tags", tags=tags, count=deleted_count)
         return deleted_count
+
+    @staticmethod
+    def _matches_tags(memory: Memory, tags: set[str]) -> bool:
+        return not tags or bool(tags & set(memory.tags))
+
+    @staticmethod
+    def _score(query: str, *parts: str) -> float:
+        text = " ".join(part for part in parts if part).lower()
+        terms = [term for term in query.lower().split() if term]
+        if not terms:
+            return 1.0
+        matches = sum(1 for term in terms if term in text)
+        return matches / len(terms)
+
+    @staticmethod
+    def _coerce_uuid(value: Any) -> uuid.UUID | None:
+        if value is None or value == "":
+            return None
+        if isinstance(value, uuid.UUID):
+            return value
+        return uuid.UUID(str(value))
 
     @staticmethod
     def _episode_to_memory(episode: Episode) -> Memory:
