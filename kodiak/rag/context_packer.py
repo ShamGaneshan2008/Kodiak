@@ -1,7 +1,7 @@
 import structlog
 from pydantic import BaseModel, Field
 
-from kodiak.rag.parsers.retriever import RetrievalResult
+from kodiak.rag.vector_store import SearchResult as RetrievalResult
 
 logger = structlog.get_logger(__name__)
 
