@@ -3,7 +3,7 @@ from typing import Protocol, runtime_checkable
 import structlog
 from pydantic import BaseModel, Field
 
-from kodiak.rag.parsers.retriever import RetrievalResult
+from kodiak.rag.vector_store import SearchResult as RetrievalResult
 
 logger = structlog.get_logger(__name__)
 
@@ -42,7 +42,7 @@ class Reranker:
         for result, score in zip(results, raw_scores):
             if score >= self._score_threshold:
                 scored_results.append(RankedResult(
-                    id=str(result.id),
+                    id=str(result.chunk_id),
                     content=result.content,
                     score=score,
                     metadata=result.metadata,
