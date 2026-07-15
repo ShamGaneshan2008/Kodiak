@@ -7,6 +7,7 @@ from typing import Protocol, runtime_checkable
 
 import structlog
 from pydantic import BaseModel, Field
+from typing import Any
 
 logger = structlog.get_logger(__name__)
 
