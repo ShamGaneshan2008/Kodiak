@@ -1,541 +1,705 @@
-"""
-Provider-based embedding service for Kodiak V3 repository chunks.
+"""Embedding generation for the Kodiak Repository Intelligence subsystem.
 
-This module consumes ``RepositoryChunk`` objects produced by
-``kodiak.rag.chunking``. It does not parse source code, rescan repositories,
-perform semantic search, retrieve documents, build prompts, or modify files.
+This module defines the ``EmbeddingProvider`` abstraction, concrete provider
+implementations (OpenAI, Ollama, Gemini), and the ``EmbeddingManager`` that
+orchestrates provider selection, retries, fallback, dimension validation,
+and caching.
+
+This module has no dependency on ChromaDB or any other vector store. Its
+sole responsibility is turning text into vectors; persistence and
+similarity search belong to other `kodiak/rag/` modules (e.g. a future
+``vector_store.py``).
 """
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
-import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Protocol
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 
-import httpx
 import structlog
-
-from kodiak.rag.chunking import RepositoryChunk
 
 logger = structlog.get_logger(__name__)
 
-
-class EmbeddingProvider(str, Enum):
-    """Supported embedding provider identifiers."""
-
-    OPENAI = "openai"
-    OLLAMA = "ollama"
-    VOYAGE = "voyage"
-    GEMINI = "gemini"
-
-
-DEFAULT_MODELS: dict[EmbeddingProvider, str] = {
-    EmbeddingProvider.OPENAI: "text-embedding-3-small",
-    EmbeddingProvider.OLLAMA: "nomic-embed-text",
-    EmbeddingProvider.VOYAGE: "voyage-code-3",
-    EmbeddingProvider.GEMINI: "gemini-embedding-001",
-}
-
-DEFAULT_BASE_URLS: dict[EmbeddingProvider, str] = {
-    EmbeddingProvider.OPENAI: "https://api.openai.com/v1",
-    EmbeddingProvider.OLLAMA: "http://localhost:11434",
-    EmbeddingProvider.VOYAGE: "https://api.voyageai.com/v1",
-    EmbeddingProvider.GEMINI: "https://generativelanguage.googleapis.com/v1beta",
-}
+__all__ = [
+    "EmbeddingProvider",
+    "EmbeddingManager",
+    "EmbeddingResult",
+    "RetryConfig",
+    "EmbeddingCache",
+    "NullEmbeddingCache",
+    "OpenAIEmbeddingProvider",
+    "OllamaEmbeddingProvider",
+    "GeminiEmbeddingProvider",
+    "EmbeddingError",
+    "ProviderConfigurationError",
+    "ProviderRequestError",
+    "EmbeddingDimensionMismatchError",
+    "AllProvidersExhaustedError",
+]
 
 
-@dataclass(frozen=True)
-class EmbeddingConfig:
-    """Configuration for embedding generation."""
-
-    provider: EmbeddingProvider = EmbeddingProvider.OPENAI
-    model: str | None = None
-    api_key: str | None = None
-    base_url: str | None = None
-    dimensions: int | None = None
-    batch_size: int = 64
-    max_retries: int = 3
-    retry_min_seconds: float = 0.5
-    retry_max_seconds: float = 8.0
-    timeout_seconds: float = 30.0
-    max_concurrency: int = 4
-    include_metadata_in_chunk_text: bool = True
-
-    def __post_init__(self) -> None:
-        """Validate and normalize configuration values."""
-        if isinstance(self.provider, str):
-            object.__setattr__(self, "provider", EmbeddingProvider(self.provider))
-        if self.batch_size <= 0:
-            raise ValueError("batch_size must be greater than zero")
-        if self.max_retries <= 0:
-            raise ValueError("max_retries must be greater than zero")
-        if self.timeout_seconds <= 0:
-            raise ValueError("timeout_seconds must be greater than zero")
-        if self.retry_min_seconds < 0:
-            raise ValueError("retry_min_seconds must be zero or greater")
-        if self.retry_max_seconds < self.retry_min_seconds:
-            raise ValueError("retry_max_seconds must be greater than retry_min_seconds")
-        if self.dimensions is not None and self.dimensions <= 0:
-            raise ValueError("dimensions must be greater than zero when provided")
-
-    @property
-    def resolved_model(self) -> str:
-        """Return the configured model or the provider default."""
-        return self.model or DEFAULT_MODELS[self.provider]
-
-    @property
-    def resolved_base_url(self) -> str:
-        """Return the configured base URL or the provider default."""
-        return (self.base_url or DEFAULT_BASE_URLS[self.provider]).rstrip("/")
+# ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+class EmbeddingError(Exception):
+    """Base exception for all embedding-related failures."""
+
+
+class ProviderConfigurationError(EmbeddingError):
+    """Raised when a provider or the manager is misconfigured."""
+
+
+class ProviderRequestError(EmbeddingError):
+    """Raised when a provider's underlying request fails.
+
+    Attributes:
+        retryable: Whether the manager's retry logic should retry this
+            failure. Transient issues (timeouts, 5xx, rate limits) should
+            set this to ``True``; malformed responses or auth failures
+            should set it to ``False``.
+    """
+
+    def __init__(self, message: str, *, retryable: bool = True) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
+
+class EmbeddingDimensionMismatchError(EmbeddingError):
+    """Raised when a provider returns a vector of an unexpected dimension."""
+
+    def __init__(self, *, expected: int, actual: int, provider: str) -> None:
+        super().__init__(
+            f"{provider} returned a {actual}-dimensional vector, expected {expected}"
+        )
+        self.expected = expected
+        self.actual = actual
+        self.provider = provider
+
+
+class AllProvidersExhaustedError(EmbeddingError):
+    """Raised when every eligible provider failed for a given request."""
+
+
+# ---------------------------------------------------------------------------
+# Core data types
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
 class EmbeddingResult:
-    """Embedding output for one input string."""
+    """A single embedding result.
 
-    text: str
-    embedding: tuple[float, ...]
-    provider: EmbeddingProvider
+    Attributes:
+        vector: The embedding vector.
+        model: The model identifier that produced the vector.
+        provider: The provider name that produced the vector.
+    """
+
+    vector: list[float]
     model: str
-    dimensions: int
-    token_count: int | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def text_hash(self) -> str:
-        """Return a short stable hash for the embedded text."""
-        return hashlib.sha256(self.text.encode("utf-8")).hexdigest()[:16]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation of this result."""
-        return {
-            "text": self.text,
-            "text_hash": self.text_hash,
-            "embedding": list(self.embedding),
-            "provider": self.provider.value,
-            "model": self.model,
-            "dimensions": self.dimensions,
-            "token_count": self.token_count,
-            "metadata": self.metadata,
-        }
+    provider: str
 
 
-@dataclass(frozen=True)
-class ChunkEmbedding:
-    """Embedding output paired with the repository chunk that produced it."""
+@dataclass(slots=True)
+class RetryConfig:
+    """Retry policy for transient provider failures.
 
-    chunk: RepositoryChunk
-    embedding: tuple[float, ...]
-    provider: EmbeddingProvider
-    model: str
-    dimensions: int
-    metadata: dict[str, Any] = field(default_factory=dict)
+    Attributes:
+        max_attempts: Total attempts per provider, including the first.
+        base_delay_seconds: Initial backoff delay.
+        max_delay_seconds: Ceiling applied to exponential backoff.
+    """
 
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable representation of this chunk embedding."""
-        return {
-            "chunk": self.chunk.to_dict(),
-            "embedding": list(self.embedding),
-            "provider": self.provider.value,
-            "model": self.model,
-            "dimensions": self.dimensions,
-            "metadata": self.metadata,
-        }
+    max_attempts: int = 3
+    base_delay_seconds: float = 0.5
+    max_delay_seconds: float = 8.0
 
 
-class AsyncEmbeddingProvider(Protocol):
-    """Minimal provider contract accepted by ``EmbeddingService``."""
+@runtime_checkable
+class EmbeddingCache(Protocol):
+    """Structural type for a caching backend used by ``EmbeddingManager``.
 
-    @property
-    def provider(self) -> EmbeddingProvider:
-        """Return the provider identifier."""
+    Implementations might be backed by Redis, an in-memory dict, or a
+    database table. ``EmbeddingManager`` depends only on this narrow
+    protocol, never on a concrete caching technology.
+    """
+
+    async def get(self, key: str) -> list[float] | None:
+        """Return a cached vector for ``key``, or ``None`` on a miss."""
         ...
 
-    @property
-    def model(self) -> str:
-        """Return the model name used by the provider."""
-        ...
-
-    async def embed_texts(self, texts: list[str]) -> list[EmbeddingResult]:
-        """Embed a batch of input strings."""
-        ...
-
-    async def close(self) -> None:
-        """Release provider-owned resources."""
+    async def set(self, key: str, vector: list[float]) -> None:
+        """Store ``vector`` under ``key``."""
         ...
 
 
-class HTTPEmbeddingProvider(ABC):
-    """Base class for HTTP embedding providers with retry handling."""
+class NullEmbeddingCache:
+    """No-op cache used when no caching backend is configured."""
+
+    async def get(self, key: str) -> list[float] | None:
+        """Always return ``None``, indicating a cache miss."""
+        return None
+
+    async def set(self, key: str, vector: list[float]) -> None:
+        """Discard the value; this cache stores nothing."""
+        return None
+
+
+@runtime_checkable
+class AsyncHTTPResponse(Protocol):
+    """Structural type for the HTTP response object providers receive."""
+
+    status_code: int
+
+    def json(self) -> dict:
+        """Parse and return the response body as JSON."""
+        ...
+
+    def raise_for_status(self) -> None:
+        """Raise an exception if the response indicates an HTTP error."""
+        ...
+
+
+@runtime_checkable
+class AsyncHTTPClient(Protocol):
+    """Structural type for the async HTTP client injected into providers.
+
+    Matches the subset of ``httpx.AsyncClient`` that providers need, so
+    providers can be exercised in tests with a fake client instead of a
+    hard dependency on any specific HTTP library.
+    """
+
+    async def post(self, url: str, **kwargs: object) -> AsyncHTTPResponse:
+        """Issue an async POST request."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Provider interface
+# ---------------------------------------------------------------------------
+
+
+class EmbeddingProvider(ABC):
+    """Abstract base class for all embedding providers.
+
+    Concrete providers wrap a specific embedding backend behind a uniform
+    async interface so the rest of Kodiak never depends on a particular
+    vendor's SDK or wire format.
+    """
+
+    @abstractmethod
+    async def embed_text(self, text: str) -> EmbeddingResult:
+        """Embed a single piece of text.
+
+        Args:
+            text: The text to embed.
+
+        Returns:
+            The resulting embedding.
+
+        Raises:
+            ProviderRequestError: If the underlying request fails.
+        """
+
+    @abstractmethod
+    async def embed_batch(self, texts: Sequence[str]) -> list[EmbeddingResult]:
+        """Embed a batch of texts.
+
+        Args:
+            texts: The texts to embed, in order.
+
+        Returns:
+            Embeddings in the same order as ``texts``.
+
+        Raises:
+            ProviderRequestError: If the underlying request fails.
+        """
+
+    @abstractmethod
+    def dimensions(self) -> int:
+        """Return the vector dimensionality this provider produces."""
+
+    @abstractmethod
+    def provider_name(self) -> str:
+        """Return a short, stable identifier for this provider."""
+
+
+# ---------------------------------------------------------------------------
+# Concrete providers
+# ---------------------------------------------------------------------------
+
+
+class OpenAIEmbeddingProvider(EmbeddingProvider):
+    """Embedding provider backed by the OpenAI embeddings API."""
+
+    _DEFAULT_ENDPOINT = "https://api.openai.com/v1/embeddings"
 
     def __init__(
         self,
-        config: EmbeddingConfig,
+        http_client: AsyncHTTPClient,
         *,
-        client: httpx.AsyncClient | None = None,
+        api_key: str,
+        model: str = "text-embedding-3-small",
+        dimensions: int = 1536,
+        endpoint: str = _DEFAULT_ENDPOINT,
+        request_timeout: float = 30.0,
     ) -> None:
-        """
-        Initialize an HTTP provider.
+        """Initialize the provider.
 
         Args:
-            config: Provider configuration.
-            client: Optional injected HTTP client for tests or shared transport.
+            http_client: Injected async HTTP client used for all requests.
+            api_key: OpenAI API key.
+            model: Embedding model identifier.
+            dimensions: Expected output vector dimensionality for ``model``.
+            endpoint: Override for the embeddings endpoint (useful for
+                Azure OpenAI deployments or internal proxies).
+            request_timeout: Per-request timeout, in seconds.
+
+        Raises:
+            ProviderConfigurationError: If ``api_key`` is empty.
         """
-        self.config = config
-        self._client = client or httpx.AsyncClient(timeout=config.timeout_seconds)
-        self._owns_client = client is None
+        if not api_key:
+            raise ProviderConfigurationError("OpenAI provider requires an api_key")
+        self._client = http_client
+        self._api_key = api_key
+        self._model = model
+        self._dimensions = dimensions
+        self._endpoint = endpoint
+        self._timeout = request_timeout
+        self._log = logger.bind(provider="openai", model=model)
 
-    @property
-    def provider(self) -> EmbeddingProvider:
-        """Return the configured provider identifier."""
-        return self.config.provider
+    async def embed_text(self, text: str) -> EmbeddingResult:
+        """See ``EmbeddingProvider.embed_text``."""
+        (result,) = await self.embed_batch([text])
+        return result
 
-    @property
-    def model(self) -> str:
-        """Return the configured model name."""
-        return self.config.resolved_model
+    async def embed_batch(self, texts: Sequence[str]) -> list[EmbeddingResult]:
+        """See ``EmbeddingProvider.embed_batch``.
 
-    async def embed_texts(self, texts: list[str]) -> list[EmbeddingResult]:
-        """Embed ``texts`` with provider-specific HTTP calls and retries."""
+        OpenAI's endpoint natively accepts a list of inputs, so batches are
+        sent as a single request.
+        """
         if not texts:
             return []
 
-        response = await self._request_with_retries(texts)
-        embeddings, token_count, metadata = self._parse_response(response)
-        if len(embeddings) != len(texts):
-            raise ValueError(
-                f"{self.provider.value} returned {len(embeddings)} embeddings for "
-                f"{len(texts)} inputs"
-            )
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {"model": self._model, "input": list(texts)}
 
+        try:
+            response = await self._client.post(
+                self._endpoint, json=payload, headers=headers, timeout=self._timeout
+            )
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001 - normalized into ProviderRequestError
+            self._log.warning("embedding_request_failed", error=str(exc))
+            raise ProviderRequestError(f"OpenAI embedding request failed: {exc}") from exc
+
+        body = response.json()
+        items = sorted(body.get("data", []), key=lambda item: item["index"])
         return [
             EmbeddingResult(
-                text=text,
-                embedding=tuple(float(value) for value in embedding),
-                provider=self.provider,
-                model=self.model,
-                dimensions=len(embedding),
-                token_count=self._token_count_for_item(token_count, len(texts)),
-                metadata=metadata,
+                vector=item["embedding"], model=self._model, provider=self.provider_name()
             )
-            for text, embedding in zip(texts, embeddings)
+            for item in items
         ]
 
-    async def close(self) -> None:
-        """Close the provider HTTP client if this provider created it."""
-        if self._owns_client:
-            await self._client.aclose()
+    def dimensions(self) -> int:
+        """See ``EmbeddingProvider.dimensions``."""
+        return self._dimensions
 
-    async def _request_with_retries(self, texts: list[str]) -> dict[str, Any]:
-        last_error: Exception | None = None
-        for attempt in range(1, self.config.max_retries + 1):
-            try:
-                start = time.perf_counter()
-                response = await self._send_request(texts)
-                response.raise_for_status()
-                elapsed = time.perf_counter() - start
-                logger.debug(
-                    "embedding_provider_success",
-                    provider=self.provider.value,
-                    model=self.model,
-                    batch_size=len(texts),
-                    elapsed_ms=round(elapsed * 1000),
-                )
-                return response.json()
-            except (httpx.HTTPError, ValueError) as exc:
-                last_error = exc
-                logger.warning(
-                    "embedding_provider_retry",
-                    provider=self.provider.value,
-                    model=self.model,
-                    attempt=attempt,
-                    max_retries=self.config.max_retries,
-                    error=str(exc),
-                )
-                if attempt >= self.config.max_retries:
-                    break
-                await asyncio.sleep(self._retry_delay(attempt))
-
-        raise RuntimeError(
-            f"{self.provider.value} embedding request failed after "
-            f"{self.config.max_retries} attempts"
-        ) from last_error
-
-    @abstractmethod
-    async def _send_request(self, texts: list[str]) -> httpx.Response:
-        """Send one provider-specific embedding request."""
-
-    @abstractmethod
-    def _parse_response(
-        self,
-        response: dict[str, Any],
-    ) -> tuple[list[list[float]], int | None, dict[str, Any]]:
-        """Extract embeddings, optional token count, and metadata."""
-
-    def _headers(self) -> dict[str, str]:
-        return {"Content-Type": "application/json"}
-
-    def _retry_delay(self, attempt: int) -> float:
-        delay = self.config.retry_min_seconds * (2 ** (attempt - 1))
-        return min(delay, self.config.retry_max_seconds)
-
-    @staticmethod
-    def _token_count_for_item(total_tokens: int | None, item_count: int) -> int | None:
-        if total_tokens is None or item_count <= 0:
-            return None
-        return total_tokens // item_count
+    def provider_name(self) -> str:
+        """See ``EmbeddingProvider.provider_name``."""
+        return "openai"
 
 
-class OpenAIEmbeddingProvider(HTTPEmbeddingProvider):
-    """Embedding provider for OpenAI-compatible embeddings endpoints."""
+class OllamaEmbeddingProvider(EmbeddingProvider):
+    """Embedding provider backed by a local or remote Ollama server.
 
-    async def _send_request(self, texts: list[str]) -> httpx.Response:
-        payload: dict[str, Any] = {"model": self.model, "input": texts}
-        if self.config.dimensions is not None:
-            payload["dimensions"] = self.config.dimensions
-        return await self._client.post(
-            f"{self.config.resolved_base_url}/embeddings",
-            headers=self._headers(),
-            json=payload,
-        )
-
-    def _headers(self) -> dict[str, str]:
-        headers = super()._headers()
-        if self.config.api_key:
-            headers["Authorization"] = f"Bearer {self.config.api_key}"
-        return headers
-
-    def _parse_response(
-        self,
-        response: dict[str, Any],
-    ) -> tuple[list[list[float]], int | None, dict[str, Any]]:
-        data = sorted(response.get("data", []), key=lambda item: item.get("index", 0))
-        embeddings = [item["embedding"] for item in data]
-        usage = response.get("usage") or {}
-        metadata = {"usage": usage}
-        return embeddings, usage.get("total_tokens"), metadata
-
-
-class OllamaEmbeddingProvider(HTTPEmbeddingProvider):
-    """Embedding provider for Ollama's local ``/api/embed`` endpoint."""
-
-    async def _send_request(self, texts: list[str]) -> httpx.Response:
-        payload: dict[str, Any] = {"model": self.model, "input": texts}
-        if self.config.dimensions is not None:
-            payload["dimensions"] = self.config.dimensions
-        return await self._client.post(
-            f"{self.config.resolved_base_url}/api/embed",
-            headers=self._headers(),
-            json=payload,
-        )
-
-    def _parse_response(
-        self,
-        response: dict[str, Any],
-    ) -> tuple[list[list[float]], int | None, dict[str, Any]]:
-        embeddings = response.get("embeddings")
-        if embeddings is None and "embedding" in response:
-            embeddings = [response["embedding"]]
-        metadata = {
-            "total_duration": response.get("total_duration"),
-            "load_duration": response.get("load_duration"),
-            "prompt_eval_count": response.get("prompt_eval_count"),
-        }
-        return embeddings or [], response.get("prompt_eval_count"), metadata
-
-
-class VoyageEmbeddingProvider(HTTPEmbeddingProvider):
-    """Embedding provider for Voyage AI embeddings."""
-
-    async def _send_request(self, texts: list[str]) -> httpx.Response:
-        payload: dict[str, Any] = {"model": self.model, "input": texts}
-        if self.config.dimensions is not None:
-            payload["output_dimension"] = self.config.dimensions
-        return await self._client.post(
-            f"{self.config.resolved_base_url}/embeddings",
-            headers=self._headers(),
-            json=payload,
-        )
-
-    def _headers(self) -> dict[str, str]:
-        headers = super()._headers()
-        if self.config.api_key:
-            headers["Authorization"] = f"Bearer {self.config.api_key}"
-        return headers
-
-    def _parse_response(
-        self,
-        response: dict[str, Any],
-    ) -> tuple[list[list[float]], int | None, dict[str, Any]]:
-        data = sorted(response.get("data", []), key=lambda item: item.get("index", 0))
-        embeddings = [item["embedding"] for item in data]
-        usage = response.get("usage") or {}
-        total_tokens = usage.get("total_tokens")
-        return embeddings, total_tokens, {"usage": usage}
-
-
-class GeminiEmbeddingProvider(HTTPEmbeddingProvider):
-    """Embedding provider for Gemini batch embedding requests."""
-
-    async def _send_request(self, texts: list[str]) -> httpx.Response:
-        model_path = f"models/{self.model}"
-        payload: dict[str, Any] = {
-            "requests": [
-                {
-                    "model": model_path,
-                    "content": {"parts": [{"text": text}]},
-                    **self._dimension_payload(),
-                }
-                for text in texts
-            ]
-        }
-        params = {"key": self.config.api_key} if self.config.api_key else None
-        return await self._client.post(
-            f"{self.config.resolved_base_url}/{model_path}:batchEmbedContents",
-            headers=self._headers(),
-            params=params,
-            json=payload,
-        )
-
-    def _parse_response(
-        self,
-        response: dict[str, Any],
-    ) -> tuple[list[list[float]], int | None, dict[str, Any]]:
-        embeddings = [
-            item.get("values", [])
-            for embedding in response.get("embeddings", [])
-            for item in [embedding]
-        ]
-        return embeddings, None, {}
-
-    def _dimension_payload(self) -> dict[str, int]:
-        if self.config.dimensions is None:
-            return {}
-        return {"outputDimensionality": self.config.dimensions}
-
-
-class EmbeddingService:
-    """
-    High-level embedding API for repository chunks and query text.
-
-    A provider can be supplied directly for tests or custom integrations. When
-    omitted, the service builds one from ``EmbeddingConfig.provider``.
+    Ollama's embeddings endpoint accepts one prompt per request, so
+    ``embed_batch`` fans requests out concurrently, bounded by
+    ``max_concurrency``, rather than relying on server-side batching.
     """
 
     def __init__(
         self,
-        config: EmbeddingConfig | None = None,
+        http_client: AsyncHTTPClient,
         *,
-        provider: AsyncEmbeddingProvider | None = None,
+        model: str = "nomic-embed-text",
+        dimensions: int = 768,
+        base_url: str = "http://localhost:11434",
+        max_concurrency: int = 8,
+        request_timeout: float = 60.0,
     ) -> None:
-        """
-        Initialize the embedding service.
+        """Initialize the provider.
 
         Args:
-            config: Embedding behavior and provider configuration.
-            provider: Optional injected provider implementation.
+            http_client: Injected async HTTP client used for all requests.
+            model: Embedding model identifier as known to the Ollama server.
+            dimensions: Expected output vector dimensionality for ``model``.
+            base_url: Base URL of the Ollama server.
+            max_concurrency: Maximum number of concurrent in-flight requests
+                when embedding a batch.
+            request_timeout: Per-request timeout, in seconds.
         """
-        self.config = config or EmbeddingConfig()
-        self.provider = provider or self._build_provider(self.config)
-        self._semaphore = asyncio.Semaphore(max(self.config.max_concurrency, 1))
+        self._client = http_client
+        self._model = model
+        self._dimensions = dimensions
+        self._endpoint = f"{base_url.rstrip('/')}/api/embeddings"
+        self._semaphore = asyncio.Semaphore(max_concurrency)
+        self._timeout = request_timeout
+        self._log = logger.bind(provider="ollama", model=model)
 
-    async def embed_chunk(self, chunk: RepositoryChunk) -> ChunkEmbedding:
-        """Embed one repository chunk."""
-        results = await self.embed_chunks([chunk])
-        return results[0]
+    async def embed_text(self, text: str) -> EmbeddingResult:
+        """See ``EmbeddingProvider.embed_text``."""
+        async with self._semaphore:
+            payload = {"model": self._model, "prompt": text}
+            try:
+                response = await self._client.post(
+                    self._endpoint, json=payload, timeout=self._timeout
+                )
+                response.raise_for_status()
+            except Exception as exc:  # noqa: BLE001
+                self._log.warning("embedding_request_failed", error=str(exc))
+                raise ProviderRequestError(f"Ollama embedding request failed: {exc}") from exc
 
-    async def embed_chunks(
-        self,
-        chunks: list[RepositoryChunk] | tuple[RepositoryChunk, ...],
-    ) -> list[ChunkEmbedding]:
-        """Embed repository chunks while preserving input order."""
-        if not chunks:
+            body = response.json()
+            vector = body.get("embedding")
+            if vector is None:
+                raise ProviderRequestError(
+                    "Ollama response missing 'embedding' field", retryable=False
+                )
+            return EmbeddingResult(vector=vector, model=self._model, provider=self.provider_name())
+
+    async def embed_batch(self, texts: Sequence[str]) -> list[EmbeddingResult]:
+        """See ``EmbeddingProvider.embed_batch``."""
+        if not texts:
             return []
+        return list(await asyncio.gather(*(self.embed_text(text) for text in texts)))
 
-        texts = [self._chunk_text(chunk) for chunk in chunks]
-        results = await self.batch_embed(texts)
-        return [
-            ChunkEmbedding(
-                chunk=chunk,
-                embedding=result.embedding,
-                provider=result.provider,
-                model=result.model,
-                dimensions=result.dimensions,
-                metadata={
-                    "chunk_id": chunk.id,
-                    "text_hash": result.text_hash,
-                    "token_count": result.token_count,
-                    **result.metadata,
-                },
+    def dimensions(self) -> int:
+        """See ``EmbeddingProvider.dimensions``."""
+        return self._dimensions
+
+    def provider_name(self) -> str:
+        """See ``EmbeddingProvider.provider_name``."""
+        return "ollama"
+
+
+class GeminiEmbeddingProvider(EmbeddingProvider):
+    """Embedding provider backed by the Google Gemini embeddings API."""
+
+    def __init__(
+        self,
+        http_client: AsyncHTTPClient,
+        *,
+        api_key: str,
+        model: str = "text-embedding-004",
+        dimensions: int = 768,
+        base_url: str = "https://generativelanguage.googleapis.com/v1beta",
+        request_timeout: float = 30.0,
+    ) -> None:
+        """Initialize the provider.
+
+        Args:
+            http_client: Injected async HTTP client used for all requests.
+            api_key: Google Generative AI API key.
+            model: Embedding model identifier.
+            dimensions: Expected output vector dimensionality for ``model``.
+            base_url: Base URL of the Generative Language API.
+            request_timeout: Per-request timeout, in seconds.
+
+        Raises:
+            ProviderConfigurationError: If ``api_key`` is empty.
+        """
+        if not api_key:
+            raise ProviderConfigurationError("Gemini provider requires an api_key")
+        self._client = http_client
+        self._api_key = api_key
+        self._model = model
+        self._dimensions = dimensions
+        self._base_url = base_url.rstrip("/")
+        self._timeout = request_timeout
+        self._log = logger.bind(provider="gemini", model=model)
+
+    async def embed_text(self, text: str) -> EmbeddingResult:
+        """See ``EmbeddingProvider.embed_text``."""
+        url = f"{self._base_url}/models/{self._model}:embedContent?key={self._api_key}"
+        payload = {"content": {"parts": [{"text": text}]}}
+
+        try:
+            response = await self._client.post(url, json=payload, timeout=self._timeout)
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("embedding_request_failed", error=str(exc))
+            raise ProviderRequestError(f"Gemini embedding request failed: {exc}") from exc
+
+        body = response.json()
+        vector = body.get("embedding", {}).get("values")
+        if vector is None:
+            raise ProviderRequestError(
+                "Gemini response missing embedding values", retryable=False
             )
-            for chunk, result in zip(chunks, results)
-        ]
+        return EmbeddingResult(vector=vector, model=self._model, provider=self.provider_name())
 
-    async def embed_query(self, query: str) -> EmbeddingResult:
-        """Embed a query string without building prompts or retrieving documents."""
-        results = await self.batch_embed([query])
-        return results[0]
+    async def embed_batch(self, texts: Sequence[str]) -> list[EmbeddingResult]:
+        """See ``EmbeddingProvider.embed_batch``.
 
-    async def batch_embed(self, texts: list[str] | tuple[str, ...]) -> list[EmbeddingResult]:
-        """Embed arbitrary texts with batching and bounded async concurrency."""
+        Uses Gemini's ``batchEmbedContents`` endpoint so a batch costs a
+        single request regardless of size.
+        """
         if not texts:
             return []
 
-        batches = [
-            list(texts[index : index + self.config.batch_size])
-            for index in range(0, len(texts), self.config.batch_size)
+        url = f"{self._base_url}/models/{self._model}:batchEmbedContents?key={self._api_key}"
+        requests_payload = [
+            {"model": f"models/{self._model}", "content": {"parts": [{"text": text}]}}
+            for text in texts
         ]
-        results = await asyncio.gather(*(self._embed_batch(batch) for batch in batches))
-        return [result for batch_result in results for result in batch_result]
 
-    async def close(self) -> None:
-        """Release provider resources."""
-        await self.provider.close()
+        try:
+            response = await self._client.post(
+                url, json={"requests": requests_payload}, timeout=self._timeout
+            )
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            self._log.warning("embedding_batch_request_failed", error=str(exc))
+            raise ProviderRequestError(f"Gemini batch embedding request failed: {exc}") from exc
 
-    async def __aenter__(self) -> EmbeddingService:
-        """Return this service for async context-manager usage."""
-        return self
-
-    async def __aexit__(self, *_exc: object) -> None:
-        """Close provider resources when leaving an async context."""
-        await self.close()
-
-    async def _embed_batch(self, texts: list[str]) -> list[EmbeddingResult]:
-        async with self._semaphore:
-            return await self.provider.embed_texts(texts)
-
-    def _chunk_text(self, chunk: RepositoryChunk) -> str:
-        if not self.config.include_metadata_in_chunk_text:
-            return chunk.source_code
-
-        header = [
-            f"module: {chunk.module_path}",
-            f"symbol: {chunk.symbol_name}",
-            f"type: {chunk.symbol_type.value}",
-            f"lines: {chunk.start_line}-{chunk.end_line}",
+        body = response.json()
+        embeddings = body.get("embeddings", [])
+        return [
+            EmbeddingResult(vector=item["values"], model=self._model, provider=self.provider_name())
+            for item in embeddings
         ]
-        if chunk.parent_class:
-            header.append(f"parent_class: {chunk.parent_class}")
-        if chunk.docstring:
-            header.append(f"docstring: {chunk.docstring}")
-        if chunk.imports:
-            header.append("imports:")
-            header.extend(chunk.imports)
 
-        return "\n".join([*header, "", chunk.source_code])
+    def dimensions(self) -> int:
+        """See ``EmbeddingProvider.dimensions``."""
+        return self._dimensions
+
+    def provider_name(self) -> str:
+        """See ``EmbeddingProvider.provider_name``."""
+        return "gemini"
+
+
+# ---------------------------------------------------------------------------
+# Manager
+# ---------------------------------------------------------------------------
+
+
+class EmbeddingManager:
+    """Coordinates embedding generation across one or more providers.
+
+    This is the single entry point the rest of Kodiak should use to obtain
+    embeddings. It handles provider selection and switching, retrying
+    transient failures, falling back to secondary providers, validating
+    returned vector dimensions, and an optional caching layer, while
+    remaining completely decoupled from any vector store.
+
+    Args:
+        providers: Mapping of provider name to provider instance. The
+            first entry (insertion order) is the default/primary provider.
+        cache: Optional cache backend. Defaults to a no-op cache.
+        retry_config: Optional retry policy. Defaults are conservative and
+            suitable for production use.
+        cache_key_fn: Optional override for deriving a cache key from a
+            ``(provider_name, text)`` pair.
+
+    Raises:
+        ProviderConfigurationError: If ``providers`` is empty.
+    """
+
+    def __init__(
+        self,
+        providers: dict[str, EmbeddingProvider],
+        *,
+        cache: EmbeddingCache | None = None,
+        retry_config: RetryConfig | None = None,
+        cache_key_fn: Callable[[str, str], str] | None = None,
+    ) -> None:
+        if not providers:
+            raise ProviderConfigurationError("EmbeddingManager requires at least one provider")
+        self._providers = dict(providers)
+        self._active_provider_name = next(iter(self._providers))
+        self._cache = cache or NullEmbeddingCache()
+        self._retry_config = retry_config or RetryConfig()
+        self._cache_key_fn = cache_key_fn or self._default_cache_key
+        self._log = logger.bind(component="embedding_manager")
 
     @staticmethod
-    def _build_provider(config: EmbeddingConfig) -> AsyncEmbeddingProvider:
-        if config.provider == EmbeddingProvider.OPENAI:
-            return OpenAIEmbeddingProvider(config)
-        if config.provider == EmbeddingProvider.OLLAMA:
-            return OllamaEmbeddingProvider(config)
-        if config.provider == EmbeddingProvider.VOYAGE:
-            return VoyageEmbeddingProvider(config)
-        if config.provider == EmbeddingProvider.GEMINI:
-            return GeminiEmbeddingProvider(config)
-        raise ValueError(f"Unsupported embedding provider: {config.provider}")
+    def _default_cache_key(provider_name: str, text: str) -> str:
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return f"embedding:{provider_name}:{digest}"
+
+    @property
+    def active_provider(self) -> EmbeddingProvider:
+        """Return the currently active provider instance."""
+        return self._providers[self._active_provider_name]
+
+    def use_provider(self, name: str) -> None:
+        """Switch the active (default) provider.
+
+        Args:
+            name: Registered provider name to make active.
+
+        Raises:
+            ProviderConfigurationError: If ``name`` is not registered.
+        """
+        if name not in self._providers:
+            raise ProviderConfigurationError(
+                f"Unknown provider '{name}'. Registered providers: {sorted(self._providers)}"
+            )
+        self._active_provider_name = name
+        self._log.info("provider_switched", provider=name)
+
+    def register_provider(self, name: str, provider: EmbeddingProvider) -> None:
+        """Register or replace a provider without disturbing the active one.
+
+        This is the extension point for adding future providers at
+        runtime, without needing to touch ``EmbeddingManager`` itself.
+
+        Args:
+            name: Name to register the provider under.
+            provider: The provider instance.
+        """
+        self._providers[name] = provider
+        self._log.info("provider_registered", provider=name)
+
+    async def embed(self, text: str, *, provider: str | None = None) -> EmbeddingResult:
+        """Embed a single piece of text, applying cache, retry, and fallback.
+
+        Args:
+            text: Text to embed.
+            provider: Optional provider name override for this call only.
+
+        Returns:
+            The embedding result.
+
+        Raises:
+            AllProvidersExhaustedError: If every eligible provider failed.
+        """
+        (result,) = await self.embed_batch([text], provider=provider)
+        return result
+
+    async def embed_batch(
+        self, texts: Sequence[str], *, provider: str | None = None
+    ) -> list[EmbeddingResult]:
+        """Embed a batch of texts, applying cache, retry, and fallback.
+
+        Cache hits are served immediately without contacting any provider.
+        Only cache misses are sent out, and only that subset is retried or
+        failed over as a unit, so a single bad request never discards
+        already-cached results.
+
+        Args:
+            texts: Texts to embed, in order.
+            provider: Optional provider name override for this call only.
+
+        Returns:
+            Embeddings in the same order as ``texts``.
+
+        Raises:
+            AllProvidersExhaustedError: If every eligible provider failed
+                for the uncached texts.
+        """
+        if not texts:
+            return []
+
+        target_name = provider or self._active_provider_name
+        if target_name not in self._providers:
+            raise ProviderConfigurationError(f"Unknown provider '{target_name}'")
+
+        cache_keys = [self._cache_key_fn(target_name, text) for text in texts]
+        results: list[EmbeddingResult | None] = [None] * len(texts)
+        miss_indices: list[int] = []
+
+        for idx, key in enumerate(cache_keys):
+            cached_vector = await self._cache.get(key)
+            if cached_vector is not None:
+                results[idx] = EmbeddingResult(
+                    vector=cached_vector, model="cached", provider=target_name
+                )
+            else:
+                miss_indices.append(idx)
+
+        if miss_indices:
+            miss_texts = [texts[i] for i in miss_indices]
+            fresh_results = await self._embed_with_fallback(miss_texts, preferred=target_name)
+            for i, result in zip(miss_indices, fresh_results, strict=True):
+                results[i] = result
+                await self._cache.set(cache_keys[i], result.vector)
+
+        return [result for result in results if result is not None]
+
+    async def _embed_with_fallback(
+        self, texts: Sequence[str], *, preferred: str
+    ) -> list[EmbeddingResult]:
+        """Try ``preferred``, then fall back through remaining providers in order."""
+        ordered_names = [preferred, *(name for name in self._providers if name != preferred)]
+        last_error: Exception | None = None
+
+        for name in ordered_names:
+            provider_instance = self._providers[name]
+            try:
+                batch_results = await self._embed_batch_with_retry(provider_instance, texts)
+                self._validate_dimensions(batch_results, provider_instance)
+                return batch_results
+            except EmbeddingError as exc:
+                self._log.warning("provider_failed_trying_next", provider=name, error=str(exc))
+                last_error = exc
+                continue
+
+        raise AllProvidersExhaustedError(
+            f"All embedding providers failed for {len(texts)} text(s)"
+        ) from last_error
+
+    async def _embed_batch_with_retry(
+        self, provider_instance: EmbeddingProvider, texts: Sequence[str]
+    ) -> list[EmbeddingResult]:
+        """Call ``provider_instance.embed_batch`` with exponential-backoff retry."""
+        attempt = 0
+        delay = self._retry_config.base_delay_seconds
+        last_error: ProviderRequestError | None = None
+
+        while attempt < self._retry_config.max_attempts:
+            attempt += 1
+            try:
+                return await provider_instance.embed_batch(texts)
+            except ProviderRequestError as exc:
+                last_error = exc
+                if not exc.retryable or attempt >= self._retry_config.max_attempts:
+                    break
+                self._log.warning(
+                    "retrying_embedding_request",
+                    provider=provider_instance.provider_name(),
+                    attempt=attempt,
+                    delay=delay,
+                )
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, self._retry_config.max_delay_seconds)
+
+        assert last_error is not None  # loop always sets this before exiting
+        raise last_error
+
+    @staticmethod
+    def _validate_dimensions(
+        results: list[EmbeddingResult], provider_instance: EmbeddingProvider
+    ) -> None:
+        """Ensure every returned vector matches the provider's declared dimensionality."""
+        expected = provider_instance.dimensions()
+        for result in results:
+            actual = len(result.vector)
+            if actual != expected:
+                raise EmbeddingDimensionMismatchError(
+                    expected=expected,
+                    actual=actual,
+                    provider=provider_instance.provider_name(),
+                )
