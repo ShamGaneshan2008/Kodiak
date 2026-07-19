@@ -17,6 +17,7 @@ files directly, implement embedding math, or execute project code.
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
@@ -24,7 +25,7 @@ from typing import Any, Iterable
 
 import structlog
 
-from kodiak.rag.chunking import ChunkSymbolType, Chunker
+from kodiak.rag.chunking import ChunkSymbolType, Chunker, RepositoryChunk
 from kodiak.rag.dependency_graph import DependencyGraph
 from kodiak.rag.embeddings import ChunkEmbedding, EmbeddingService
 from kodiak.rag.repository_index import RepositoryIndex, RepositoryIndexer
@@ -38,6 +39,17 @@ from kodiak.rag.retriever import (
 )
 
 logger = structlog.get_logger(__name__)
+
+TOKEN_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|[0-9]+")
+DEFINITION_TYPES = frozenset(
+    {
+        ChunkSymbolType.CLASS,
+        ChunkSymbolType.FUNCTION,
+        ChunkSymbolType.ASYNC_FUNCTION,
+    }
+)
+PYTHON_EXTENSIONS = frozenset({".py", ".pyi"})
+PYTHON_LANGUAGES = frozenset({"py", "python"})
 
 
 class SearchKind(str, Enum):
@@ -65,6 +77,13 @@ class SemanticSearchConfig:
     dependency_context_top_k: int = 5
     auto_embed_queries: bool = True
     documentation_fallback_to_code: bool = True
+    exact_symbol_boost: float = 0.18
+    lexical_match_boost: float = 0.06
+    definition_boost: float = 0.08
+    repository_importance_weight: float = 0.12
+    context_neighbor_window: int = 1
+    context_expansion_top_k: int = 4
+    filtered_search_multiplier: int = 4
 
     def __post_init__(self) -> None:
         """Validate configuration values."""
@@ -74,6 +93,12 @@ class SemanticSearchConfig:
             raise ValueError("min_confidence must be between 0.0 and 1.0")
         if self.dependency_context_top_k <= 0:
             raise ValueError("dependency_context_top_k must be greater than zero")
+        if self.context_neighbor_window < 0:
+            raise ValueError("context_neighbor_window must be zero or greater")
+        if self.context_expansion_top_k <= 0:
+            raise ValueError("context_expansion_top_k must be greater than zero")
+        if self.filtered_search_multiplier <= 0:
+            raise ValueError("filtered_search_multiplier must be greater than zero")
 
 
 @dataclass(frozen=True)
@@ -99,14 +124,65 @@ class SemanticSearchQuery:
     symbol: str | None = None
     symbols: frozenset[str] = field(default_factory=frozenset)
     parent_class: str | None = None
+    language: str | None = None
+    languages: frozenset[str] = field(default_factory=frozenset)
+    file_extension: str | None = None
+    file_extensions: frozenset[str] = field(default_factory=frozenset)
+    directory: str | Path | None = None
+    directories: frozenset[str] = field(default_factory=frozenset)
+    symbol_type: ChunkSymbolType | str | None = None
+    symbol_types: frozenset[ChunkSymbolType | str] = field(default_factory=frozenset)
     metadata: dict[str, Any] = field(default_factory=dict)
     use_embedding: bool | None = None
     include_dependency_context: bool | None = None
+    include_neighboring_chunks: bool = True
+    include_parent_context: bool = True
 
     def __post_init__(self) -> None:
         """Normalize enum-like fields for stable downstream behavior."""
         if isinstance(self.kind, str):
             object.__setattr__(self, "kind", SearchKind(self.kind))
+        if isinstance(self.symbol_type, str):
+            object.__setattr__(self, "symbol_type", ChunkSymbolType(self.symbol_type))
+        if self.symbol_types:
+            object.__setattr__(
+                self,
+                "symbol_types",
+                frozenset(
+                    symbol_type
+                    if isinstance(symbol_type, ChunkSymbolType)
+                    else ChunkSymbolType(symbol_type)
+                    for symbol_type in self.symbol_types
+                ),
+            )
+        if self.languages:
+            object.__setattr__(
+                self,
+                "languages",
+                frozenset(language.lower() for language in self.languages),
+            )
+        if self.language:
+            object.__setattr__(self, "language", self.language.lower())
+        if self.file_extension:
+            object.__setattr__(
+                self,
+                "file_extension",
+                self._normalize_extension(self.file_extension),
+            )
+        if self.file_extensions:
+            object.__setattr__(
+                self,
+                "file_extensions",
+                frozenset(
+                    self._normalize_extension(extension)
+                    for extension in self.file_extensions
+                ),
+            )
+
+    @staticmethod
+    def _normalize_extension(extension: str) -> str:
+        normalized = extension.lower()
+        return normalized if normalized.startswith(".") else f".{normalized}"
 
 
 @dataclass(frozen=True)
@@ -187,9 +263,23 @@ class SemanticSearchResponse:
                 "symbol": self.query.symbol,
                 "symbols": sorted(self.query.symbols),
                 "parent_class": self.query.parent_class,
+                "language": self.query.language,
+                "languages": sorted(self.query.languages),
+                "file_extension": self.query.file_extension,
+                "file_extensions": sorted(self.query.file_extensions),
+                "directory": str(self.query.directory) if self.query.directory else None,
+                "directories": sorted(self.query.directories),
+                "symbol_type": (
+                    self.query.symbol_type.value if self.query.symbol_type else None
+                ),
+                "symbol_types": sorted(
+                    symbol_type.value for symbol_type in self.query.symbol_types
+                ),
                 "metadata": self.query.metadata,
                 "use_embedding": self.query.use_embedding,
                 "include_dependency_context": self.query.include_dependency_context,
+                "include_neighboring_chunks": self.query.include_neighboring_chunks,
+                "include_parent_context": self.query.include_parent_context,
             },
             "results": [result.to_dict() for result in self.results],
             "related_results": [result.to_dict() for result in self.related_results],
@@ -225,6 +315,8 @@ class SemanticSearch:
         self.dependency_graph = dependency_graph
         self.embedding_service = embedding_service
         self.config = config or SemanticSearchConfig()
+        self._chunks_by_id = self._build_chunk_lookup()
+        self._chunks_by_file = self._build_file_lookup(self._chunks_by_id.values())
 
     @classmethod
     def from_embeddings(
@@ -458,7 +550,7 @@ class SemanticSearch:
             query=query,
             results=tuple(
                 self._to_search_result(result, SearchKind.RELATED)
-                for result in self._rerank(results)
+                for result in self._rank_retrieval_results(results, query)
             ),
             metadata={"pipeline": "dependency_graph.related_modules"},
         )
@@ -502,7 +594,7 @@ class SemanticSearch:
             query=query,
             results=tuple(
                 self._to_search_result(result, SearchKind.DEPENDENCY)
-                for result in self._rerank(results)
+                for result in self._rank_retrieval_results(results, query)
             ),
             metadata={
                 "pipeline": "dependency_graph.retriever",
@@ -586,6 +678,28 @@ class SemanticSearch:
             "functions": tuple(function.qualname for function in functions),
         }
 
+    def _build_chunk_lookup(self) -> dict[str, RepositoryChunk]:
+        """Build a defensive chunk lookup from the configured retriever records."""
+        records = getattr(self.retriever, "_records", ())
+        chunks: dict[str, RepositoryChunk] = {}
+        for record in records:
+            chunk = getattr(record, "chunk", None)
+            if isinstance(chunk, RepositoryChunk):
+                chunks[chunk.id] = chunk
+        return chunks
+
+    @staticmethod
+    def _build_file_lookup(
+        chunks: Iterable[RepositoryChunk],
+    ) -> dict[str, tuple[RepositoryChunk, ...]]:
+        grouped: dict[str, list[RepositoryChunk]] = {}
+        for chunk in chunks:
+            grouped.setdefault(chunk.file_path.as_posix(), []).append(chunk)
+        return {
+            file_path: tuple(sorted(file_chunks, key=lambda chunk: chunk.start_line))
+            for file_path, file_chunks in grouped.items()
+        }
+
     def _normalize_query(self, query: SemanticSearchQuery | str) -> SemanticSearchQuery:
         if isinstance(query, SemanticSearchQuery):
             return query
@@ -599,14 +713,45 @@ class SemanticSearch:
         )
         if (
             not should_embed
+            or self._can_use_structural_search(query)
             or query.query_embedding is not None
             or not query.text
             or self.embedding_service is None
         ):
             return query
 
-        embedding = await self.embedding_service.embed_query(query.text)
+        try:
+            embedding = await self.embedding_service.embed_query(query.text)
+        except Exception as exc:
+            logger.warning(
+                "semantic_search_query_embedding_failed",
+                kind=query.kind.value,
+                error=str(exc),
+                provider=type(self.embedding_service).__name__,
+            )
+            return replace(query, use_embedding=False)
         return replace(query, query_embedding=embedding.embedding)
+
+    @staticmethod
+    def _can_use_structural_search(query: SemanticSearchQuery) -> bool:
+        """Return whether metadata/keyword retrieval is sufficient for this query."""
+        has_structural_filter = bool(
+            query.symbol
+            or query.symbols
+            or query.module
+            or query.modules
+            or query.file_path
+            or query.file_paths
+            or query.symbol_type
+            or query.symbol_types
+        )
+        return has_structural_filter and query.kind in {
+            SearchKind.SYMBOL,
+            SearchKind.CLASS,
+            SearchKind.FUNCTION,
+            SearchKind.MODULE,
+            SearchKind.FILE,
+        }
 
     async def _retrieve_context(
         self,
@@ -619,21 +764,38 @@ class SemanticSearch:
             else self.config.include_dependency_context
         )
         if include_context:
-            return await self.retriever.retrieve_context(
-                retrieval_query,
-                related_top_k=self.config.dependency_context_top_k,
-            )
+            try:
+                return await self.retriever.retrieve_context(
+                    retrieval_query,
+                    related_top_k=self.config.dependency_context_top_k,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "semantic_search_context_retrieval_failed",
+                    kind=query.kind.value,
+                    error=str(exc),
+                )
 
-        primary = tuple(await self.retriever.retrieve(retrieval_query))
+        try:
+            primary = tuple(await self.retriever.retrieve(retrieval_query))
+        except Exception as exc:
+            logger.error(
+                "semantic_search_primary_retrieval_failed",
+                kind=query.kind.value,
+                error=str(exc),
+            )
+            primary = ()
         return RetrievalContext(primary=primary, related=())
 
     def _to_retrieval_query(self, query: SemanticSearchQuery) -> RetrievalQuery:
         return RetrievalQuery(
             text=query.text,
             query_embedding=query.query_embedding,
-            top_k=query.top_k or self.config.top_k,
+            top_k=self._retrieval_top_k(query),
             min_score=self._confidence_threshold(query),
             filters=self._filters_for_query(query),
+            vector_weight=0.65 if query.query_embedding is not None and query.text else None,
+            keyword_weight=0.35 if query.query_embedding is not None and query.text else None,
         )
 
     def _filters_for_query(self, query: SemanticSearchQuery) -> RetrievalFilters:
@@ -648,6 +810,11 @@ class SemanticSearch:
         elif query.kind == SearchKind.MODULE:
             symbol_type = ChunkSymbolType.MODULE
 
+        if query.symbol_type is not None:
+            symbol_type = query.symbol_type
+        if query.symbol_types:
+            symbol_types = query.symbol_types
+
         return RetrievalFilters(
             module=query.module,
             modules=query.modules,
@@ -661,29 +828,354 @@ class SemanticSearch:
             metadata=query.metadata,
         )
 
+    def _retrieval_top_k(self, query: SemanticSearchQuery) -> int:
+        top_k = query.top_k or self.config.top_k
+        if self._has_post_filters(query):
+            return top_k * self.config.filtered_search_multiplier
+        if query.include_neighboring_chunks or query.include_parent_context:
+            return top_k + self.config.context_expansion_top_k
+        return top_k
+
+    @staticmethod
+    def _has_post_filters(query: SemanticSearchQuery) -> bool:
+        return bool(
+            query.language
+            or query.languages
+            or query.file_extension
+            or query.file_extensions
+            or query.directory
+            or query.directories
+        )
+
+    def _passes_query_filters(
+        self,
+        result: RetrievalResult,
+        query: SemanticSearchQuery,
+    ) -> bool:
+        chunk = result.chunk
+        if query.language or query.languages:
+            languages = {*(query.languages), *((query.language,) if query.language else ())}
+            if not self._language_matches(chunk.file_path, languages):
+                return False
+        if query.file_extension or query.file_extensions:
+            extensions = {
+                *(query.file_extensions),
+                *((query.file_extension,) if query.file_extension else ()),
+            }
+            if chunk.file_path.suffix.lower() not in extensions:
+                return False
+        if query.directory and not self._directory_matches(chunk.file_path, query.directory):
+            return False
+        if query.directories and not any(
+            self._directory_matches(chunk.file_path, directory)
+            for directory in query.directories
+        ):
+            return False
+        return True
+
+    def _expand_context(
+        self,
+        query: SemanticSearchQuery,
+        primary: Iterable[RetrievalResult],
+    ) -> tuple[RetrievalResult, ...]:
+        """Return parent and neighboring chunks that clarify the primary hits."""
+        if not self._chunks_by_id:
+            return ()
+
+        primary_results = tuple(primary)
+        primary_ids = {result.chunk.id for result in primary_results}
+        context: list[RetrievalResult] = []
+        seen = set(primary_ids)
+
+        for result in primary_results:
+            if query.include_parent_context:
+                parent = self._parent_context_chunk(result.chunk)
+                if parent is not None and parent.id not in seen:
+                    context.append(self._context_result(parent, source="parent_context"))
+                    seen.add(parent.id)
+
+            if query.include_neighboring_chunks and self.config.context_neighbor_window > 0:
+                for neighbor in self._neighbor_chunks(result.chunk):
+                    if neighbor.id in seen:
+                        continue
+                    context.append(self._context_result(neighbor, source="neighbor_context"))
+                    seen.add(neighbor.id)
+
+            if len(context) >= self.config.context_expansion_top_k:
+                break
+
+        return tuple(context[: self.config.context_expansion_top_k])
+
+    def _parent_context_chunk(self, chunk: RepositoryChunk) -> RepositoryChunk | None:
+        if not chunk.parent_class:
+            return None
+        candidates = (
+            candidate
+            for candidate in self._chunks_by_file.get(chunk.file_path.as_posix(), ())
+            if candidate.symbol_type == ChunkSymbolType.CLASS
+        )
+        for candidate in candidates:
+            if (
+                candidate.symbol_name == chunk.parent_class
+                or candidate.symbol_name.endswith(f".{chunk.parent_class}")
+            ):
+                return candidate
+        return None
+
+    def _neighbor_chunks(self, chunk: RepositoryChunk) -> tuple[RepositoryChunk, ...]:
+        chunks = self._chunks_by_file.get(chunk.file_path.as_posix(), ())
+        if not chunks:
+            return ()
+        try:
+            index = next(
+                idx for idx, candidate in enumerate(chunks) if candidate.id == chunk.id
+            )
+        except StopIteration:
+            return ()
+
+        window = self.config.context_neighbor_window
+        start = max(0, index - window)
+        end = min(len(chunks), index + window + 1)
+        return tuple(
+            candidate
+            for candidate in chunks[start:end]
+            if candidate.id != chunk.id
+            and candidate.symbol_type in DEFINITION_TYPES | {ChunkSymbolType.MODULE}
+        )
+
+    @staticmethod
+    def _language_matches(path: Path, languages: set[str]) -> bool:
+        if languages & PYTHON_LANGUAGES and path.suffix.lower() in PYTHON_EXTENSIONS:
+            return True
+        return path.suffix.lower().lstrip(".") in languages
+
+    def _directory_matches(self, path: Path, directory: str | Path) -> bool:
+        directory_text = Path(directory).as_posix().strip("/")
+        if not directory_text:
+            return True
+        path_text = path.as_posix()
+        relative_text = self._relative_path(path).as_posix()
+        return (
+            path_text.startswith(f"{directory_text}/")
+            or f"/{directory_text}/" in path_text
+            or relative_text.startswith(f"{directory_text}/")
+            or relative_text == directory_text
+        )
+
+    def _relative_path(self, path: Path) -> Path:
+        try:
+            return path.resolve().relative_to(self.repository_index.root_path)
+        except (OSError, ValueError):
+            return Path(path.name)
+
+    def _post_filter_metadata(self, query: SemanticSearchQuery) -> dict[str, Any]:
+        return {
+            "language": query.language,
+            "languages": sorted(query.languages),
+            "file_extension": query.file_extension,
+            "file_extensions": sorted(query.file_extensions),
+            "directory": str(query.directory) if query.directory else None,
+            "directories": sorted(query.directories),
+            "applied": self._has_post_filters(query),
+        }
+
+    def _rank_retrieval_results(
+        self,
+        results: Iterable[RetrievalResult],
+        query: SemanticSearchQuery | None = None,
+    ) -> tuple[RetrievalResult, ...]:
+        best_by_id = self._deduplicate_retrieval_results(results)
+        scored = tuple(self._with_final_score(result, query) for result in best_by_id)
+        ordered = sorted(
+            scored,
+            key=lambda result: (
+                result.score,
+                self._type_priority(result.chunk.symbol_type),
+                -result.chunk.start_line,
+                result.chunk.symbol_name,
+            ),
+            reverse=True,
+        )
+        return tuple(replace(result, rank=index) for index, result in enumerate(ordered, start=1))
+
+    @staticmethod
+    def _deduplicate_retrieval_results(
+        results: Iterable[RetrievalResult],
+        *,
+        excluded_ids: set[str] | None = None,
+    ) -> tuple[RetrievalResult, ...]:
+        excluded = excluded_ids or set()
+        best_by_id: dict[str, RetrievalResult] = {}
+        for result in results:
+            if result.chunk.id in excluded:
+                continue
+            current = best_by_id.get(result.chunk.id)
+            if current is None or result.score > current.score:
+                best_by_id[result.chunk.id] = result
+        return tuple(best_by_id.values())
+
+    def _with_final_score(
+        self,
+        result: RetrievalResult,
+        query: SemanticSearchQuery | None,
+    ) -> RetrievalResult:
+        base = self._confidence(result)
+        exact_symbol_boost = self._exact_symbol_boost(result, query)
+        lexical_boost = self._lexical_match_boost(result, query)
+        definition_boost = self._definition_boost(result, query)
+        repository_boost = (
+            self._repository_importance(result.chunk) * self.config.repository_importance_weight
+        )
+        final_score = self._clamp_score(
+            base + exact_symbol_boost + lexical_boost + definition_boost + repository_boost
+        )
+        return replace(
+            result,
+            score=final_score,
+            metadata={
+                **result.metadata,
+                "base_confidence": round(base, 6),
+                "final_score": round(final_score, 6),
+                "ranking_features": {
+                    "exact_symbol_boost": round(exact_symbol_boost, 6),
+                    "lexical_match_boost": round(lexical_boost, 6),
+                    "definition_boost": round(definition_boost, 6),
+                    "repository_importance_boost": round(repository_boost, 6),
+                },
+            },
+        )
+
+    def _exact_symbol_boost(
+        self,
+        result: RetrievalResult,
+        query: SemanticSearchQuery | None,
+    ) -> float:
+        if query is None:
+            return 0.0
+        expected = tuple(
+            symbol for symbol in (query.symbol, *query.symbols, query.text) if symbol
+        )
+        if not expected:
+            return 0.0
+        symbol_name = result.chunk.symbol_name
+        short_name = symbol_name.rsplit(".", maxsplit=1)[-1]
+        for candidate in expected:
+            candidate_short = candidate.rsplit(".", maxsplit=1)[-1]
+            if symbol_name == candidate or short_name == candidate_short:
+                return self.config.exact_symbol_boost
+        return 0.0
+
+    def _lexical_match_boost(
+        self,
+        result: RetrievalResult,
+        query: SemanticSearchQuery | None,
+    ) -> float:
+        if query is None or not query.text or not result.matched_terms:
+            return 0.0
+        query_tokens = {match.group(0).lower() for match in TOKEN_PATTERN.finditer(query.text)}
+        if not query_tokens:
+            return 0.0
+        overlap = len(set(result.matched_terms) & query_tokens) / len(query_tokens)
+        return self.config.lexical_match_boost * self._clamp_score(overlap)
+
+    def _definition_boost(
+        self,
+        result: RetrievalResult,
+        query: SemanticSearchQuery | None,
+    ) -> float:
+        if result.chunk.symbol_type not in DEFINITION_TYPES:
+            return 0.0
+        if query is None or query.kind in {
+            SearchKind.CODE,
+            SearchKind.HYBRID,
+            SearchKind.SYMBOL,
+            SearchKind.FUNCTION,
+            SearchKind.CLASS,
+        }:
+            return self.config.definition_boost
+        return self.config.definition_boost / 2.0
+
+    def _repository_importance(self, chunk: RepositoryChunk) -> float:
+        metadata = chunk.metadata
+        line_count = float(
+            metadata.get("line_count") or max(chunk.end_line - chunk.start_line + 1, 1)
+        )
+        class_count = float(metadata.get("class_count") or 0)
+        function_count = float(metadata.get("function_count") or 0)
+        import_count = float(metadata.get("import_count") or 0)
+        public_symbol = not chunk.symbol_name.rsplit(".", maxsplit=1)[-1].startswith("_")
+
+        importance = 0.0
+        importance += min(line_count / 250.0, 0.35)
+        importance += min((class_count + function_count) / 25.0, 0.35)
+        importance += min(import_count / 30.0, 0.15)
+        importance += 0.15 if public_symbol else 0.0
+        if chunk.file_path.name in {"__init__.py", "main.py", "app.py"}:
+            importance += 0.1
+        return self._clamp_score(importance)
+
+    def _context_result(self, chunk: RepositoryChunk, *, source: str) -> RetrievalResult:
+        return RetrievalResult(
+            chunk=chunk,
+            score=0.45 + self._repository_importance(chunk) * 0.2,
+            vector_score=None,
+            keyword_score=None,
+            metadata_score=0.0,
+            rank=0,
+            source=source,
+            metadata={
+                "context_expansion": True,
+                "relative_path": self._relative_path(chunk.file_path).as_posix(),
+            },
+        )
+
     def _response_from_context(
         self,
         query: SemanticSearchQuery,
         context: RetrievalContext,
     ) -> SemanticSearchResponse:
+        threshold = self._confidence_threshold(query)
+        primary_results = self._rank_retrieval_results(
+            (result for result in context.primary if self._passes_query_filters(result, query)),
+            query,
+        )
+        result_limit = query.top_k or self.config.top_k
+        limited_primary = primary_results[:result_limit]
+        related_results = self._rank_retrieval_results(
+            (
+                result
+                for result in (
+                    *context.related,
+                    *self._expand_context(query, limited_primary),
+                )
+                if self._passes_query_filters(result, query)
+            ),
+            query,
+        )
+        related = self._deduplicate_retrieval_results(
+            related_results,
+            excluded_ids={result.chunk.id for result in limited_primary},
+        )[: self.config.context_expansion_top_k + self.config.dependency_context_top_k]
         primary = tuple(
             self._to_search_result(result, query.kind)
-            for result in self._rerank(context.primary)
-            if self._confidence(result) >= self._confidence_threshold(query)
+            for result in limited_primary
+            if self._confidence(result) >= threshold
         )
-        related = tuple(
+        related_search_results = tuple(
             self._to_search_result(result, SearchKind.RELATED)
-            for result in self._rerank(context.related)
+            for result in related
         )
         return SemanticSearchResponse(
             query=query,
             results=primary,
-            related_results=related,
+            related_results=related_search_results,
             metadata={
                 "pipeline": self._pipeline_name(query),
-                "ranking": "retriever_score_plus_evidence_confidence",
+                "ranking": "hybrid_retriever_score_plus_symbol_definition_repository_boosts",
                 "used_query_embedding": query.query_embedding is not None,
-                "dependency_context": bool(related),
+                "dependency_context": bool(context.related),
+                "expanded_context": len(related_search_results),
+                "post_filters": self._post_filter_metadata(query),
             },
         )
 
@@ -793,6 +1285,21 @@ class SemanticSearch:
             replace(result, rank=index)
             for index, result in enumerate(ordered, start=1)
         )
+
+    @staticmethod
+    def _type_priority(symbol_type: ChunkSymbolType) -> int:
+        priorities = {
+            ChunkSymbolType.CLASS: 4,
+            ChunkSymbolType.FUNCTION: 3,
+            ChunkSymbolType.ASYNC_FUNCTION: 3,
+            ChunkSymbolType.MODULE: 2,
+            ChunkSymbolType.CONSTANT_BLOCK: 1,
+        }
+        return priorities.get(symbol_type, 0)
+
+    @staticmethod
+    def _clamp_score(value: float) -> float:
+        return max(0.0, min(1.0, value))
 
     @staticmethod
     def _confidence(result: RetrievalResult) -> float:
