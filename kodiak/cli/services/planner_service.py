@@ -3,7 +3,13 @@ from __future__ import annotations
 import structlog
 
 from kodiak.agents.base import AgentInput
-from kodiak.agents.planner import PlannerAgent, SubTask, TaskPlan
+from kodiak.agents.planner import (
+    PlannedTool,
+    PlannerAgent,
+    SubTask,
+    TaskDependency,
+    TaskPlan,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -132,13 +138,38 @@ class PlannerService:
                 complexity=st["complexity"],
                 depends_on=st["depends_on"],
                 likely_files=st["likely_files"],
+                files_to_inspect=st.get("files_to_inspect", st.get("likely_files", [])),
+                tools=[
+                    PlannedTool(
+                        name=tool.get("name", "planner"),
+                        purpose=tool.get("purpose", ""),
+                        required_capability=tool.get("required_capability"),
+                        inputs=tool.get("inputs", {}),
+                        risk_level=tool.get("risk_level", "low"),
+                    )
+                    for tool in st.get("tools", [])
+                ],
+                parallel_group=st.get("parallel_group"),
+                can_run_parallel=bool(st.get("can_run_parallel", False)),
             )
             for st in plan_dict.get("subtasks", [])
         ]
         return TaskPlan(
+            plan_version=plan_dict.get("plan_version", "1.0"),
             goal=plan_dict.get("goal", ""),
             acceptance_criteria=plan_dict.get("acceptance_criteria", []),
+            repository_files=plan_dict.get("repository_files", []),
             subtasks=subtasks,
+            execution_order=plan_dict.get("execution_order", []),
+            parallel_groups=plan_dict.get("parallel_groups", []),
+            estimated_dependencies=[
+                TaskDependency(
+                    from_task=dep.get("from_task", ""),
+                    to_task=dep.get("to_task", ""),
+                    reason=dep.get("reason", ""),
+                )
+                for dep in plan_dict.get("estimated_dependencies", [])
+            ],
             estimated_total_complexity=plan_dict.get("estimated_total_complexity", "medium"),
             requires_architecture_review=plan_dict.get("requires_architecture_review", False),
         )
