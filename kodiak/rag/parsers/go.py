@@ -21,7 +21,7 @@ class GoParser(BaseParser):
         )
 
     def extract_symbols(self, content: str) -> list[ParsedSymbol]:
-        symbols = []
+        symbols: list[ParsedSymbol] = []
         for match in re.finditer(r"type\s+(\w+)\s+struct\s*\{", content):
             self._add_symbol(symbols, content, match, "struct")
         for match in re.finditer(r"type\s+(\w+)\s+interface\s*\{", content):
@@ -46,7 +46,7 @@ class GoParser(BaseParser):
         return imports
 
     def extract_chunks(self, content: str, path: Path) -> list[SourceChunk]:
-        chunks = []
+        chunks: list[SourceChunk] = []
         lines = content.splitlines()
         pattern = re.compile(r"^(?:func|type)\s+\w+", re.MULTILINE)
         matches = list(pattern.finditer(content))

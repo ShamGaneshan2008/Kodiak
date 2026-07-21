@@ -62,7 +62,7 @@ class EmbeddingResult:
 
 
 class EmbeddingCache:
-    def __init__(self, max_size: int = 10_000):
+    def __init__(self, max_size: int = 10_000) -> None:
         self._cache: dict[str, list[float]] = {}
         self._max_size = max_size
         self._hits = 0
@@ -89,7 +89,7 @@ class EmbeddingCache:
         self._cache[self._key(text, model)] = embedding
 
     @property
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, Any]:
         total = self._hits + self._misses
         return {
             "size": len(self._cache),
@@ -122,7 +122,7 @@ class Embedder:
         dimensions: int = DEFAULT_DIMENSIONS,
         batch_size: int = DEFAULT_BATCH_SIZE,
         cache_size: int = 10_000,
-    ):
+    ) -> None:
         self.model = model
         self.dimensions = dimensions
         self.batch_size = batch_size
@@ -234,7 +234,7 @@ class Embedder:
             total_tokens=total_tokens,
         )
 
-        results = []
+        results: list[EmbeddingResult] = []
         for item, text in zip(response.data, texts):
             results.append(
                 EmbeddingResult(
@@ -251,7 +251,7 @@ class Embedder:
     # ------------------------------------------------------------------
 
     @property
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, Any]:
         return {
             "model": self.model,
             "dimensions": self.dimensions,

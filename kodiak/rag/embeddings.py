@@ -18,7 +18,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import structlog
 
@@ -157,7 +157,7 @@ class AsyncHTTPResponse(Protocol):
 
     status_code: int
 
-    def json(self) -> dict:
+    def json(self) -> dict[str, Any]:
         """Parse and return the response body as JSON."""
         ...
 

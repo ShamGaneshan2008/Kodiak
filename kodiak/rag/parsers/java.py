@@ -21,7 +21,7 @@ class JavaParser(BaseParser):
         )
 
     def extract_symbols(self, content: str) -> list[ParsedSymbol]:
-        symbols = []
+        symbols: list[ParsedSymbol] = []
         for match in re.finditer(r"(?:public|private|protected)?\s*(?:abstract\s+)?(?:class|interface|enum)\s+(\w+)", content):
             self._add_symbol(symbols, content, match, "class")
         for match in re.finditer(r"(@\w+)", content):
@@ -51,7 +51,7 @@ class JavaParser(BaseParser):
         return re.findall(r"import\s+(?:static\s+)?([\w.]+)", content)
 
     def extract_chunks(self, content: str, path: Path) -> list[SourceChunk]:
-        chunks = []
+        chunks: list[SourceChunk] = []
         lines = content.splitlines()
         pattern = re.compile(r"^(?:public|private|protected)?\s*(?:abstract\s+)?(?:class|interface|enum)\s+\w+", re.MULTILINE)
         matches = list(pattern.finditer(content))

@@ -76,7 +76,7 @@ class PythonParser(BaseParser):
             tree = ast.parse(content)
         except SyntaxError:
             return []
-        imports = []
+        imports: list[str] = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
@@ -93,7 +93,7 @@ class PythonParser(BaseParser):
         except SyntaxError:
             return [SourceChunk(content=content, start_line=1, end_line=max(1, len(content.splitlines())))]
         lines = content.splitlines()
-        chunks = []
+        chunks: list[SourceChunk] = []
         for node in ast.iter_child_nodes(tree):
             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 start = node.lineno - 1

@@ -22,7 +22,7 @@ class JavaScriptParser(BaseParser):
         )
 
     def extract_symbols(self, content: str) -> list[ParsedSymbol]:
-        symbols = []
+        symbols: list[ParsedSymbol] = []
         patterns = [
             (r"(?:export\s+)?(?:default\s+)?(?:interface|enum)\s+(\w+)", lambda m: "interface" if "interface" in m.group(0) else "enum"),
             (r"(?:export\s+)?(?:default\s+)?class\s+(\w+)", lambda m: "class"),
@@ -42,7 +42,7 @@ class JavaScriptParser(BaseParser):
         return re.findall(r"import\s+.*?from\s+['\"](.*?)['\"]", content)
 
     def extract_chunks(self, content: str, path: Path) -> list[SourceChunk]:
-        chunks = []
+        chunks: list[SourceChunk] = []
         lines = content.splitlines()
         pattern = re.compile(
             r"^(?:export\s+)?(?:default\s+)?(?:class|function|interface|enum|const\s+\w+\s*=\s*(?:async\s+)?\([^)]*\)\s*=>)\s+\w+",
