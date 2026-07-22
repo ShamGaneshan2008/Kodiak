@@ -12,7 +12,7 @@ import hashlib
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Iterator
+from typing import Any,Iterator
 
 import structlog
 
@@ -41,7 +41,7 @@ class Chunk:
     language: str
     name: str | None = None
     parent: str | None = None
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def chunk_id(self) -> str:
@@ -73,7 +73,7 @@ class Chunk:
 class PythonASTChunker:
     """AST-aware chunker for Python source files."""
 
-    def __init__(self, max_tokens: int = 512, overlap_lines: int = 3):
+    def __init__(self, max_tokens: int = 512, overlap_lines: int = 3) -> None :
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
 
@@ -182,7 +182,7 @@ class PythonASTChunker:
 class LineBasedChunker:
     """Generic line-based chunker for any language."""
 
-    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5):
+    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None :
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
 
@@ -269,7 +269,7 @@ class Chunker:
     Main entry point. Dispatches to language-specific chunker.
     """
 
-    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5):
+    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None :
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
         self._python = PythonASTChunker(max_tokens=max_tokens, overlap_lines=overlap_lines)
