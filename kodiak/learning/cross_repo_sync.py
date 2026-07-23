@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
@@ -37,7 +37,7 @@ class SyncResult(BaseModel):
     duplicates: int = 0
     merged: int = 0
     error: str | None = None
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class SyncReport(BaseModel):
@@ -113,9 +113,7 @@ class CrossRepoSyncService:
             report.total_merged += res.merged
         return report
 
-    async def detect_duplicates(
-        self, pattern: Pattern, threshold: float = 0.9
-    ) -> DuplicateGroup:
+    async def detect_duplicates(self, pattern: Pattern, threshold: float = 0.9) -> DuplicateGroup:
         similar = await self._store.find_similar(pattern.name, pattern.tags, limit=5)
         ids = [p.id for p in similar if p.id != pattern.id]
         return DuplicateGroup(
@@ -196,11 +194,7 @@ class CrossRepoSyncService:
         total = len(self._history)
         return SyncStatistics(
             total_syncs=total,
-            successful_syncs=sum(
-                1 for r in self._history if r.status == SyncStatus.COMPLETED
-            ),
-            failed_syncs=sum(
-                1 for r in self._history if r.status == SyncStatus.FAILED
-            ),
+            successful_syncs=sum(1 for r in self._history if r.status == SyncStatus.COMPLETED),
+            failed_syncs=sum(1 for r in self._history if r.status == SyncStatus.FAILED),
             total_patterns_synced=sum(r.imported for r in self._history),
         )

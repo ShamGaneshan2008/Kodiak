@@ -37,7 +37,7 @@ class User(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     api_keys: Mapped[list[APIKey]] = relationship(
         "APIKey", back_populates="user", cascade="all, delete-orphan"
     )
-    installations: Mapped[list["GitHubInstallation"]] = relationship(  # noqa: F821
+    installations: Mapped[list[GitHubInstallation]] = relationship(  # noqa: F821
         "GitHubInstallation", back_populates="owner"
     )
 
@@ -51,12 +51,14 @@ class OAuthAccount(UUIDMixin, TimestampMixin, Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    provider: Mapped[str] = mapped_column(String(32), nullable=False)   # "github" | "google"
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)  # "github" | "google"
     provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
     provider_username: Mapped[str | None] = mapped_column(String(128), nullable=True)
     access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
-    token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     scopes: Mapped[str | None] = mapped_column(Text, nullable=True)  # space-separated
 
     user: Mapped[User] = relationship("User", back_populates="oauth_accounts")
@@ -72,7 +74,7 @@ class APIKey(UUIDMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
-    key_prefix: Mapped[str] = mapped_column(String(8), nullable=False)   # first 8 chars, shown in UI
+    key_prefix: Mapped[str] = mapped_column(String(8), nullable=False)  # first 8 chars, shown in UI
     hashed_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     scopes: Mapped[str] = mapped_column(Text, default="*", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

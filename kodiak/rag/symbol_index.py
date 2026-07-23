@@ -2,7 +2,7 @@ import ast
 from pathlib import Path
 
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 logger = structlog.get_logger(__name__)
 
@@ -52,26 +52,30 @@ class SymbolIndex:
                 bases = ", ".join(self._get_name(b) for b in node.bases)
                 if bases:
                     sig += f"({bases})"
-                self.add_symbol(Symbol(
-                    name=node.name,
-                    symbol_type="class",
-                    file_path=str(file_path),
-                    start_line=node.lineno,
-                    end_line=node.end_lineno or node.lineno,
-                    signature=sig,
-                ))
+                self.add_symbol(
+                    Symbol(
+                        name=node.name,
+                        symbol_type="class",
+                        file_path=str(file_path),
+                        start_line=node.lineno,
+                        end_line=node.end_lineno or node.lineno,
+                        signature=sig,
+                    )
+                )
                 count += 1
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 args = [self._get_name(a) for a in node.args.args]
                 sig = f"def {node.name}({', '.join(args)})"
-                self.add_symbol(Symbol(
-                    name=node.name,
-                    symbol_type="function",
-                    file_path=str(file_path),
-                    start_line=node.lineno,
-                    end_line=node.end_lineno or node.lineno,
-                    signature=sig,
-                ))
+                self.add_symbol(
+                    Symbol(
+                        name=node.name,
+                        symbol_type="function",
+                        file_path=str(file_path),
+                        start_line=node.lineno,
+                        end_line=node.end_lineno or node.lineno,
+                        signature=sig,
+                    )
+                )
                 count += 1
 
         logger.debug("symbols_parsed", path=str(file_path), count=count)

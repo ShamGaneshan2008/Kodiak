@@ -15,16 +15,17 @@ before letting an agent-authored PR merge autonomously.
 
 from __future__ import annotations
 
-from enum import Enum
+from collections.abc import Callable, Coroutine
+from enum import StrEnum
 from functools import wraps
-from typing import Callable, Coroutine, Any
+from typing import Any
 
 from fastapi import Depends, HTTPException, status
 
 from kodiak.auth.jwt import TokenClaims, get_current_claims
 
 
-class Role(str, Enum):
+class Role(StrEnum):
     OWNER = "owner"  # full control over an org's Kodiak instance
     MAINTAINER = "maintainer"  # can approve/merge, manage plugins & policies
     DEVELOPER = "developer"  # can trigger runs, review diffs, comment
@@ -32,7 +33,7 @@ class Role(str, Enum):
     SERVICE = "service"  # machine identity, e.g. webhook relays, CI bots
 
 
-class Scope(str, Enum):
+class Scope(StrEnum):
     RUNS_READ = "runs:read"
     RUNS_WRITE = "runs:write"  # trigger a new agent run
     RUNS_CANCEL = "runs:cancel"

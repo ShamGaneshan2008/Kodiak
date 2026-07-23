@@ -50,7 +50,7 @@ def show() -> None:
         snapshot = get_settings().model_dump(mode="json")
     except Exception as exc:  # noqa: BLE001
         _render_error(f"Failed to load configuration: {exc}")
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=2) from exc
 
     _render_table(snapshot)
     raise typer.Exit(code=0)

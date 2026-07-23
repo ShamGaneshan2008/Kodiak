@@ -1,4 +1,5 @@
 import ast
+import asyncio
 import re
 from pathlib import Path
 
@@ -48,11 +49,7 @@ class CodeScanner:
         except SyntaxError as e:
             return ScanResult(
                 safe=False,
-                findings=[
-                    SecurityFinding(
-                        severity="high", rule_id="SYNTAX_ERROR", message=str(e)
-                    )
-                ],
+                findings=[SecurityFinding(severity="high", rule_id="SYNTAX_ERROR", message=str(e))],
             )
 
         for node in ast.walk(tree):
@@ -72,9 +69,7 @@ class CodeScanner:
             logger.warning("python_security_findings", count=len(findings))
         return ScanResult(safe=len(findings) == 0, findings=findings)
 
-    def _matches_node(
-        self, node: ast.AST, targets: str, rule_id: str
-    ) -> bool:
+    def _matches_node(self, node: ast.AST, targets: str, rule_id: str) -> bool:
         target_list = [t.strip() for t in targets.split(",")]
         if rule_id == "DANGEROUS_IMPORTS":
             if isinstance(node, ast.Import):
@@ -106,7 +101,7 @@ class CodeScanner:
         return ScanResult(safe=len(findings) == 0, findings=findings)
 
     async def scan_file(self, file_path: Path) -> ScanResult:
-        if not file_path.exists():
+        if not await asyncio.to_thread(file_path.exists):
             return ScanResult(
                 safe=False,
                 findings=[
@@ -117,16 +112,28 @@ class CodeScanner:
                     )
                 ],
             )
-        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        content = await asyncio.to_thread(
+            file_path.read_text,
+            encoding="utf-8",
+            errors="ignore",
+        )
         if file_path.suffix == ".py":
             return await self.scan_python(content)
         return await self.scan_shell(content)
 
     async def scan_directory(self, dir_path: Path) -> dict[str, ScanResult]:
-        if not dir_path.is_dir():
+        if not await asyncio.to_thread(dir_path.is_dir):
             return {}
         results: dict[str, ScanResult] = {}
-        for path in dir_path.rglob("*"):
-            if path.is_file() and path.suffix in {".py", ".sh", ".bash"}:
-                results[str(path)] = await self.scan_file(path)
+        paths = await asyncio.to_thread(self._scan_candidate_paths, dir_path)
+        for path in paths:
+            results[str(path)] = await self.scan_file(path)
         return results
+
+    @staticmethod
+    def _scan_candidate_paths(dir_path: Path) -> list[Path]:
+        return [
+            path
+            for path in dir_path.rglob("*")
+            if path.is_file() and path.suffix in {".py", ".sh", ".bash"}
+        ]

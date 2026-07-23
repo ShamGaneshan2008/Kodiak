@@ -15,18 +15,11 @@ Typical usage example:
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.tree import Tree
-
-from kodiak.cli.services.planner_service import (
-    PlannerService,
-    InvalidIssueError,
-    PlanGenerationFailedError,
-)
 
 app = typer.Typer(name="plan", help="Generate an implementation plan for an issue or task.")
 
@@ -55,7 +48,7 @@ def _render_error_panel(title: str, message: str) -> None:
     )
 
 
-def _render_plan(plan: "Plan") -> None:  # noqa: F821
+def _render_plan(plan: Plan) -> None:  # noqa: F821
     """Render a generated plan using Rich panels and trees.
 
     Args:
@@ -114,10 +107,10 @@ def _render_plan(plan: "Plan") -> None:  # noqa: F821
 
 @app.command()
 def plan(
-    issue: Optional[str] = typer.Option(
+    issue: str | None = typer.Option(
         None, "--issue", help="GitHub issue number or URL to plan against."
     ),
-    task_id: Optional[str] = typer.Option(
+    task_id: str | None = typer.Option(
         None, "--task-id", help="ID of an existing Kodiak task to plan against."
     ),
     json_output: bool = typer.Option(
@@ -139,9 +132,7 @@ def plan(
             planning failure, or ``2`` on any unexpected error.
     """
     if not issue and not task_id:
-        _render_error_panel(
-            "Missing Input", "You must provide either --issue or --task-id."
-        )
+        _render_error_panel("Missing Input", "You must provide either --issue or --task-id.")
         raise typer.Exit(code=1)
 
     if issue and task_id:
@@ -150,7 +141,7 @@ def plan(
         )
         raise typer.Exit(code=1)
 
-    plan_service = PlanService()
+    plan_service = PlanService()  # noqa: F821
 
     try:
         with console.status(
@@ -161,11 +152,11 @@ def plan(
             else:
                 generated_plan = plan_service.generate_plan_from_task(task_id)
 
-    except PlanGenerationError as exc:
+    except PlanGenerationError as exc:  # noqa: F821
         _render_error_panel("Plan Generation Failed", str(exc))
         raise typer.Exit(code=1) from exc
 
-    except PlanServiceError as exc:
+    except PlanServiceError as exc:  # noqa: F821
         _render_error_panel("Plan Service Error", str(exc))
         raise typer.Exit(code=1) from exc
 

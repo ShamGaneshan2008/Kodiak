@@ -1,13 +1,11 @@
-
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Protocol, runtime_checkable
+from datetime import UTC, datetime
+from typing import Any, Protocol, runtime_checkable
 
 import structlog
 from pydantic import BaseModel, Field
-from typing import Any
 
 logger = structlog.get_logger(__name__)
 
@@ -24,8 +22,8 @@ class SemanticEntity(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     embedding: list[float] | None = None
     metadata: dict[str, str] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class SemanticSearchResult(BaseModel):
@@ -96,44 +94,24 @@ class SemanticMemory:
         return await self._repo.search(query, category, limit)
 
     async def update_fact(
-            self,
-            entity_id: uuid.UUID,
-            content: str | None = None,
-            category: str | None = None,
-            confidence: float | None = None,
-            embedding: list[float] | None = None,
-            metadata: dict[str, Any] | None = None,
+        self,
+        entity_id: uuid.UUID,
+        content: str | None = None,
+        category: str | None = None,
+        confidence: float | None = None,
+        embedding: list[float] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> SemanticEntity:
         existing = await self.get_fact(entity_id)
 
         updated_entity = existing.model_copy(
             update={
-                "content": (
-                    content
-                    if content is not None
-                    else existing.content
-                ),
-                "category": (
-                    category
-                    if category is not None
-                    else existing.category
-                ),
-                "confidence": (
-                    confidence
-                    if confidence is not None
-                    else existing.confidence
-                ),
-                "embedding": (
-                    embedding
-                    if embedding is not None
-                    else existing.embedding
-                ),
-                "metadata": (
-                    metadata
-                    if metadata is not None
-                    else existing.metadata
-                ),
-                "updated_at": datetime.now(timezone.utc),
+                "content": (content if content is not None else existing.content),
+                "category": (category if category is not None else existing.category),
+                "confidence": (confidence if confidence is not None else existing.confidence),
+                "embedding": (embedding if embedding is not None else existing.embedding),
+                "metadata": (metadata if metadata is not None else existing.metadata),
+                "updated_at": datetime.now(UTC),
             }
         )
 

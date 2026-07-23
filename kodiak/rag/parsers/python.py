@@ -34,32 +34,48 @@ class PythonParser(BaseParser):
         if isinstance(node, ast.ClassDef):
             decorators = [self._get_decorator_name(d) for d in node.decorator_list]
             docstring = ast.get_docstring(node)
-            symbols.append(ParsedSymbol(
-                name=node.name, symbol_type="class",
-                start_line=node.lineno, end_line=node.end_lineno or node.lineno,
-                metadata={"decorators": ", ".join(decorators), "docstring": docstring or ""}
-            ))
+            symbols.append(
+                ParsedSymbol(
+                    name=node.name,
+                    symbol_type="class",
+                    start_line=node.lineno,
+                    end_line=node.end_lineno or node.lineno,
+                    metadata={"decorators": ", ".join(decorators), "docstring": docstring or ""},
+                )
+            )
             for child in ast.iter_child_nodes(node):
                 self._visit(child, node, symbols)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             is_method = isinstance(parent, ast.ClassDef)
-            sym_type = "method" if is_method else ("async_function" if isinstance(node, ast.AsyncFunctionDef) else "function")
+            sym_type = (
+                "method"
+                if is_method
+                else ("async_function" if isinstance(node, ast.AsyncFunctionDef) else "function")
+            )
             decorators = [self._get_decorator_name(d) for d in node.decorator_list]
             docstring = ast.get_docstring(node)
-            symbols.append(ParsedSymbol(
-                name=node.name, symbol_type=sym_type,
-                start_line=node.lineno, end_line=node.end_lineno or node.lineno,
-                metadata={"decorators": ", ".join(decorators), "docstring": docstring or ""}
-            ))
+            symbols.append(
+                ParsedSymbol(
+                    name=node.name,
+                    symbol_type=sym_type,
+                    start_line=node.lineno,
+                    end_line=node.end_lineno or node.lineno,
+                    metadata={"decorators": ", ".join(decorators), "docstring": docstring or ""},
+                )
+            )
             for child in ast.iter_child_nodes(node):
                 self._visit(child, node, symbols)
         elif isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id.isupper():
-                    symbols.append(ParsedSymbol(
-                        name=target.id, symbol_type="constant",
-                        start_line=node.lineno, end_line=node.end_lineno or node.lineno,
-                    ))
+                    symbols.append(
+                        ParsedSymbol(
+                            name=target.id,
+                            symbol_type="constant",
+                            start_line=node.lineno,
+                            end_line=node.end_lineno or node.lineno,
+                        )
+                    )
         else:
             for child in ast.iter_child_nodes(node):
                 self._visit(child, node, symbols)
@@ -91,7 +107,11 @@ class PythonParser(BaseParser):
         try:
             tree = ast.parse(content)
         except SyntaxError:
-            return [SourceChunk(content=content, start_line=1, end_line=max(1, len(content.splitlines())))]
+            return [
+                SourceChunk(
+                    content=content, start_line=1, end_line=max(1, len(content.splitlines()))
+                )
+            ]
         lines = content.splitlines()
         chunks = []
         for node in ast.iter_child_nodes(tree):
@@ -99,10 +119,14 @@ class PythonParser(BaseParser):
                 start = node.lineno - 1
                 end = node.end_lineno or start + 1
                 chunk_content = "\n".join(lines[start:end])
-                chunks.append(SourceChunk(
-                    content=chunk_content, start_line=node.lineno, end_line=end,
-                    chunk_type="class" if isinstance(node, ast.ClassDef) else "function"
-                ))
+                chunks.append(
+                    SourceChunk(
+                        content=chunk_content,
+                        start_line=node.lineno,
+                        end_line=end,
+                        chunk_type="class" if isinstance(node, ast.ClassDef) else "function",
+                    )
+                )
         if not chunks:
             chunks.append(SourceChunk(content=content, start_line=1, end_line=len(lines)))
         return chunks

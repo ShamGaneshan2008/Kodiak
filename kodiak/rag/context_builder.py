@@ -9,17 +9,17 @@ files, or duplicate retrieval logic.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import structlog
 
 from kodiak.rag.chunking import ChunkSymbolType
 from kodiak.rag.dependency_graph import DependencyGraph
 from kodiak.rag.semantic_search import (
-    SearchKind,
     SemanticSearch,
     SemanticSearchQuery,
     SemanticSearchResponse,
@@ -29,7 +29,7 @@ from kodiak.rag.semantic_search import (
 logger = structlog.get_logger(__name__)
 
 
-class ContextOrdering(str, Enum):
+class ContextOrdering(StrEnum):
     """Supported ordering strategies for context blocks."""
 
     IMPORTANCE = "importance"
@@ -39,7 +39,7 @@ class ContextOrdering(str, Enum):
     SOURCE_ORDER = "source_order"
 
 
-class ContextPurpose(str, Enum):
+class ContextPurpose(StrEnum):
     """High-level context use cases supported by the builder."""
 
     GENERAL = "general"
@@ -271,8 +271,7 @@ class BuiltContext:
                 module: list(symbols) for module, symbols in self.symbol_hierarchy.items()
             },
             "dependency_map": {
-                module: list(dependencies)
-                for module, dependencies in self.dependency_map.items()
+                module: list(dependencies) for module, dependencies in self.dependency_map.items()
             },
             "metadata": self.metadata,
         }
@@ -539,15 +538,26 @@ class ContextBuilder:
         ordering: ContextOrdering,
     ) -> tuple[ContextBlock, ...]:
         if ordering == ContextOrdering.FILE_HIERARCHY:
-            key = lambda block: (block.file_path.as_posix(), block.start_line)
+
+            def key(block):
+                return (block.file_path.as_posix(), block.start_line)
         elif ordering == ContextOrdering.MODULE_HIERARCHY:
-            key = lambda block: (block.module_path, block.file_path.as_posix(), block.start_line)
+
+            def key(block):
+                return (block.module_path, block.file_path.as_posix(), block.start_line)
         elif ordering == ContextOrdering.SYMBOL_HIERARCHY:
-            key = lambda block: (block.module_path, block.parent_class or "", block.symbol_name)
+
+            def key(block):
+                return (block.module_path, block.parent_class or "", block.symbol_name)
         elif ordering == ContextOrdering.SOURCE_ORDER:
-            key = lambda block: (block.file_path.as_posix(), block.start_line, block.end_line)
+
+            def key(block):
+                return (block.file_path.as_posix(), block.start_line, block.end_line)
         else:
-            key = lambda block: (-block.importance, block.file_path.as_posix(), block.start_line)
+
+            def key(block):
+                return (-block.importance, block.file_path.as_posix(), block.start_line)
+
         return tuple(sorted(blocks, key=key))
 
     def _fit_blocks(
@@ -690,11 +700,7 @@ class ContextBuilder:
         for module in sorted(included_modules):
             dependencies = self.dependency_graph.get_dependencies(module)
             visible = tuple(
-                sorted(
-                    dependency
-                    for dependency in dependencies
-                    if dependency in included_modules
-                )
+                sorted(dependency for dependency in dependencies if dependency in included_modules)
             )
             dependency_map[module] = visible
         return dependency_map

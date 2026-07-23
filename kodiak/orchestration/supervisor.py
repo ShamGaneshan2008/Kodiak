@@ -18,9 +18,7 @@ class ExecutableAgent(Protocol):
 
 
 class Supervisor:
-    def __init__(
-        self, state: ExecutionState, agents: dict[str, ExecutableAgent]
-    ) -> None:
+    def __init__(self, state: ExecutionState, agents: dict[str, ExecutableAgent]) -> None:
         self._state = state
         self._agents = agents
         self._running = False
@@ -37,9 +35,7 @@ class Supervisor:
             await agent.stop()
         logger.info("supervisor_stopped")
 
-    async def run_task(
-        self, task_id: uuid.UUID, agent_type: str, input_data: Any
-    ) -> Any:
+    async def run_task(self, task_id: uuid.UUID, agent_type: str, input_data: Any) -> Any:
         agent = self._agents.get(agent_type)
         if not agent:
             logger.error("agent_not_found", agent_type=agent_type)
@@ -78,23 +74,17 @@ class Supervisor:
         if not agent:
             return False
         await agent.stop()
-        self._state.agents[agent_type] = AgentState(
-            name=agent_type, status=AgentStatus.IDLE
-        )
+        self._state.agents[agent_type] = AgentState(name=agent_type, status=AgentStatus.IDLE)
         logger.info("agent_restarted", agent_type=agent_type)
         return True
 
     def get_statistics(self) -> dict[str, Any]:
         total_tasks = len(self._state.tasks)
-        completed = sum(
-            1 for t in self._state.tasks if t.status == TaskStatus.COMPLETED
-        )
+        completed = sum(1 for t in self._state.tasks if t.status == TaskStatus.COMPLETED)
         failed = sum(1 for t in self._state.tasks if t.status == TaskStatus.FAILED)
         return {
             "total_tasks": total_tasks,
             "completed_tasks": completed,
             "failed_tasks": failed,
-            "agents": {
-                name: state.status for name, state in self._state.agents.items()
-            },
+            "agents": {name: state.status for name, state in self._state.agents.items()},
         }

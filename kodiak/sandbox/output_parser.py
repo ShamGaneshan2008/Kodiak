@@ -44,11 +44,7 @@ class OutputParser:
         lines = text.strip().splitlines()
         errors = [line.strip() for line in lines if ERROR_PATTERNS.search(line)]
         if not errors and "Traceback" in text:
-            return [
-                line.strip()
-                for line in lines
-                if line.strip().startswith(("  ", "Error"))
-            ]
+            return [line.strip() for line in lines if line.strip().startswith(("  ", "Error"))]
         return errors
 
     def extract_warnings(self, text: str) -> list[str]:

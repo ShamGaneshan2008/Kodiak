@@ -16,9 +16,7 @@ if TYPE_CHECKING:
     from kodiak.config.settings import Settings
 
 
-def _add_app_context(
-    logger: Any, method: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+def _add_app_context(logger: Any, method: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     """Inject static app-level fields into every log record."""
     from kodiak.config.settings import get_settings
 
@@ -64,9 +62,7 @@ def configure_logging(settings: Settings | None = None) -> None:
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
-        wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(logging, log_level)
-        ),
+        wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, log_level)),
         cache_logger_on_first_use=True,
     )
 

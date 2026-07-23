@@ -13,23 +13,22 @@ from typing import Final
 import typer
 
 from kodiak.cli.commands.analyze import app as analyze_app
+
 # from kodiak.cli.commands.config import app as config_app
 # from kodiak.cli.commands.doctor import app as doctor_app
-
 # from kodiak.cli.commands.init import app as init_app
 # from kodiak.cli.commands.login import app as login_app
 from kodiak.cli.commands.logout import app as logout_app
 from kodiak.cli.commands.memory import app as memory_app
 from kodiak.cli.commands.plan import app as plan_app
+
 # from kodiak.cli.commands.review import app as review_app
 # from kodiak.cli.commands.status import app as status_app
 from kodiak.cli.commands.task import app as task_app
 from kodiak.cli.commands.version import app as version_app
 
 APP_NAME: Final[str] = "kodiak"
-APP_HELP: Final[str] = (
-    "Kodiak: an autonomous AI software engineering platform."
-)
+APP_HELP: Final[str] = "Kodiak: an autonomous AI software engineering platform."
 
 _RICH_MARKUP_MODE: Final[str] = "rich"
 _PRETTY_EXCEPTIONS_ENABLE: Final[bool] = True

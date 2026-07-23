@@ -1,7 +1,7 @@
 import asyncio
 import io
 import tarfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,7 @@ class ContainerConfig(BaseModel):
 class SandboxContainer(BaseModel):
     container_id: str
     status: str = "created"
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class DockerBackend:
@@ -36,14 +36,12 @@ class DockerBackend:
 
                 self._client = docker.from_env()
             except ImportError:
-                raise RuntimeError("Docker SDK is not installed")
+                raise RuntimeError("Docker SDK is not installed") from None
             except Exception as e:
-                raise RuntimeError(f"Failed to connect to Docker daemon: {e}")
+                raise RuntimeError(f"Failed to connect to Docker daemon: {e}") from e
         return self._client
 
-    async def create_container(
-        self, config: ContainerConfig | None = None
-    ) -> SandboxContainer:
+    async def create_container(self, config: ContainerConfig | None = None) -> SandboxContainer:
         cfg = config or self._default_config
         client = await self.get_client()
 
@@ -121,9 +119,7 @@ class DockerBackend:
 
         return await asyncio.to_thread(_exec)
 
-    async def copy_files(
-        self, container: SandboxContainer, src: Path, dst: str
-    ) -> bool:
+    async def copy_files(self, container: SandboxContainer, src: Path, dst: str) -> bool:
         client = await self.get_client()
 
         def _copy() -> bool:

@@ -31,15 +31,13 @@ def analyze(
 
     try:
         with console.status("[bold cyan]Analyzing repository..."):
-            result = asyncio.run(
-                service.analyze_repository(path, deep=deep)
-            )
+            result = asyncio.run(service.analyze_repository(path, deep=deep))
     except InvalidRepositoryPathError as exc:
         error_console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
     except RepositoryAnalysisFailedError as exc:
         error_console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
     if json_output:
         payload = {

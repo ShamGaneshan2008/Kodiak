@@ -23,6 +23,7 @@ logger = structlog.get_logger(__name__)
 
 # Data types
 
+
 @dataclass
 class SearchResult:
     chunk_id: str
@@ -42,6 +43,7 @@ class UpsertStats:
     upserted: int
     skipped: int
     collection: str
+
 
 # Vector Store
 class VectorStore:
@@ -70,7 +72,6 @@ class VectorStore:
             )
         self._loop = asyncio.get_event_loop()
         self._collections: dict[str, chromadb.Collection] = {}
-
 
     # Collection management
 
@@ -186,7 +187,7 @@ class VectorStore:
         metas = raw["metadatas"][0]
         distances = raw["distances"][0]
 
-        for chunk_id, doc, meta, dist in zip(ids, docs, metas, distances):
+        for chunk_id, doc, meta, dist in zip(ids, docs, metas, distances, strict=False):
             # ChromaDB cosine distance → similarity
             score = 1.0 - dist
             results.append(
@@ -213,14 +214,11 @@ class VectorStore:
         top_k: int = 10,
     ) -> list[SearchResult]:
         """Search across multiple repositories and merge results."""
-        tasks = [
-            self.search(repo_id, query_embedding, top_k=top_k)
-            for repo_id in repo_ids
-        ]
+        tasks = [self.search(repo_id, query_embedding, top_k=top_k) for repo_id in repo_ids]
         per_repo = await asyncio.gather(*tasks, return_exceptions=True)
 
         merged: list[SearchResult] = []
-        for repo_id, result in zip(repo_ids, per_repo):
+        for repo_id, result in zip(repo_ids, per_repo, strict=False):
             if isinstance(result, Exception):
                 logger.warning("search_repo_error", repo_id=repo_id, error=str(result))
                 continue
@@ -282,6 +280,4 @@ class VectorStore:
         if len(filters) == 1:
             k, v = next(iter(filters.items()))
             return {k: {"$eq": v}}
-        return {
-            "$and": [{k: {"$eq": v}} for k, v in filters.items()]
-        }
+        return {"$and": [{k: {"$eq": v}} for k, v in filters.items()]}

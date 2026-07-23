@@ -103,9 +103,7 @@ async def test_workflow_engine_supports_conditional_branching() -> None:
         ],
     )
 
-    result = await WorkflowEngine(
-        executors={"decide": decide, "exec": execute}
-    ).run(workflow)
+    result = await WorkflowEngine(executors={"decide": decide, "exec": execute}).run(workflow)
 
     assert result.status == WorkflowStatus.COMPLETED
     assert result.node_map["left"].status == WorkflowNodeStatus.COMPLETED
@@ -145,9 +143,7 @@ async def test_workflow_engine_retries_and_runs_recovery_node() -> None:
         ],
     )
 
-    result = await WorkflowEngine(
-        executors={"flaky": flaky, "recover": recover}
-    ).run(workflow)
+    result = await WorkflowEngine(executors={"flaky": flaky, "recover": recover}).run(workflow)
 
     assert result.status == WorkflowStatus.COMPLETED
     assert attempts == 2

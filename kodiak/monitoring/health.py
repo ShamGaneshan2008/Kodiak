@@ -1,6 +1,6 @@
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
@@ -20,14 +20,14 @@ class ComponentHealth(BaseModel):
     component_name: str
     status: HealthStatus
     response_time_ms: float
-    checked_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     details: dict[str, Any] = Field(default_factory=dict)
 
 
 class SystemHealthReport(BaseModel):
     overall_status: HealthStatus
     components: list[ComponentHealth]
-    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 @runtime_checkable
@@ -47,7 +47,9 @@ class HealthChecker:
         logger.debug("health_check_registered", name=check.name)
 
     async def run_check(
-        self, name: str, timeout: float | None = None
+        self,
+        name: str,
+        timeout: float | None = None,  # noqa: ASYNC109
     ) -> ComponentHealth:
         check = self._checks.get(name)
         if check is None:
@@ -63,7 +65,7 @@ class HealthChecker:
 
         try:
             return await asyncio.wait_for(check.check(), timeout=timeout_secs)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             elapsed_ms = (time.monotonic() - start_time) * 1000
             logger.warning(
                 "health_check_timeout",

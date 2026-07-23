@@ -45,9 +45,7 @@ class SandboxExecutor:
         self, container: SandboxContainer, request: ExecutionRequest
     ) -> ExecutionResult:
         if not self.validate_command(request.command):
-            return ExecutionResult(
-                success=False, exit_code=-1, stderr="Command validation failed"
-            )
+            return ExecutionResult(success=False, exit_code=-1, stderr="Command validation failed")
 
         start = time.perf_counter()
         try:
@@ -65,12 +63,13 @@ class SandboxExecutor:
         except Exception as e:
             duration = (time.perf_counter() - start) * 1000
             logger.exception("execution_failed", error=str(e))
-            return ExecutionResult(
-                success=False, exit_code=-1, stderr=str(e), duration_ms=duration
-            )
+            return ExecutionResult(success=False, exit_code=-1, stderr=str(e), duration_ms=duration)
 
     async def execute_python(
-        self, container: SandboxContainer, script: str, timeout: float = 30.0
+        self,
+        container: SandboxContainer,
+        script: str,
+        timeout: float = 30.0,  # noqa: ASYNC109
     ) -> ExecutionResult:
         safe_script = shlex.quote(script)
         command = f"python3 -c {safe_script}"
@@ -78,7 +77,10 @@ class SandboxExecutor:
         return await self.execute(container, request)
 
     async def execute_shell(
-        self, container: SandboxContainer, shell_command: str, timeout: float = 30.0
+        self,
+        container: SandboxContainer,
+        shell_command: str,
+        timeout: float = 30.0,  # noqa: ASYNC109
     ) -> ExecutionResult:
         request = ExecutionRequest(command=shell_command, timeout_seconds=timeout)
         return await self.execute(container, request)

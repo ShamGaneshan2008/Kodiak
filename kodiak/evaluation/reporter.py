@@ -1,18 +1,18 @@
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 from pathlib import Path
+from typing import Any
 
 from .harness import EvaluationResult
 
 
 class EvaluationReporter:
-    def __init__(self, output_dir: Optional[str] = None):
+    def __init__(self, output_dir: str | None = None):
         self.output_dir = Path(output_dir) if output_dir else Path("./evaluation_reports")
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.reports: List[Dict[str, Any]] = []
+        self.reports: list[dict[str, Any]] = []
 
-    def generate_summary(self, results: List[EvaluationResult]) -> Dict[str, Any]:
+    def generate_summary(self, results: list[EvaluationResult]) -> dict[str, Any]:
         if not results:
             return {}
 
@@ -36,8 +36,8 @@ class EvaluationReporter:
 
     def generate_json_report(
         self,
-        results: List[EvaluationResult],
-        filename: Optional[str] = None,
+        results: list[EvaluationResult],
+        filename: str | None = None,
     ) -> str:
         if not filename:
             filename = f"evaluation_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
@@ -68,8 +68,8 @@ class EvaluationReporter:
 
     def generate_markdown_report(
         self,
-        results: List[EvaluationResult],
-        filename: Optional[str] = None,
+        results: list[EvaluationResult],
+        filename: str | None = None,
     ) -> str:
         if not filename:
             filename = f"evaluation_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.md"
@@ -98,19 +98,19 @@ class EvaluationReporter:
         for r in results:
             status = "✓ PASS" if r.passed else "✗ FAIL"
             error_text = r.error[:50] + "..." if r.error and len(r.error) > 50 else r.error or "-"
-            lines.append(
-                f"| {r.case_name} | {status} | {r.execution_time:.3f} | {error_text} |"
-            )
+            lines.append(f"| {r.case_name} | {status} | {r.execution_time:.3f} | {error_text} |")
 
         lines.extend(["", "## Detailed Results", ""])
 
         for r in results:
             status = "PASS" if r.passed else "FAIL"
-            lines.extend([
-                f"### {r.case_name} [{status}]",
-                "",
-                f"- **Execution Time:** {r.execution_time:.3f}s",
-            ])
+            lines.extend(
+                [
+                    f"### {r.case_name} [{status}]",
+                    "",
+                    f"- **Execution Time:** {r.execution_time:.3f}s",
+                ]
+            )
             if r.error:
                 lines.append(f"- **Error:** {r.error}")
             if r.metrics:
@@ -127,8 +127,8 @@ class EvaluationReporter:
 
     def generate_csv_report(
         self,
-        results: List[EvaluationResult],
-        filename: Optional[str] = None,
+        results: list[EvaluationResult],
+        filename: str | None = None,
     ) -> str:
         if not filename:
             filename = f"evaluation_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -138,15 +138,17 @@ class EvaluationReporter:
             f.write("case_id,case_name,passed,execution_time,error\n")
             for r in results:
                 error_escaped = f'"{r.error}"' if r.error else ""
-                f.write(f"{r.case_id},{r.case_name},{r.passed},{r.execution_time:.3f},{error_escaped}\n")
+                f.write(
+                    f"{r.case_id},{r.case_name},{r.passed},{r.execution_time:.3f},{error_escaped}\n"
+                )
 
         return str(filepath)
 
     def compare_reports(
         self,
-        results1: List[EvaluationResult],
-        results2: List[EvaluationResult],
-    ) -> Dict[str, Any]:
+        results1: list[EvaluationResult],
+        results2: list[EvaluationResult],
+    ) -> dict[str, Any]:
         summary1 = self.generate_summary(results1)
         summary2 = self.generate_summary(results2)
 
@@ -155,9 +157,11 @@ class EvaluationReporter:
             "current": summary2,
             "differences": {
                 "pass_rate_delta": round(summary2["pass_rate"] - summary1["pass_rate"], 2),
-                "avg_time_delta": round(summary2["avg_execution_time"] - summary1["avg_execution_time"], 3),
+                "avg_time_delta": round(
+                    summary2["avg_execution_time"] - summary1["avg_execution_time"], 3
+                ),
             },
         }
 
-    def get_reports(self) -> List[Dict[str, Any]]:
+    def get_reports(self) -> list[dict[str, Any]]:
         return self.reports

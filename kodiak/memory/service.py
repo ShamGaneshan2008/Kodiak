@@ -170,21 +170,31 @@ class MemoryService:
         """Delete a single memory by id."""
         parsed_id = self._coerce_uuid(memory_id)
         if parsed_id is None:
-            raise MemoryNotFoundError(str(memory_id), memory_type=str(memory_type) if memory_type else None)
+            raise MemoryNotFoundError(
+                str(memory_id), memory_type=str(memory_type) if memory_type else None
+            )
 
         if memory_type in (None, MemoryType.EPISODIC) and self._episodes.pop(parsed_id, None):
-            logger.info("memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.EPISODIC))
+            logger.info(
+                "memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.EPISODIC)
+            )
             return True
 
         if memory_type in (None, MemoryType.SEMANTIC) and self._entities.pop(parsed_id, None):
-            logger.info("memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.SEMANTIC))
+            logger.info(
+                "memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.SEMANTIC)
+            )
             return True
 
         if memory_type in (None, MemoryType.PROCEDURAL) and self._procedures.pop(parsed_id, None):
-            logger.info("memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.PROCEDURAL))
+            logger.info(
+                "memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.PROCEDURAL)
+            )
             return True
 
-        raise MemoryNotFoundError(str(memory_id), memory_type=str(memory_type) if memory_type else None)
+        raise MemoryNotFoundError(
+            str(memory_id), memory_type=str(memory_type) if memory_type else None
+        )
 
     async def delete_by_tags(
         self,

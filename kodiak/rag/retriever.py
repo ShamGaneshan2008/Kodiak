@@ -12,9 +12,10 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Protocol, TYPE_CHECKING, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import structlog
 
@@ -35,6 +36,7 @@ else:
         model: str
         dimensions: int
         metadata: dict[str, Any]
+
 
 logger = structlog.get_logger(__name__)
 
@@ -411,11 +413,7 @@ class Retriever:
                 lexical_ids = {record.chunk.id for record in lexical}
                 lexical = (
                     *lexical,
-                    *(
-                        record
-                        for record in structural
-                        if record.chunk.id not in lexical_ids
-                    ),
+                    *(record for record in structural if record.chunk.id not in lexical_ids),
                 )
             return self._limit_candidates(lexical, query)
         return self._limit_candidates(structural, query)
@@ -449,8 +447,7 @@ class Retriever:
     def _safe_rank(self, results: list[RetrievalResult], *, top_k: int) -> list[RetrievalResult]:
         ordered = sorted(results, key=lambda result: result.score, reverse=True)[:top_k]
         return [
-            self._replace_rank(result, rank=index)
-            for index, result in enumerate(ordered, start=1)
+            self._replace_rank(result, rank=index) for index, result in enumerate(ordered, start=1)
         ]
 
     def _select_final_context(
@@ -487,8 +484,7 @@ class Retriever:
                 break
 
         return [
-            self._replace_rank(result, rank=index)
-            for index, result in enumerate(selected, start=1)
+            self._replace_rank(result, rank=index) for index, result in enumerate(selected, start=1)
         ]
 
     def _context_results(
@@ -630,9 +626,8 @@ class Retriever:
             candidate = record.chunk
             if candidate.symbol_type != ChunkSymbolType.CLASS:
                 continue
-            if (
-                candidate.symbol_name == chunk.parent_class
-                or candidate.symbol_name.endswith(f".{chunk.parent_class}")
+            if candidate.symbol_name == chunk.parent_class or candidate.symbol_name.endswith(
+                f".{chunk.parent_class}"
             ):
                 return record
         return None
@@ -643,9 +638,7 @@ class Retriever:
         records: tuple[ChunkEmbedding, ...],
     ) -> tuple[ChunkEmbedding, ...]:
         try:
-            index = next(
-                idx for idx, record in enumerate(records) if record.chunk.id == chunk.id
-            )
+            index = next(idx for idx, record in enumerate(records) if record.chunk.id == chunk.id)
         except StopIteration:
             return ()
 
@@ -766,9 +759,7 @@ class Retriever:
                     else None
                 )
                 keyword_score, matched_terms = (
-                    self._keyword_score(query_tokens, record)
-                    if query_tokens
-                    else (None, ())
+                    self._keyword_score(query_tokens, record) if query_tokens else (None, ())
                 )
                 metadata_score = self._metadata_score(query.filters, record.chunk)
                 repository_score = self._repository_score(record.chunk)
@@ -837,8 +828,7 @@ class Retriever:
             reverse=True,
         )[:top_k]
         return [
-            self._replace_rank(result, rank=index)
-            for index, result in enumerate(ordered, start=1)
+            self._replace_rank(result, rank=index) for index, result in enumerate(ordered, start=1)
         ]
 
     def _apply_filters(
@@ -899,8 +889,7 @@ class Retriever:
             frequency = counts[token]
             document_frequency = self._document_frequencies.get(token, 0)
             inverse_document_frequency = math.log(
-                1.0 + (self._document_count - document_frequency + 0.5)
-                / (document_frequency + 0.5)
+                1.0 + (self._document_count - document_frequency + 0.5) / (document_frequency + 0.5)
             )
             denominator = frequency + k1 * (1.0 - b + b * document_length / average_length)
             score += inverse_document_frequency * ((frequency * (k1 + 1.0)) / denominator)
@@ -1245,7 +1234,7 @@ class Retriever:
     def _cosine_similarity(left: tuple[float, ...], right: tuple[float, ...]) -> float:
         if len(left) != len(right) or not left:
             return 0.0
-        dot = sum(a * b for a, b in zip(left, right))
+        dot = sum(a * b for a, b in zip(left, right, strict=False))
         left_norm = math.sqrt(sum(value * value for value in left))
         right_norm = math.sqrt(sum(value * value for value in right))
         if left_norm == 0.0 or right_norm == 0.0:

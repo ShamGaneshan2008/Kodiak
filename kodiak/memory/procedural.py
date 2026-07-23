@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
 import structlog
@@ -30,8 +30,8 @@ class Procedure(BaseModel):
     tags: list[str] = Field(default_factory=list)
     success_count: int = Field(default=0, ge=0)
     failure_count: int = Field(default=0, ge=0)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def success_rate(self) -> float:
@@ -52,9 +52,7 @@ class ProcedureRepository(Protocol):
 
     async def update(self, procedure: Procedure) -> Procedure: ...
 
-    async def search(
-        self, query: str, limit: int = 10
-    ) -> list[ProcedureSearchResult]: ...
+    async def search(self, query: str, limit: int = 10) -> list[ProcedureSearchResult]: ...
 
     async def increment_success(self, procedure_id: uuid.UUID) -> Procedure: ...
 
@@ -114,15 +112,13 @@ class ProceduralMemory:
         if tags is not None:
             update_data["tags"] = tags
 
-        update_data["updated_at"] = datetime.now(timezone.utc)
+        update_data["updated_at"] = datetime.now(UTC)
         updated_procedure = Procedure(**update_data)
         result = await self._repo.update(updated_procedure)
         logger.info("procedure_updated", procedure_id=str(procedure_id))
         return result
 
-    async def search_procedures(
-        self, query: str, limit: int = 10
-    ) -> list[ProcedureSearchResult]:
+    async def search_procedures(self, query: str, limit: int = 10) -> list[ProcedureSearchResult]:
         return await self._repo.search(query, limit)
 
     async def record_success(self, procedure_id: uuid.UUID) -> Procedure:

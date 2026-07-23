@@ -12,18 +12,24 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 import structlog
 
-from kodiak.rag.repository_index import ClassInfo, FunctionInfo, ImportInfo, ModuleInfo, RepositoryIndex
+from kodiak.rag.repository_index import (
+    ClassInfo,
+    FunctionInfo,
+    ImportInfo,
+    ModuleInfo,
+    RepositoryIndex,
+)
 
 logger = structlog.get_logger(__name__)
 
 
-class ChunkSymbolType(str, Enum):
+class ChunkSymbolType(StrEnum):
     """Logical source object represented by a repository chunk."""
 
     MODULE = "module"
@@ -200,9 +206,7 @@ class Chunker:
         source_lines = self._source_lines(module.path)
         imports = self._format_imports(module.imports)
         symbol_type = (
-            ChunkSymbolType.ASYNC_FUNCTION
-            if function_info.is_async
-            else ChunkSymbolType.FUNCTION
+            ChunkSymbolType.ASYNC_FUNCTION if function_info.is_async else ChunkSymbolType.FUNCTION
         )
         metadata: dict[str, Any] = {
             "signature": function_info.signature,

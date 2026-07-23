@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import structlog
 from pydantic import BaseModel, Field, model_validator
 

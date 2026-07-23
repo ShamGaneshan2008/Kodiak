@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -70,7 +70,7 @@ class TaskScheduler:
         self._state.update_task(
             task_id,
             status=TaskStatus.COMPLETED,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
         logger.info("task_completed", task_id=str(task_id))
 

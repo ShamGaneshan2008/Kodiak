@@ -170,7 +170,7 @@ class Embedder:
         # Batch API calls for uncached
         if uncached_texts:
             api_results = await self._embed_batched(uncached_texts)
-            for idx, result in zip(uncached_indices, api_results):
+            for idx, result in zip(uncached_indices, api_results, strict=False):
                 self._cache.set(result.text, self.model, result.embedding)
                 results[idx] = result
 
@@ -183,7 +183,7 @@ class Embedder:
         """
         texts = [c.content for c in chunks]
         results = await self.embed_many(texts)
-        return [(chunk, result.embedding) for chunk, result in zip(chunks, results)]
+        return [(chunk, result.embedding) for chunk, result in zip(chunks, results, strict=False)]
 
     # ------------------------------------------------------------------
     # Internal
@@ -191,10 +191,7 @@ class Embedder:
 
     async def _embed_batched(self, texts: list[str]) -> list[EmbeddingResult]:
         """Split into batches and call API concurrently."""
-        batches = [
-            texts[i : i + self.batch_size]
-            for i in range(0, len(texts), self.batch_size)
-        ]
+        batches = [texts[i : i + self.batch_size] for i in range(0, len(texts), self.batch_size)]
 
         tasks = [self._call_api(batch) for batch in batches]
         batch_results = await asyncio.gather(*tasks)
@@ -235,7 +232,7 @@ class Embedder:
         )
 
         results = []
-        for item, text in zip(response.data, texts):
+        for item, text in zip(response.data, texts, strict=False):
             results.append(
                 EmbeddingResult(
                     text=text,

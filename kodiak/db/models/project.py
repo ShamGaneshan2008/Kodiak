@@ -12,12 +12,12 @@ import uuid
 
 from sqlalchemy import Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from kodiak.db.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 
 
-class ProjectStatus(str, enum.Enum):
+class ProjectStatus(enum.StrEnum):
     ACTIVE = "active"
     PAUSED = "paused"
     ARCHIVED = "archived"
@@ -36,7 +36,6 @@ class Project(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     status: Mapped[ProjectStatus] = mapped_column(
         Enum(ProjectStatus), nullable=False, default=ProjectStatus.ACTIVE
     )
-
 
     def __repr__(self) -> str:
         return f"<Project id={self.id} name={self.name!r}>"

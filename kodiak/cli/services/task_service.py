@@ -4,16 +4,16 @@ from pathlib import Path
 
 import structlog
 
-from kodiak.agents.repository_analyzer_agent import RepositoryAnalyzerAgent
-from kodiak.agents.planning_agent import PlanningAgent
-from kodiak.agents.review_agent import ReviewAgent
 from kodiak.agents.execution_agent import ExecutionAgent
 from kodiak.agents.models.analysis import RepositoryAnalysis
+from kodiak.agents.models.execution import ExecutionResult
 from kodiak.agents.models.issue import GitHubIssue
 from kodiak.agents.models.plan import ImplementationPlan
 from kodiak.agents.models.review import ReviewResult
-from kodiak.agents.models.execution import ExecutionResult
 from kodiak.agents.models.task import TaskOutcome
+from kodiak.agents.planning_agent import PlanningAgent
+from kodiak.agents.repository_analyzer_agent import RepositoryAnalyzerAgent
+from kodiak.agents.review_agent import ReviewAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -61,9 +61,7 @@ class TaskService:
         self._review_agent = review_agent
         self._execution_agent = execution_agent
 
-    async def run_task(
-        self, repository_path: str | Path, issue: GitHubIssue
-    ) -> TaskOutcome:
+    async def run_task(self, repository_path: str | Path, issue: GitHubIssue) -> TaskOutcome:
         """Runs the full autonomous workflow for a given repository and issue.
 
         Args:
@@ -179,9 +177,7 @@ class TaskService:
                 plan_id=plan.id,
                 error=str(exc),
             )
-            raise TaskWorkflowFailedError(
-                f"Plan review failed for plan: {plan.id}"
-            ) from exc
+            raise TaskWorkflowFailedError(f"Plan review failed for plan: {plan.id}") from exc
 
     async def _run_execution(
         self, plan: ImplementationPlan, review: ReviewResult
@@ -206,9 +202,7 @@ class TaskService:
                 plan_id=plan.id,
                 error=str(exc),
             )
-            raise TaskWorkflowFailedError(
-                f"Plan execution failed for plan: {plan.id}"
-            ) from exc
+            raise TaskWorkflowFailedError(f"Plan execution failed for plan: {plan.id}") from exc
 
     def _validate_repository_path(self, repository_path: str | Path) -> Path:
         """Validates that the given repository path exists and is a directory.
@@ -225,14 +219,10 @@ class TaskService:
         resolved_path = Path(repository_path).resolve()
 
         if not resolved_path.exists():
-            raise InvalidTaskInputError(
-                f"Repository path does not exist: {resolved_path}"
-            )
+            raise InvalidTaskInputError(f"Repository path does not exist: {resolved_path}")
 
         if not resolved_path.is_dir():
-            raise InvalidTaskInputError(
-                f"Repository path is not a directory: {resolved_path}"
-            )
+            raise InvalidTaskInputError(f"Repository path is not a directory: {resolved_path}")
 
         return resolved_path
 

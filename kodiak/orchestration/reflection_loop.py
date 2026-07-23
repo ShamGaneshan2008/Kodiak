@@ -12,13 +12,9 @@ class ReflectionLoop:
         self._state = state
         self._max_retries = max_retries
 
-    async def evaluate(
-        self, task_id: uuid.UUID, output: str, error: str | None = None
-    ) -> bool:
+    async def evaluate(self, task_id: uuid.UUID, output: str, error: str | None = None) -> bool:
         if error:
-            logger.info(
-                "reflection_detected_failure", task_id=str(task_id), error=error
-            )
+            logger.info("reflection_detected_failure", task_id=str(task_id), error=error)
             return False
         if not output or len(output.strip()) < 10:
             logger.info("reflection_detected_empty_output", task_id=str(task_id))
@@ -41,9 +37,7 @@ class ReflectionLoop:
             return {"status": "error", "message": "Task not found"}
 
         if not await self.should_retry(task_id):
-            self._state.update_task(
-                task_id, status=TaskStatus.FAILED, error="Max retries exceeded"
-            )
+            self._state.update_task(task_id, status=TaskStatus.FAILED, error="Max retries exceeded")
             logger.error("reflection_max_retries_exceeded", task_id=str(task_id))
             return {"status": "failed", "message": "Max retries exceeded"}
 

@@ -1,6 +1,6 @@
 import logging
-from typing import Any, Dict, List, Optional
-from datetime import datetime
+from typing import Any
+
 import aiohttp
 
 logger = logging.getLogger(__name__)
@@ -16,11 +16,11 @@ class GitHubClient:
             "User-Agent": "Kodiak-AI",
         }
 
-    async def get_repo(self, owner: str, repo: str) -> Dict[str, Any]:
+    async def get_repo(self, owner: str, repo: str) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}"
         return await self._request("GET", url)
 
-    async def get_issue(self, owner: str, repo: str, issue_number: int) -> Dict[str, Any]:
+    async def get_issue(self, owner: str, repo: str, issue_number: int) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}/issues/{issue_number}"
         return await self._request("GET", url)
 
@@ -30,7 +30,7 @@ class GitHubClient:
         repo: str,
         state: str = "open",
         per_page: int = 30,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         url = f"{self.base_url}/repos/{owner}/{repo}/issues"
         params = {"state": state, "per_page": per_page}
         return await self._request("GET", url, params=params)
@@ -41,8 +41,8 @@ class GitHubClient:
         repo: str,
         title: str,
         body: str,
-        labels: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        labels: list[str] | None = None,
+    ) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}/issues"
         data = {"title": title, "body": body}
         if labels:
@@ -55,11 +55,11 @@ class GitHubClient:
         repo: str,
         issue_number: int,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}/issues/{issue_number}"
         return await self._request("PATCH", url, json=kwargs)
 
-    async def close_issue(self, owner: str, repo: str, issue_number: int) -> Dict[str, Any]:
+    async def close_issue(self, owner: str, repo: str, issue_number: int) -> dict[str, Any]:
         return await self.update_issue(owner, repo, issue_number, state="closed")
 
     async def get_pull_request(
@@ -67,7 +67,7 @@ class GitHubClient:
         owner: str,
         repo: str,
         pr_number: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}"
         return await self._request("GET", url)
 
@@ -77,7 +77,7 @@ class GitHubClient:
         repo: str,
         state: str = "open",
         per_page: int = 30,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls"
         params = {"state": state, "per_page": per_page}
         return await self._request("GET", url, params=params)
@@ -90,7 +90,7 @@ class GitHubClient:
         head: str,
         base: str,
         body: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls"
         data = {
             "title": title,
@@ -106,7 +106,7 @@ class GitHubClient:
         repo: str,
         pr_number: int,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}"
         return await self._request("PATCH", url, json=kwargs)
 
@@ -116,7 +116,7 @@ class GitHubClient:
         repo: str,
         pr_number: int,
         commit_message: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}/merge"
         data = {}
         if commit_message:
@@ -128,7 +128,7 @@ class GitHubClient:
         owner: str,
         repo: str,
         per_page: int = 30,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         url = f"{self.base_url}/repos/{owner}/{repo}/commits"
         params = {"per_page": per_page}
         return await self._request("GET", url, params=params)
@@ -140,7 +140,7 @@ class GitHubClient:
         pr_number: int,
         body: str,
         event: str = "COMMENT",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
         data = {"body": body, "event": event}
         return await self._request("POST", url, json=data)
@@ -154,7 +154,7 @@ class GitHubClient:
         path: str,
         position: int,
         body: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls/{pr_number}/comments"
         data = {
             "commit_id": commit_id,
@@ -170,7 +170,7 @@ class GitHubClient:
         repo: str,
         path: str,
         ref: str = "main",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}/contents/{path}"
         params = {"ref": ref}
         return await self._request("GET", url, params=params)
@@ -181,7 +181,7 @@ class GitHubClient:
         repo: str,
         path: str = "",
         ref: str = "main",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         url = f"{self.base_url}/repos/{owner}/{repo}/contents/{path}"
         params = {"ref": ref}
         return await self._request("GET", url, params=params)
@@ -190,8 +190,8 @@ class GitHubClient:
         self,
         method: str,
         url: str,
-        json: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> Any:
         try:
             async with aiohttp.ClientSession() as session:

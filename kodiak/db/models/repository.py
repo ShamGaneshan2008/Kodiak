@@ -7,7 +7,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,9 +17,11 @@ from kodiak.db.base import Base, TimestampMixin, UUIDMixin
 class GitHubInstallation(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "github_installations"
 
-    installation_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
+    installation_id: Mapped[int] = mapped_column(
+        BigInteger, unique=True, nullable=False, index=True
+    )
     app_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    account_type: Mapped[str] = mapped_column(String(16), nullable=False)   # "User" | "Organization"
+    account_type: Mapped[str] = mapped_column(String(16), nullable=False)  # "User" | "Organization"
     account_login: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     account_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
@@ -33,7 +35,7 @@ class GitHubInstallation(UUIDMixin, TimestampMixin, Base):
     permissions: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     events: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
 
-    owner: Mapped["User"] = relationship("User", back_populates="installations")  # noqa: F821
+    owner: Mapped[User] = relationship("User", back_populates="installations")  # noqa: F821
     repositories: Mapped[list[Repository]] = relationship(
         "Repository", back_populates="installation", cascade="all, delete-orphan"
     )
@@ -70,7 +72,7 @@ class Repository(UUIDMixin, TimestampMixin, Base):
     installation: Mapped[GitHubInstallation] = relationship(
         "GitHubInstallation", back_populates="repositories"
     )
-    tasks: Mapped[list["Task"]] = relationship(  # noqa: F821
+    tasks: Mapped[list[Task]] = relationship(  # noqa: F821
         "Task", back_populates="repository"
     )
 

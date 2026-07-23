@@ -18,7 +18,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
@@ -26,10 +26,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kodiak.auth.permissions import Scope
-from kodiak.db.session import get_db
 from kodiak.db.models.api_key import APIKey  # ORM model: id, org_id, name, key_hash,
-                                              # prefix, scopes, last_used_at, expires_at,
-                                              # revoked_at, created_by
+from kodiak.db.session import get_db
+
+# prefix, scopes, last_used_at, expires_at,
+# revoked_at, created_by
 
 _API_KEY_HEADER = APIKeyHeader(name="X-Kodiak-Api-Key", auto_error=False)
 
@@ -106,7 +107,7 @@ async def revoke_api_key(db: AsyncSession, *, key_id: str, org_id: str) -> None:
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
 
-    record.revoked_at = datetime.now(timezone.utc)
+    record.revoked_at = datetime.now(UTC)
     await db.commit()
 
 
@@ -114,7 +115,9 @@ async def _resolve_api_key(
     raw_key: str | None,
     db: AsyncSession,
 ) -> APIKeyPrincipal:
-    if not raw_key or not (raw_key.startswith(KEY_PREFIX_LIVE) or raw_key.startswith(KEY_PREFIX_TEST)):
+    if not raw_key or not (
+        raw_key.startswith(KEY_PREFIX_LIVE) or raw_key.startswith(KEY_PREFIX_TEST)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or malformed API key",
@@ -128,9 +131,11 @@ async def _resolve_api_key(
     if record is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if record.revoked_at is not None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key has been revoked")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="API key has been revoked"
+        )
     if record.expires_at is not None and record.expires_at < now:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key has expired")
 
@@ -168,6 +173,7 @@ def require_api_key_scope(scope: Scope):
 
     return dependency
 
+
 async def lookup_api_key(
     session: AsyncSession,
     raw_key: str,
@@ -194,7 +200,7 @@ async def lookup_api_key(
     if record is None:
         return None
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if record.expires_at is not None and record.expires_at < now:
         return None

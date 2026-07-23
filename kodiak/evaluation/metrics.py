@@ -1,7 +1,6 @@
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
-from collections import defaultdict
 import statistics
+from collections import defaultdict
+from dataclasses import dataclass
 
 
 @dataclass
@@ -9,25 +8,25 @@ class Metric:
     name: str
     value: float
     unit: str = ""
-    timestamp: Optional[float] = None
+    timestamp: float | None = None
 
 
 class MetricsCollector:
     def __init__(self):
-        self.metrics: Dict[str, List[float]] = defaultdict(list)
-        self.labels: Dict[str, str] = {}
-        self.snapshots: List[Dict[str, float]] = []
+        self.metrics: dict[str, list[float]] = defaultdict(list)
+        self.labels: dict[str, str] = {}
+        self.snapshots: list[dict[str, float]] = []
 
     def record(self, name: str, value: float, unit: str = ""):
         self.metrics[name].append(value)
         if unit:
             self.labels[name] = unit
 
-    def record_multiple(self, metrics_dict: Dict[str, float]):
+    def record_multiple(self, metrics_dict: dict[str, float]):
         for name, value in metrics_dict.items():
             self.record(name, value)
 
-    def get_snapshot(self) -> Dict[str, float]:
+    def get_snapshot(self) -> dict[str, float]:
         snapshot = {}
         for name, values in self.metrics.items():
             if values:
@@ -40,7 +39,7 @@ class MetricsCollector:
                 snapshot[f"{name}_count"] = len(values)
         return snapshot
 
-    def get_metric_stats(self, name: str) -> Optional[Dict[str, float]]:
+    def get_metric_stats(self, name: str) -> dict[str, float] | None:
         if name not in self.metrics or not self.metrics[name]:
             return None
 
@@ -54,7 +53,7 @@ class MetricsCollector:
             "count": len(values),
         }
 
-    def get_all_metrics(self) -> Dict[str, List[float]]:
+    def get_all_metrics(self) -> dict[str, list[float]]:
         return dict(self.metrics)
 
     def reset(self):
@@ -62,7 +61,7 @@ class MetricsCollector:
         self.labels.clear()
         self.snapshots.clear()
 
-    def aggregate_by_percentile(self, name: str, percentile: int) -> Optional[float]:
+    def aggregate_by_percentile(self, name: str, percentile: int) -> float | None:
         if name not in self.metrics or not self.metrics[name]:
             return None
 

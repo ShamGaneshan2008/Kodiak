@@ -1,7 +1,8 @@
 import asyncio
 import functools
 import time
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import structlog
 from pydantic import BaseModel, Field

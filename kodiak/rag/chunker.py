@@ -9,17 +9,16 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Iterator
+from enum import StrEnum
 
 import structlog
 
 logger = structlog.get_logger(__name__)
 
 
-class ChunkType(str, Enum):
+class ChunkType(StrEnum):
     FUNCTION = "function"
     CLASS = "class"
     MODULE = "module"
@@ -174,9 +173,9 @@ class PythonASTChunker:
         return content[:max_chars] + "\n# ... (truncated)"
 
     def _fallback_chunk(self, source: str, file_path: str) -> list[Chunk]:
-        return LineBasedChunker(
-            max_tokens=self.max_tokens, overlap_lines=self.overlap_lines
-        ).chunk(source, file_path, language="python")
+        return LineBasedChunker(max_tokens=self.max_tokens, overlap_lines=self.overlap_lines).chunk(
+            source, file_path, language="python"
+        )
 
 
 class LineBasedChunker:
@@ -186,9 +185,7 @@ class LineBasedChunker:
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
 
-    def chunk(
-        self, source: str, file_path: str, language: str = "text"
-    ) -> list[Chunk]:
+    def chunk(self, source: str, file_path: str, language: str = "text") -> list[Chunk]:
         lines = source.splitlines()
         chunks: list[Chunk] = []
         max_chars = self.max_tokens * 4
@@ -217,7 +214,7 @@ class LineBasedChunker:
                 overlap = current_lines[-self.overlap_lines :]
                 current_start = i - self.overlap_lines + 1
                 current_lines = overlap
-                current_chars = sum(len(l) + 1 for l in overlap)
+                current_chars = sum(len(line) + 1 for line in overlap)
 
         # Remaining lines
         if current_lines:
@@ -260,6 +257,7 @@ LANGUAGE_MAP: dict[str, str] = {
 
 def detect_language(file_path: str) -> str:
     import os
+
     ext = os.path.splitext(file_path)[1].lower()
     return LANGUAGE_MAP.get(ext, "text")
 

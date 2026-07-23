@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from collections import Counter
 from dataclasses import dataclass
@@ -93,7 +94,7 @@ class RepositoryAnalyzerAgent(BaseAgent):
                 "repository_path missing from AgentInput.context",
             )
 
-        analysis = self._scan(Path(repository).resolve())
+        analysis = await asyncio.to_thread(lambda: self._scan(Path(repository).resolve()))
 
         return self._make_output(
             input_,

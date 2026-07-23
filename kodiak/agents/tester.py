@@ -14,7 +14,7 @@ import re
 import shlex
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -66,14 +66,14 @@ Output schema:
 """
 
 
-class TestRunnerName(str, Enum):
+class TestRunnerName(StrEnum):
     """Supported Python test runners."""
 
     PYTEST = "pytest"
     UNITTEST = "unittest"
 
 
-class TestScope(str, Enum):
+class TestScope(StrEnum):
     """Kinds of tests the agent can discover, generate, and execute."""
 
     UNIT = "unit"
@@ -82,7 +82,7 @@ class TestScope(str, Enum):
     PROJECT = "project"
 
 
-class TestStatus(str, Enum):
+class TestStatus(StrEnum):
     """Execution status for test commands and reports."""
 
     PASSED = "passed"
@@ -541,15 +541,9 @@ class TestAgent(BaseAgent):
         if root is None or not root.exists():
             return ()
 
-        candidates = [
-            path
-            for path in root.rglob("test_*.py")
-            if self._is_test_path(path, root)
-        ]
+        candidates = [path for path in root.rglob("test_*.py") if self._is_test_path(path, root)]
         candidates.extend(
-            path
-            for path in root.rglob("*_test.py")
-            if self._is_test_path(path, root)
+            path for path in root.rglob("*_test.py") if self._is_test_path(path, root)
         )
         tests = tuple(
             DiscoveredTest(
@@ -760,8 +754,7 @@ class TestAgent(BaseAgent):
     ) -> tuple[TestCommand, ...]:
         if discovered and affected_only:
             return tuple(
-                self._file_command(test, collect_coverage=collect_coverage)
-                for test in discovered
+                self._file_command(test, collect_coverage=collect_coverage) for test in discovered
             )
         if discovered and not affected_only:
             scopes = sorted({test.scope for test in discovered}, key=lambda scope: scope.value)
@@ -791,8 +784,7 @@ class TestAgent(BaseAgent):
     ) -> tuple[TestRunResult, ...]:
         if dry_run or self._command_runner is None or repository_root is None:
             return tuple(
-                TestRunResult(command=command, status=TestStatus.DRY_RUN)
-                for command in commands
+                TestRunResult(command=command, status=TestStatus.DRY_RUN) for command in commands
             )
 
         results: list[TestRunResult] = []
@@ -835,8 +827,7 @@ class TestAgent(BaseAgent):
             )
         if hasattr(self._command_runner, "execute_shell") and self._command_container is not None:
             shell_command = (
-                f"cd {shlex.quote(str(repository_root))} "
-                f"&& {self._shell_join(command.command)}"
+                f"cd {shlex.quote(str(repository_root))} && {self._shell_join(command.command)}"
             )
             return await self._command_runner.execute_shell(
                 self._command_container,
@@ -1025,9 +1016,7 @@ class TestAgent(BaseAgent):
         interesting = [
             line
             for line in lines
-            if line.startswith("E   ")
-            or "Traceback" in line
-            or re.match(r"\s*File \"", line)
+            if line.startswith("E   ") or "Traceback" in line or re.match(r"\s*File \"", line)
         ]
         return "\n".join(interesting[-40:])
 

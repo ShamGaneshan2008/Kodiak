@@ -54,9 +54,7 @@ class AnalyzeService:
         output = await self._agent.run(agent_input)
 
         if not output.success:
-            raise RepositoryAnalysisFailedError(
-                output.error or "Repository analysis failed."
-            )
+            raise RepositoryAnalysisFailedError(output.error or "Repository analysis failed.")
 
         analysis = output.result.get("analysis")
 
@@ -80,13 +78,9 @@ class AnalyzeService:
         path = Path(repository_path).expanduser().resolve()
 
         if not path.exists():
-            raise InvalidRepositoryPathError(
-                f"Repository path does not exist: {path}"
-            )
+            raise InvalidRepositoryPathError(f"Repository path does not exist: {path}")
 
         if not path.is_dir():
-            raise InvalidRepositoryPathError(
-                f"Repository path is not a directory: {path}"
-            )
+            raise InvalidRepositoryPathError(f"Repository path is not a directory: {path}")
 
         return path

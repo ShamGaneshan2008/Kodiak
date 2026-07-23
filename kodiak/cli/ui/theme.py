@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
-from rich.box import Box, DOUBLE, HEAVY, ROUNDED
+from rich.box import DOUBLE, HEAVY, ROUNDED, Box
 from rich.console import Console
 from rich.theme import Theme
 

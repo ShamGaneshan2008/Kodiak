@@ -12,32 +12,35 @@ parsers without modifying the core logic.
 from __future__ import annotations
 
 import datetime
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 import structlog
 
 # --------------------------------------------------------------------------- #
 # Ignored directories (relative to repository root)
 # --------------------------------------------------------------------------- #
-_IGNORED_DIRS: frozenset[str] = frozenset({
-    ".git",
-    ".venv",
-    "venv",
-    "__pycache__",
-    "node_modules",
-    "build",
-    "dist",
-    ".idea",
-    ".pytest_cache",
-    ".mypy_cache",
-})
+_IGNORED_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "__pycache__",
+        "node_modules",
+        "build",
+        "dist",
+        ".idea",
+        ".pytest_cache",
+        ".mypy_cache",
+    }
+)
 
 # --------------------------------------------------------------------------- #
 # Supported file extensions and their associated languages
 # --------------------------------------------------------------------------- #
-_SUPPORTED_EXTENSIONS: Dict[str, str] = {
+_SUPPORTED_EXTENSIONS: dict[str, str] = {
     ".py": "python",
     ".md": "markdown",
     ".json": "json",
@@ -81,7 +84,7 @@ class ParsedDocument:
     file_size: int
     last_modified: datetime.datetime
     content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- #
@@ -103,7 +106,7 @@ class RepositoryParser:
         if not root_path.is_dir():
             raise ValueError(f"Provided path '{root_path}' is not a directory.")
         self.root_path: Path = root_path.resolve()
-        self._parser_registry: Dict[str, Callable[[Path, Path], ParsedDocument]] = {
+        self._parser_registry: dict[str, Callable[[Path, Path], ParsedDocument]] = {
             ext: self._default_text_parser for ext in _SUPPORTED_EXTENSIONS
         }
         self._logger = structlog.get_logger(self.__class__.__name__)
@@ -111,7 +114,7 @@ class RepositoryParser:
     # ------------------------------------------------------------------- #
     # Public API
     # ------------------------------------------------------------------- #
-    def parse_repository(self) -> List[ParsedDocument]:
+    def parse_repository(self) -> list[ParsedDocument]:
         """Walk the repository and parse all supported files.
 
         Returns
@@ -120,15 +123,17 @@ class RepositoryParser:
             A list containing a ``ParsedDocument`` for each successfully parsed
             file. Files that cannot be parsed are silently skipped.
         """
-        parsed_documents: List[ParsedDocument] = []
+        parsed_documents: list[ParsedDocument] = []
         for file_path in self._iter_repository_files():
             doc = self.parse_file(file_path)
             if doc is not None:
                 parsed_documents.append(doc)
-        self._logger.info("repository_parsed", total=len(parsed_documents), root=str(self.root_path))
+        self._logger.info(
+            "repository_parsed", total=len(parsed_documents), root=str(self.root_path)
+        )
         return parsed_documents
 
-    def parse_file(self, file_path: Path) -> Optional[ParsedDocument]:
+    def parse_file(self, file_path: Path) -> ParsedDocument | None:
         """Parse a single file and return its ``ParsedDocument``.
 
         If the file cannot be read or parsed, ``None`` is returned.
@@ -204,7 +209,7 @@ class RepositoryParser:
     # ------------------------------------------------------------------- #
     # Private helpers
     # ------------------------------------------------------------------- #
-    def _iter_repository_files(self) -> List[Path]:
+    def _iter_repository_files(self) -> list[Path]:
         """Yield all files under ``self.root_path`` while ignoring unwanted dirs.
 
         Directories matching any entry in ``_IGNORED_DIRS`` are skipped entirely.
@@ -213,10 +218,11 @@ class RepositoryParser:
         valid_files = [
             p
             for p in all_files
-            if p.is_file()
-            and not any(ignored in p.parts for ignored in _IGNORED_DIRS)
+            if p.is_file() and not any(ignored in p.parts for ignored in _IGNORED_DIRS)
         ]
-        self._logger.debug("repository_files_iterated", total=len(valid_files), root=str(self.root_path))
+        self._logger.debug(
+            "repository_files_iterated", total=len(valid_files), root=str(self.root_path)
+        )
         return valid_files
 
     @staticmethod
@@ -250,9 +256,7 @@ class RepositoryParser:
             file_type=suffix[1:],  # strip leading dot
             language=_SUPPORTED_EXTENSIONS[suffix],
             file_size=stat.st_size,
-            last_modified=datetime.datetime.fromtimestamp(
-                stat.st_mtime, tz=datetime.timezone.utc
-            ),
+            last_modified=datetime.datetime.fromtimestamp(stat.st_mtime, tz=datetime.UTC),
             content=content,
             metadata={
                 "extension": suffix,

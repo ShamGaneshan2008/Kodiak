@@ -1,4 +1,3 @@
-
 """Reusable spinner components for the Kodiak CLI.
 
 This module is a pure presentation layer: it wraps `rich.status.Status`
@@ -66,27 +65,17 @@ SPINNER_PRESETS: Final[dict[str, SpinnerPreset]] = {
     "repository_analysis": SpinnerPreset(
         message="Analyzing repository...", spinner="dots", style="bright_cyan"
     ),
-    "planning": SpinnerPreset(
-        message="Planning...", spinner="dots", style="bright_magenta"
-    ),
+    "planning": SpinnerPreset(message="Planning...", spinner="dots", style="bright_magenta"),
     "task_execution": SpinnerPreset(
         message="Executing task...", spinner="dots", style="bright_yellow"
     ),
-    "ai_reasoning": SpinnerPreset(
-        message="Reasoning...", spinner="dots", style="bright_magenta"
-    ),
+    "ai_reasoning": SpinnerPreset(message="Reasoning...", spinner="dots", style="bright_magenta"),
     "repository_indexing": SpinnerPreset(
         message="Indexing repository...", spinner="dots", style="bright_cyan"
     ),
-    "test_run": SpinnerPreset(
-        message="Running tests...", spinner="dots", style="bright_blue"
-    ),
-    "formatting": SpinnerPreset(
-        message="Formatting code...", spinner="dots", style="bright_green"
-    ),
-    "commit": SpinnerPreset(
-        message="Creating commit...", spinner="dots", style="bright_green"
-    ),
+    "test_run": SpinnerPreset(message="Running tests...", spinner="dots", style="bright_blue"),
+    "formatting": SpinnerPreset(message="Formatting code...", spinner="dots", style="bright_green"),
+    "commit": SpinnerPreset(message="Creating commit...", spinner="dots", style="bright_green"),
     "pull_request": SpinnerPreset(
         message="Creating pull request...", spinner="dots", style="bright_yellow"
     ),

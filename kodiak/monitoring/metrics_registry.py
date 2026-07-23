@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
 
 import structlog
 from pydantic import BaseModel, Field
@@ -23,12 +22,12 @@ class MetricRecord(BaseModel):
     type: MetricType
     value: float | list[float]
     labels: dict[str, str] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class MetricsSnapshot(BaseModel):
     metrics: list[MetricRecord]
-    collected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    collected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 def _make_key(name: str, labels: dict[str, str]) -> str:
@@ -69,9 +68,7 @@ class MetricRegistry:
                 labels=labels or {},
             )
 
-    def set_gauge(
-        self, name: str, value: float, labels: dict[str, str] | None = None
-    ) -> None:
+    def set_gauge(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         key = _make_key(name, labels or {})
         with self._lock:
             self._metrics[key] = MetricRecord(
@@ -119,9 +116,7 @@ class MetricRegistry:
                 labels=labels or {},
             )
 
-    def get_metric(
-        self, name: str, labels: dict[str, str] | None = None
-    ) -> MetricRecord | None:
+    def get_metric(self, name: str, labels: dict[str, str] | None = None) -> MetricRecord | None:
         key = _make_key(name, labels or {})
         with self._lock:
             return self._metrics.get(key)
@@ -130,9 +125,7 @@ class MetricRegistry:
         with self._lock:
             return list(self._metrics.values())
 
-    def remove_metric(
-        self, name: str, labels: dict[str, str] | None = None
-    ) -> bool:
+    def remove_metric(self, name: str, labels: dict[str, str] | None = None) -> bool:
         key = _make_key(name, labels or {})
         with self._lock:
             if key in self._metrics:

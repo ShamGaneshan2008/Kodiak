@@ -8,8 +8,9 @@ including streaming, is delegated to
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Coroutine
 from pathlib import Path
-from typing import Any, Coroutine, Optional, TypeVar
+from typing import Any, TypeVar
 
 import typer
 from rich.console import Console
@@ -19,10 +20,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from kodiak.schemas.explain import (
-    ExplainChunk,
     ExplainMetadata,
     ExplainRequest,
-    ExplainResult,
     ExplainTargetKind,
 )
 from kodiak.services.exceptions import ExplainError
@@ -36,17 +35,17 @@ app = typer.Typer()
 
 @app.command("explain")
 def explain(
-    target: Optional[Path] = typer.Argument(
+    target: Path | None = typer.Argument(
         None,
         help="Path to a file to explain.",
     ),
-    function: Optional[str] = typer.Option(
+    function: str | None = typer.Option(
         None,
         "--function",
         "-f",
         help="Name of a function to explain.",
     ),
-    class_name: Optional[str] = typer.Option(
+    class_name: str | None = typer.Option(
         None,
         "--class",
         "-c",
@@ -100,7 +99,7 @@ def explain(
         request = _build_request(target, function, class_name, architecture, verbose)
     except ValueError as exc:
         _render_error(str(exc))
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
     service = ExplainService()
 
@@ -116,18 +115,18 @@ def explain(
                 _render_metadata(metadata)
     except ExplainError as exc:
         _render_error(str(exc))
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
     except Exception as exc:  # noqa: BLE001
         _render_error(f"Unexpected error while generating explanation: {exc}")
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=2) from exc
 
     raise typer.Exit(code=0)
 
 
 def _build_request(
-    target: Optional[Path],
-    function: Optional[str],
-    class_name: Optional[str],
+    target: Path | None,
+    function: str | None,
+    class_name: str | None,
     architecture: bool,
     verbose: bool,
 ) -> ExplainRequest:
@@ -151,13 +150,17 @@ def _build_request(
     """
     provided = [
         value
-        for value in (target is not None, function is not None, class_name is not None, architecture)
+        for value in (
+            target is not None,
+            function is not None,
+            class_name is not None,
+            architecture,
+        )
         if value
     ]
     if len(provided) == 0:
         raise ValueError(
-            "No target specified. Provide a file path, --function, --class, "
-            "or --architecture."
+            "No target specified. Provide a file path, --function, --class, or --architecture."
         )
     if len(provided) > 1:
         raise ValueError(
@@ -169,25 +172,17 @@ def _build_request(
         resolved = target.resolve()
         if not resolved.exists():
             raise ValueError(f"File does not exist: {resolved}")
-        return ExplainRequest(
-            kind=ExplainTargetKind.FILE, target=str(resolved), verbose=verbose
-        )
+        return ExplainRequest(kind=ExplainTargetKind.FILE, target=str(resolved), verbose=verbose)
     if function is not None:
-        return ExplainRequest(
-            kind=ExplainTargetKind.FUNCTION, target=function, verbose=verbose
-        )
+        return ExplainRequest(kind=ExplainTargetKind.FUNCTION, target=function, verbose=verbose)
     if class_name is not None:
-        return ExplainRequest(
-            kind=ExplainTargetKind.CLASS, target=class_name, verbose=verbose
-        )
-    return ExplainRequest(
-        kind=ExplainTargetKind.ARCHITECTURE, target=None, verbose=verbose
-    )
+        return ExplainRequest(kind=ExplainTargetKind.CLASS, target=class_name, verbose=verbose)
+    return ExplainRequest(kind=ExplainTargetKind.ARCHITECTURE, target=None, verbose=verbose)
 
 
 async def _stream_rendered(
     service: ExplainService, request: ExplainRequest
-) -> tuple[str, Optional[ExplainMetadata]]:
+) -> tuple[str, ExplainMetadata | None]:
     """Stream an explanation and render it as live-updating Markdown.
 
     Args:
@@ -199,11 +194,11 @@ async def _stream_rendered(
         the metadata reported by the final chunk.
     """
     buffer = ""
-    metadata: Optional[ExplainMetadata] = None
+    metadata: ExplainMetadata | None = None
     status = console.status("[bold cyan]Analyzing...", spinner="dots")
     status.start()
 
-    live: Optional[Live] = None
+    live: Live | None = None
     try:
         async for chunk in service.stream(request):
             if chunk.metadata is not None:

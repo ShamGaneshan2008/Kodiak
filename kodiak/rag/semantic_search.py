@@ -18,14 +18,15 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import structlog
 
-from kodiak.rag.chunking import ChunkSymbolType, Chunker, RepositoryChunk
+from kodiak.rag.chunking import Chunker, ChunkSymbolType, RepositoryChunk
 from kodiak.rag.dependency_graph import DependencyGraph
 from kodiak.rag.embeddings import ChunkEmbedding, EmbeddingService
 from kodiak.rag.repository_index import RepositoryIndex, RepositoryIndexer
@@ -52,7 +53,7 @@ PYTHON_EXTENSIONS = frozenset({".py", ".pyi"})
 PYTHON_LANGUAGES = frozenset({"py", "python"})
 
 
-class SearchKind(str, Enum):
+class SearchKind(StrEnum):
     """Search categories exposed by the agent-facing API."""
 
     CODE = "code"
@@ -174,8 +175,7 @@ class SemanticSearchQuery:
                 self,
                 "file_extensions",
                 frozenset(
-                    self._normalize_extension(extension)
-                    for extension in self.file_extensions
+                    self._normalize_extension(extension) for extension in self.file_extensions
                 ),
             )
 
@@ -269,9 +269,7 @@ class SemanticSearchResponse:
                 "file_extensions": sorted(self.query.file_extensions),
                 "directory": str(self.query.directory) if self.query.directory else None,
                 "directories": sorted(self.query.directories),
-                "symbol_type": (
-                    self.query.symbol_type.value if self.query.symbol_type else None
-                ),
+                "symbol_type": (self.query.symbol_type.value if self.query.symbol_type else None),
                 "symbol_types": sorted(
                     symbol_type.value for symbol_type in self.query.symbol_types
                 ),
@@ -804,9 +802,7 @@ class SemanticSearch:
         if query.kind == SearchKind.CLASS:
             symbol_type = ChunkSymbolType.CLASS
         elif query.kind == SearchKind.FUNCTION:
-            symbol_types = frozenset(
-                {ChunkSymbolType.FUNCTION, ChunkSymbolType.ASYNC_FUNCTION}
-            )
+            symbol_types = frozenset({ChunkSymbolType.FUNCTION, ChunkSymbolType.ASYNC_FUNCTION})
         elif query.kind == SearchKind.MODULE:
             symbol_type = ChunkSymbolType.MODULE
 
@@ -867,8 +863,7 @@ class SemanticSearch:
         if query.directory and not self._directory_matches(chunk.file_path, query.directory):
             return False
         if query.directories and not any(
-            self._directory_matches(chunk.file_path, directory)
-            for directory in query.directories
+            self._directory_matches(chunk.file_path, directory) for directory in query.directories
         ):
             return False
         return True
@@ -915,9 +910,8 @@ class SemanticSearch:
             if candidate.symbol_type == ChunkSymbolType.CLASS
         )
         for candidate in candidates:
-            if (
-                candidate.symbol_name == chunk.parent_class
-                or candidate.symbol_name.endswith(f".{chunk.parent_class}")
+            if candidate.symbol_name == chunk.parent_class or candidate.symbol_name.endswith(
+                f".{chunk.parent_class}"
             ):
                 return candidate
         return None
@@ -927,9 +921,7 @@ class SemanticSearch:
         if not chunks:
             return ()
         try:
-            index = next(
-                idx for idx, candidate in enumerate(chunks) if candidate.id == chunk.id
-            )
+            index = next(idx for idx, candidate in enumerate(chunks) if candidate.id == chunk.id)
         except StopIteration:
             return ()
 
@@ -1052,9 +1044,7 @@ class SemanticSearch:
     ) -> float:
         if query is None:
             return 0.0
-        expected = tuple(
-            symbol for symbol in (query.symbol, *query.symbols, query.text) if symbol
-        )
+        expected = tuple(symbol for symbol in (query.symbol, *query.symbols, query.text) if symbol)
         if not expected:
             return 0.0
         symbol_name = result.chunk.symbol_name
@@ -1162,8 +1152,7 @@ class SemanticSearch:
             if self._confidence(result) >= threshold
         )
         related_search_results = tuple(
-            self._to_search_result(result, SearchKind.RELATED)
-            for result in related
+            self._to_search_result(result, SearchKind.RELATED) for result in related
         )
         return SemanticSearchResponse(
             query=query,
@@ -1251,9 +1240,7 @@ class SemanticSearch:
 
     def _confidence_threshold(self, query: SemanticSearchQuery) -> float:
         return (
-            query.min_confidence
-            if query.min_confidence is not None
-            else self.config.min_confidence
+            query.min_confidence if query.min_confidence is not None else self.config.min_confidence
         )
 
     @staticmethod
@@ -1267,10 +1254,7 @@ class SemanticSearch:
             ),
             reverse=True,
         )
-        return tuple(
-            replace(result, rank=index)
-            for index, result in enumerate(ordered, start=1)
-        )
+        return tuple(replace(result, rank=index) for index, result in enumerate(ordered, start=1))
 
     @staticmethod
     def _rerank_search_results(
@@ -1281,10 +1265,7 @@ class SemanticSearch:
             key=lambda result: (result.confidence, -result.rank),
             reverse=True,
         )
-        return tuple(
-            replace(result, rank=index)
-            for index, result in enumerate(ordered, start=1)
-        )
+        return tuple(replace(result, rank=index) for index, result in enumerate(ordered, start=1))
 
     @staticmethod
     def _type_priority(symbol_type: ChunkSymbolType) -> int:

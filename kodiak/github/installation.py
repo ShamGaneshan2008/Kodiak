@@ -1,7 +1,8 @@
 import logging
-import jwt
-from typing import Any, Dict, Optional
 from datetime import datetime, timedelta
+from typing import Any
+
+import jwt
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +11,7 @@ class InstallationManager:
     def __init__(self, app_id: str, private_key: str):
         self.app_id = app_id
         self.private_key = private_key
-        self.installations: Dict[str, Dict[str, Any]] = {}
+        self.installations: dict[str, dict[str, Any]] = {}
 
     def generate_jwt(self) -> str:
         now = datetime.utcnow()
@@ -23,10 +24,10 @@ class InstallationManager:
         return token
 
     async def register_installation(
-            self,
-            installation_id: str,
-            access_token: str,
-            repositories: Optional[Dict[str, Any]] = None,
+        self,
+        installation_id: str,
+        access_token: str,
+        repositories: dict[str, Any] | None = None,
     ) -> bool:
         try:
             self.installations[installation_id] = {
@@ -41,7 +42,7 @@ class InstallationManager:
             logger.error(f"Failed to register installation: {e}")
             return False
 
-    async def get_installation_token(self, installation_id: str) -> Optional[str]:
+    async def get_installation_token(self, installation_id: str) -> str | None:
         if installation_id not in self.installations:
             return None
 
@@ -66,7 +67,7 @@ class InstallationManager:
             return self.installations[installation_id].get("repositories", [])
         return []
 
-    def get_all_installations(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_installations(self) -> dict[str, dict[str, Any]]:
         return self.installations.copy()
 
     async def check_access(self, installation_id: str, repository: str) -> bool:

@@ -192,9 +192,7 @@ class PlannerAgent(BaseAgent):
                 return None
 
             subtasks = [
-                self._parse_subtask(st)
-                for st in data.get("subtasks", [])
-                if isinstance(st, dict)
+                self._parse_subtask(st) for st in data.get("subtasks", []) if isinstance(st, dict)
             ]
             task_ids = {task.id for task in subtasks}
             for task in subtasks:
@@ -220,25 +218,17 @@ class PlannerAgent(BaseAgent):
                 if isinstance(item, dict)
             ]
             dependencies = [
-                dep
-                for dep in dependencies
-                if dep.from_task in task_ids and dep.to_task in task_ids
+                dep for dep in dependencies if dep.from_task in task_ids and dep.to_task in task_ids
             ]
             if not dependencies:
                 dependencies = self._dependencies_from_tasks(subtasks)
 
             return TaskPlan(
                 goal=str(data.get("goal", "")),
-                acceptance_criteria=self._coerce_string_list(
-                    data.get("acceptance_criteria")
-                ),
+                acceptance_criteria=self._coerce_string_list(data.get("acceptance_criteria")),
                 subtasks=subtasks,
-                estimated_total_complexity=str(
-                    data.get("estimated_total_complexity", "medium")
-                ),
-                requires_architecture_review=bool(
-                    data.get("requires_architecture_review", False)
-                ),
+                estimated_total_complexity=str(data.get("estimated_total_complexity", "medium")),
+                requires_architecture_review=bool(data.get("requires_architecture_review", False)),
                 plan_version=str(data.get("plan_version", "1.0")),
                 repository_files=repository_files,
                 execution_order=execution_order,
@@ -304,11 +294,7 @@ class PlannerAgent(BaseAgent):
         files_to_inspect = self._coerce_string_list(st.get("files_to_inspect"))
         if not files_to_inspect:
             files_to_inspect = list(likely_files)
-        tools = [
-            self._parse_tool(tool)
-            for tool in st.get("tools", [])
-            if isinstance(tool, dict)
-        ]
+        tools = [self._parse_tool(tool) for tool in st.get("tools", []) if isinstance(tool, dict)]
         if not tools:
             tools = self._default_tools_for_task(task_type, st)
         return SubTask(

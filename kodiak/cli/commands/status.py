@@ -39,7 +39,7 @@ def _connection_style(is_connected: bool) -> str:
     return "green" if is_connected else "red"
 
 
-def _render_status_table(status: "StatusSnapshot") -> Table:  # noqa: F821
+def _render_status_table(status: StatusSnapshot) -> Table:  # noqa: F821
     """Build a Rich table summarizing the current status snapshot.
 
     Args:
@@ -58,15 +58,17 @@ def _render_status_table(status: "StatusSnapshot") -> Table:  # noqa: F821
     table.add_row("Active agent", status.active_agent or "[dim]None[/dim]")
 
     backend_style = _connection_style(status.backend_connected)
+    backend_label = "Connected" if status.backend_connected else "Disconnected"
     table.add_row(
         "Backend connection",
-        f"[{backend_style}]{'Connected' if status.backend_connected else 'Disconnected'}[/{backend_style}]",
+        f"[{backend_style}]{backend_label}[/{backend_style}]",
     )
 
     redis_style = _connection_style(status.redis_connected)
+    redis_label = "Connected" if status.redis_connected else "Disconnected"
     table.add_row(
         "Redis status",
-        f"[{redis_style}]{'Connected' if status.redis_connected else 'Disconnected'}[/{redis_style}]",
+        f"[{redis_style}]{redis_label}[/{redis_style}]",
     )
 
     table.add_row("Git repository", status.git_repository or "[dim]None[/dim]")
@@ -109,9 +111,7 @@ def status() -> None:
     status_service = StatusService()
 
     try:
-        with console.status(
-            "[bold cyan]Gathering Kodiak status...[/bold cyan]", spinner="dots"
-        ):
+        with console.status("[bold cyan]Gathering Kodiak status...[/bold cyan]", spinner="dots"):
             snapshot = status_service.get_status()
 
     except StatusUnavailableError as exc:

@@ -185,7 +185,9 @@ def prompt_password(
         if password == confirmation:
             return password
 
-        console.print("[bold bright_red]Passwords do not match. Please try again.[/bold bright_red]")
+        console.print(
+            "[bold bright_red]Passwords do not match. Please try again.[/bold bright_red]"
+        )
 
 
 def prompt_multiline_issue(

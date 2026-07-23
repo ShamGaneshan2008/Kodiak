@@ -9,12 +9,12 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
-from kodiak.github.client import GitHubClient, get_client_for_repo
-from kodiak.db.models.pull_request import PullRequestRecord, PRStatus
+from kodiak.db.models.pull_request import PRStatus, PullRequestRecord
 from kodiak.db.session import get_session
 from kodiak.events.bus import publish_event
+from kodiak.github.client import GitHubClient, get_client_for_repo
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ BRANCH_PREFIX = "kodiak"
 class FileChange:
     path: str
     content: str
-    sha: Optional[str] = None  # required when updating an existing file
+    sha: str | None = None  # required when updating an existing file
 
 
 def make_branch_name(task_id: str, slug: str) -> str:
@@ -149,7 +149,9 @@ async def handle_pull_request_event(payload: dict[str, Any]) -> None:
         return
 
     async with get_session() as session:
-        record = await session.get(PullRequestRecord, {"pr_number": pr_number, "repo_name": repo["name"]})
+        record = await session.get(
+            PullRequestRecord, {"pr_number": pr_number, "repo_name": repo["name"]}
+        )
         if record:
             record.status = new_status
             await session.commit()

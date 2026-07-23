@@ -12,9 +12,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import AsyncIterator
 
 import structlog
 
@@ -28,16 +28,39 @@ logger = structlog.get_logger(__name__)
 # Config
 
 IGNORED_EXTENSIONS = {
-    ".pyc", ".pyo", ".pyd", ".so", ".dll", ".exe",
-    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
-    ".lock", ".sum", ".mod",
-    ".min.js", ".min.css",
+    ".pyc",
+    ".pyo",
+    ".pyd",
+    ".so",
+    ".dll",
+    ".exe",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".ico",
+    ".lock",
+    ".sum",
+    ".mod",
+    ".min.js",
+    ".min.css",
 }
 
 IGNORED_DIRS = {
-    ".git", "__pycache__", "node_modules", ".venv", "venv",
-    "env", "dist", "build", ".mypy_cache", ".pytest_cache",
-    ".tox", "coverage", ".eggs",
+    ".git",
+    "__pycache__",
+    "node_modules",
+    ".venv",
+    "venv",
+    "env",
+    "dist",
+    "build",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    "coverage",
+    ".eggs",
 }
 
 MAX_FILE_SIZE_BYTES = 512 * 1024  # 512 KB
@@ -175,13 +198,10 @@ class Indexer:
             incremental=incremental,
         )
 
-        tasks = [
-            self._index_file(repo_id, fp, incremental)
-            for fp in files
-        ]
+        tasks = [self._index_file(repo_id, fp, incremental) for fp in files]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for fp, result in zip(files, results):
+        for fp, result in zip(files, results, strict=False):
             if isinstance(result, Exception):
                 report.errors.append(f"{fp}: {result}")
                 report.skipped_files += 1
@@ -231,7 +251,11 @@ class Indexer:
     ) -> FileIndexResult:
         async with self._semaphore:
             try:
-                content = Path(file_path).read_text(encoding="utf-8", errors="replace")
+                content = await asyncio.to_thread(
+                    Path(file_path).read_text,
+                    encoding="utf-8",
+                    errors="replace",
+                )
             except Exception as exc:
                 return FileIndexResult(
                     file_path=file_path,
@@ -239,9 +263,7 @@ class Indexer:
                     skipped=True,
                     reason=f"read_error: {exc}",
                 )
-            return await self._index_content(
-                repo_id, file_path, content, force=not incremental
-            )
+            return await self._index_content(repo_id, file_path, content, force=not incremental)
 
     async def _index_content(
         self,

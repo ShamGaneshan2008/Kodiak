@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -47,7 +47,7 @@ class NormalizedFeedback(BaseModel):
     comment: str | None = None
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @field_validator("score")
     @classmethod
@@ -213,9 +213,7 @@ class FeedbackCollector:
 
     async def get(self, feedback_id: str) -> NormalizedFeedback | None:
         async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM learning_feedback WHERE id = $1", feedback_id
-            )
+            row = await conn.fetchrow("SELECT * FROM learning_feedback WHERE id = $1", feedback_id)
         return NormalizedFeedback(**dict(row)) if row else None
 
     async def list_for_task(self, task_id: str) -> list[NormalizedFeedback]:
@@ -351,9 +349,7 @@ class FeedbackCollector:
 
     async def delete_for_task(self, task_id: str) -> int:
         async with self._pool.acquire() as conn:
-            result = await conn.execute(
-                "DELETE FROM learning_feedback WHERE task_id = $1", task_id
-            )
+            result = await conn.execute("DELETE FROM learning_feedback WHERE task_id = $1", task_id)
         count = int(result.split()[-1])
         logger.info("Deleted %d feedback records for task %s", count, task_id)
         return count
@@ -396,7 +392,9 @@ class FeedbackCollector:
         elif fb.review_state == "CHANGES_REQUESTED":
             score = -0.6 - min(0.3, len(fb.requested_changes) * 0.05)
             sentiment = FeedbackSentiment.NEGATIVE
-            severity = FeedbackSeverity.HIGH if len(fb.requested_changes) > 3 else FeedbackSeverity.MEDIUM
+            severity = (
+                FeedbackSeverity.HIGH if len(fb.requested_changes) > 3 else FeedbackSeverity.MEDIUM
+            )
         else:
             score = 0.1
             sentiment = FeedbackSentiment.NEUTRAL

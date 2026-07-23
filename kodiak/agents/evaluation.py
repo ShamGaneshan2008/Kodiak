@@ -1,7 +1,7 @@
 import json
 
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from kodiak.agents.base import AgentInput, AgentOutput, BaseAgent, LLMClient
 
@@ -16,7 +16,9 @@ class EvaluationOutput(AgentOutput):
 
 class EvaluationAgent(BaseAgent):
     def __init__(self, llm: LLMClient) -> None:
-        super().__init__(llm, name="evaluation", description="Evaluates output quality and confidence")
+        super().__init__(
+            llm, name="evaluation", description="Evaluates output quality and confidence"
+        )
 
     async def execute(self, input_data: AgentInput) -> EvaluationOutput:
         self._logger.info("evaluating_output", task=input_data.task)

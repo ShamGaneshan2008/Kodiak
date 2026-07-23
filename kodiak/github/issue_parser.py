@@ -8,17 +8,19 @@ Also handles slash-command style triggers in issue comments
 
 from __future__ import annotations
 
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
-from kodiak.orchestration.task_planner import enqueue_task
 from kodiak.db.models.task import TaskSource
+from kodiak.orchestration.task_planner import enqueue_task
 
 logger = logging.getLogger(__name__)
 
-COMMAND_PATTERN = re.compile(r"^/kodiak\s+(?P<command>\w+)\s*(?P<args>.*)$", re.IGNORECASE | re.MULTILINE)
+COMMAND_PATTERN = re.compile(
+    r"^/kodiak\s+(?P<command>\w+)\s*(?P<args>.*)$", re.IGNORECASE | re.MULTILINE
+)
 
 LABEL_TRIGGERS = {"kodiak", "kodiak:auto-fix", "kodiak:plan"}
 
@@ -31,7 +33,7 @@ class IssueTaskSpec:
     title: str
     body: str
     labels: list[str] = field(default_factory=list)
-    command: Optional[str] = None
+    command: str | None = None
     command_args: str = ""
     author: str = ""
     source: TaskSource = TaskSource.GITHUB_ISSUE
@@ -63,7 +65,7 @@ def parse_issue_payload(payload: dict[str, Any]) -> IssueTaskSpec:
     )
 
 
-def parse_issue_comment_payload(payload: dict[str, Any]) -> Optional[IssueTaskSpec]:
+def parse_issue_comment_payload(payload: dict[str, Any]) -> IssueTaskSpec | None:
     """Issue comments can also trigger commands (e.g. `/kodiak fix` posted later)."""
     comment_body = payload.get("comment", {}).get("body", "")
     command, args = _extract_command(comment_body)
@@ -87,7 +89,7 @@ def parse_issue_comment_payload(payload: dict[str, Any]) -> Optional[IssueTaskSp
     )
 
 
-def _extract_command(text: str) -> tuple[Optional[str], str]:
+def _extract_command(text: str) -> tuple[str | None, str]:
     match = COMMAND_PATTERN.search(text)
     if not match:
         return None, ""
@@ -104,7 +106,7 @@ async def handle_issue_event(payload: dict[str, Any]) -> None:
     if event_type == "issue_comment" and action != "created":
         return
 
-    spec: Optional[IssueTaskSpec]
+    spec: IssueTaskSpec | None
     if event_type == "issues":
         spec = parse_issue_payload(payload)
     else:
@@ -116,7 +118,10 @@ async def handle_issue_event(payload: dict[str, Any]) -> None:
 
     logger.info(
         "Enqueuing task for %s/%s#%s (command=%s)",
-        spec.repo_owner, spec.repo_name, spec.issue_number, spec.command,
+        spec.repo_owner,
+        spec.repo_name,
+        spec.issue_number,
+        spec.command,
     )
     await enqueue_task(
         repo_owner=spec.repo_owner,

@@ -74,9 +74,7 @@ class EmbeddingDimensionMismatchError(EmbeddingError):
     """Raised when a provider returns a vector of an unexpected dimension."""
 
     def __init__(self, *, expected: int, actual: int, provider: str) -> None:
-        super().__init__(
-            f"{provider} returned a {actual}-dimensional vector, expected {expected}"
-        )
+        super().__init__(f"{provider} returned a {actual}-dimensional vector, expected {expected}")
         self.expected = expected
         self.actual = actual
         self.provider = provider
@@ -445,9 +443,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         body = response.json()
         vector = body.get("embedding", {}).get("values")
         if vector is None:
-            raise ProviderRequestError(
-                "Gemini response missing embedding values", retryable=False
-            )
+            raise ProviderRequestError("Gemini response missing embedding values", retryable=False)
         return EmbeddingResult(vector=vector, model=self._model, provider=self.provider_name())
 
     async def embed_batch(self, texts: Sequence[str]) -> list[EmbeddingResult]:

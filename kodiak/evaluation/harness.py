@@ -1,11 +1,14 @@
 import asyncio
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
 from datetime import datetime
+from typing import Any
+
+from kodiak.llm.base import LLMProvider
 
 from kodiak.db.models import TaskType
-from kodiak.llm.base import LLMProvider
+
 from .metrics import MetricsCollector
 
 
@@ -15,10 +18,10 @@ class EvaluationCase:
     name: str
     description: str
     task_type: TaskType
-    input_data: Dict[str, Any]
-    expected_output: Optional[Dict[str, Any]] = None
+    input_data: dict[str, Any]
+    expected_output: dict[str, Any] | None = None
     timeout_seconds: int = 300
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -28,8 +31,8 @@ class EvaluationResult:
     passed: bool
     output: Any
     execution_time: float
-    error: Optional[str] = None
-    metrics: Dict[str, float] = field(default_factory=dict)
+    error: str | None = None
+    metrics: dict[str, float] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
 
@@ -37,8 +40,8 @@ class EvaluationHarness:
     def __init__(self, llm_provider: LLMProvider):
         self.llm_provider = llm_provider
         self.metrics = MetricsCollector()
-        self.results: List[EvaluationResult] = []
-        self.validators: Dict[str, Callable] = {}
+        self.results: list[EvaluationResult] = []
+        self.validators: dict[str, Callable] = {}
 
     def register_validator(self, task_type: str, validator: Callable):
         self.validators[task_type] = validator
@@ -65,7 +68,7 @@ class EvaluationHarness:
             else:
                 passed = output is not None
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             error = f"Execution timeout after {case.timeout_seconds}s"
         except Exception as e:
             error = str(e)
@@ -87,9 +90,9 @@ class EvaluationHarness:
 
     async def run_suite(
         self,
-        cases: List[EvaluationCase],
+        cases: list[EvaluationCase],
         agent_execute_fn: Callable,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         results = []
         for case in cases:
             result = await self.run_case(case, agent_execute_fn)
@@ -99,11 +102,7 @@ class EvaluationHarness:
         total_count = len(results)
         pass_rate = (passed_count / total_count * 100) if total_count > 0 else 0
 
-        avg_execution_time = (
-            sum(r.execution_time for r in results) / len(results)
-            if results
-            else 0
-        )
+        avg_execution_time = sum(r.execution_time for r in results) / len(results) if results else 0
 
         return {
             "total_cases": total_count,
@@ -114,7 +113,7 @@ class EvaluationHarness:
             "results": results,
         }
 
-    def get_results(self) -> List[EvaluationResult]:
+    def get_results(self) -> list[EvaluationResult]:
         return self.results
 
     def clear_results(self):
