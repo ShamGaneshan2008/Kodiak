@@ -24,6 +24,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3",
     "passlib[bcrypt]>=1.7",
     "tenacity>=8.5",
+    "psycopg2-binary>=2.9.9",
 ]
 
 [project.optional-dependencies]
