@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -65,7 +65,7 @@ Output schema:
 """
 
 
-class PatchAction(str, Enum):
+class PatchAction(StrEnum):
     """Supported repository file patch actions."""
 
     CREATE = "create"
@@ -516,8 +516,7 @@ class CodingAgent(BaseAgent):
         )
 
         patches = tuple(
-            self._file_patch_from_generated(file, repository_root=root)
-            for file in generation.files
+            self._file_patch_from_generated(file, repository_root=root) for file in generation.files
         )
         return CodePatch(
             files=patches,
@@ -741,8 +740,7 @@ class CodingAgent(BaseAgent):
         ]
         if research_report:
             parts.append(
-                "## Research report from ResearchAgent\n"
-                f"{self._to_pretty_json(research_report)}"
+                f"## Research report from ResearchAgent\n{self._to_pretty_json(research_report)}"
             )
         if repository_context:
             parts.append(f"## Context from ContextBuilder\n{repository_context}")
