@@ -12,9 +12,16 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import time
+<<<<<<< HEAD
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
+=======
+from collections.abc import Iterator
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+>>>>>>> narasimha/refactor/3-rag-type-hints
 
 import structlog
 
@@ -27,6 +34,7 @@ logger = structlog.get_logger(__name__)
 
 # Config
 
+<<<<<<< HEAD
 IGNORED_EXTENSIONS = {
     ".pyc",
     ".pyo",
@@ -61,6 +69,19 @@ IGNORED_DIRS = {
     ".tox",
     "coverage",
     ".eggs",
+=======
+IGNORED_EXTENSIONS: set[str] = {
+    ".pyc", ".pyo", ".pyd", ".so", ".dll", ".exe",
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
+    ".lock", ".sum", ".mod",
+    ".min.js", ".min.css",
+}
+
+IGNORED_DIRS: set[str] = {
+    ".git", "__pycache__", "node_modules", ".venv", "venv",
+    "env", "dist", "build", ".mypy_cache", ".pytest_cache",
+    ".tox", "coverage", ".eggs",
+>>>>>>> narasimha/refactor/3-rag-type-hints
 }
 
 MAX_FILE_SIZE_BYTES = 512 * 1024  # 512 KB
@@ -94,7 +115,7 @@ class IndexingReport:
             return 0.0
         return self.indexed_files / self.total_files
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "repo_id": self.repo_id,
             "total_files": self.total_files,
@@ -113,7 +134,7 @@ class IndexingReport:
 
 
 class FileHashTracker:
-    def __init__(self):
+    def __init__(self) -> None:
         self._hashes: dict[str, str] = {}
 
     def compute(self, content: str) -> str:
@@ -158,7 +179,7 @@ class Indexer:
         symbol_index: SymbolIndex,
         chunker: Chunker | None = None,
         max_concurrency: int = 8,
-    ):
+    ) -> None:
         self.embedder = embedder
         self.vector_store = vector_store
         self.symbol_index = symbol_index
@@ -317,11 +338,11 @@ class Indexer:
     # File discovery
     # ------------------------------------------------------------------
 
-    def _iter_files(self, root: str) -> AsyncIterator[str]:
+    def _iter_files(self, root: str) -> Iterator[str]:
         """Yield file paths worth indexing under root."""
         from pathlib import Path as P
 
-        def _walk(p: P):
+        def _walk(p: P) -> Iterator[str]:
             for item in p.iterdir():
                 if item.is_dir():
                     if item.name not in IGNORED_DIRS:

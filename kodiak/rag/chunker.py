@@ -11,7 +11,12 @@ import ast
 import hashlib
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+<<<<<<< HEAD
 from enum import StrEnum
+=======
+from enum import Enum
+from typing import Any, Iterator
+>>>>>>> narasimha/refactor/3-rag-type-hints
 
 import structlog
 
@@ -40,7 +45,7 @@ class Chunk:
     language: str
     name: str | None = None
     parent: str | None = None
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def chunk_id(self) -> str:
@@ -53,7 +58,7 @@ class Chunk:
         """Rough token estimate (4 chars ≈ 1 token)."""
         return len(self.content) // 4
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "chunk_id": self.chunk_id,
             "content": self.content,
@@ -72,7 +77,7 @@ class Chunk:
 class PythonASTChunker:
     """AST-aware chunker for Python source files."""
 
-    def __init__(self, max_tokens: int = 512, overlap_lines: int = 3):
+    def __init__(self, max_tokens: int = 512, overlap_lines: int = 3) -> None:
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
 
@@ -98,7 +103,7 @@ class PythonASTChunker:
                     chunks.append(chunk)
 
         # Collect module-level imports as a single chunk
-        import_lines = []
+        import_lines: list[int] = []
         for node in ast.iter_child_nodes(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 import_lines.append(node.lineno)
@@ -181,7 +186,7 @@ class PythonASTChunker:
 class LineBasedChunker:
     """Generic line-based chunker for any language."""
 
-    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5):
+    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None:
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
 
@@ -267,7 +272,7 @@ class Chunker:
     Main entry point. Dispatches to language-specific chunker.
     """
 
-    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5):
+    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None:
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
         self._python = PythonASTChunker(max_tokens=max_tokens, overlap_lines=overlap_lines)

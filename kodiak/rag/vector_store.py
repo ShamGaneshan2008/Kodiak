@@ -9,6 +9,7 @@ and async wrappers around the synchronous ChromaDB client.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
@@ -35,7 +36,7 @@ class SearchResult:
     chunk_type: str
     name: str | None
     score: float  # cosine similarity [0, 1]
-    metadata: dict
+    metadata: dict[str, Any]
 
 
 @dataclass
@@ -89,7 +90,7 @@ class VectorStore:
             )
         return self._collections[name]
 
-    async def _run_sync(self, fn, *args, **kwargs):
+    async def _run_sync(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Run a sync ChromaDB call in the thread pool."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
@@ -181,7 +182,7 @@ class VectorStore:
             include=["documents", "metadatas", "distances"],
         )
 
-        results = []
+        results: list[SearchResult] = []
         ids = raw["ids"][0]
         docs = raw["documents"][0]
         metas = raw["metadatas"][0]
@@ -275,7 +276,7 @@ class VectorStore:
 
     # Helpers
 
-    def _build_where(self, filters: dict[str, Any]) -> dict:
+    def _build_where(self, filters: dict[str, Any]) -> dict[str, Any]:
         """Convert simple key=value filter dict to ChromaDB where clause."""
         if len(filters) == 1:
             k, v = next(iter(filters.items()))

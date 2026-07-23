@@ -22,7 +22,7 @@ class MarkdownParser(BaseParser):
         )
 
     def extract_symbols(self, content: str) -> list[ParsedSymbol]:
-        symbols = []
+        symbols: list[ParsedSymbol] = []
         lines = content.splitlines()
         for i, line in enumerate(lines):
             match = re.match(r"^(#{1,6})\s+(.+)$", line)
@@ -55,7 +55,7 @@ class MarkdownParser(BaseParser):
         return urls
 
     def extract_chunks(self, content: str, path: Path) -> list[SourceChunk]:
-        chunks = []
+        chunks: list[SourceChunk] = []
         lines = content.splitlines()
         heading_pattern = re.compile(r"^(#{1,6}\s+.+)$", re.MULTILINE)
         heading_matches = list(heading_pattern.finditer(content))

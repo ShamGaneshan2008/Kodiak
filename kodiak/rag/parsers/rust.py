@@ -22,7 +22,7 @@ class RustParser(BaseParser):
         )
 
     def extract_symbols(self, content: str) -> list[ParsedSymbol]:
-        symbols = []
+        symbols: list[ParsedSymbol] = []
         for match in re.finditer(r"(?:pub\s+)?(?:struct|enum|trait)\s+(\w+)", content):
             self._add_symbol(symbols, content, match, match.group(0).split()[1])
         for match in re.finditer(r"impl\s+(?:<[^>]+>\s+)?(\w+)", content):
@@ -48,7 +48,7 @@ class RustParser(BaseParser):
         return re.findall(r"use\s+([^;]+);", content)
 
     def extract_chunks(self, content: str, path: Path) -> list[SourceChunk]:
-        chunks = []
+        chunks: list[SourceChunk] = []
         lines = content.splitlines()
         pattern = re.compile(
             r"^(?:pub\s+)?(?:async\s+)?(?:fn|struct|enum|trait|impl)\s+\w+", re.MULTILINE

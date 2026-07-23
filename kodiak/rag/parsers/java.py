@@ -22,11 +22,16 @@ class JavaParser(BaseParser):
         )
 
     def extract_symbols(self, content: str) -> list[ParsedSymbol]:
+<<<<<<< HEAD
         symbols = []
         for match in re.finditer(
             r"(?:public|private|protected)?\s*(?:abstract\s+)?(?:class|interface|enum)\s+(\w+)",
             content,
         ):
+=======
+        symbols: list[ParsedSymbol] = []
+        for match in re.finditer(r"(?:public|private|protected)?\s*(?:abstract\s+)?(?:class|interface|enum)\s+(\w+)", content):
+>>>>>>> narasimha/refactor/3-rag-type-hints
             self._add_symbol(symbols, content, match, "class")
         for match in re.finditer(r"(@\w+)", content):
             self._add_symbol(symbols, content, match, "annotation")
@@ -68,7 +73,7 @@ class JavaParser(BaseParser):
         return re.findall(r"import\s+(?:static\s+)?([\w.]+)", content)
 
     def extract_chunks(self, content: str, path: Path) -> list[SourceChunk]:
-        chunks = []
+        chunks: list[SourceChunk] = []
         lines = content.splitlines()
         pattern = re.compile(
             r"^(?:public|private|protected)?\s*(?:abstract\s+)?(?:class|interface|enum)\s+\w+",
