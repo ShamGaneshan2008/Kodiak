@@ -11,12 +11,8 @@ import ast
 import hashlib
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-<<<<<<< HEAD
 from enum import StrEnum
-=======
-from enum import Enum
-from typing import Any, Iterator
->>>>>>> narasimha/refactor/3-rag-type-hints
+from typing import Any
 
 import structlog
 

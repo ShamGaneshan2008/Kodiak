@@ -12,16 +12,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import time
-<<<<<<< HEAD
-from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
-from pathlib import Path
-=======
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
->>>>>>> narasimha/refactor/3-rag-type-hints
 
 import structlog
 
@@ -34,8 +28,8 @@ logger = structlog.get_logger(__name__)
 
 # Config
 
-<<<<<<< HEAD
-IGNORED_EXTENSIONS = {
+
+IGNORED_EXTENSIONS: set[str] = {
     ".pyc",
     ".pyo",
     ".pyd",
@@ -55,7 +49,7 @@ IGNORED_EXTENSIONS = {
     ".min.css",
 }
 
-IGNORED_DIRS = {
+IGNORED_DIRS: set[str] = {
     ".git",
     "__pycache__",
     "node_modules",
@@ -69,19 +63,6 @@ IGNORED_DIRS = {
     ".tox",
     "coverage",
     ".eggs",
-=======
-IGNORED_EXTENSIONS: set[str] = {
-    ".pyc", ".pyo", ".pyd", ".so", ".dll", ".exe",
-    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
-    ".lock", ".sum", ".mod",
-    ".min.js", ".min.css",
-}
-
-IGNORED_DIRS: set[str] = {
-    ".git", "__pycache__", "node_modules", ".venv", "venv",
-    "env", "dist", "build", ".mypy_cache", ".pytest_cache",
-    ".tox", "coverage", ".eggs",
->>>>>>> narasimha/refactor/3-rag-type-hints
 }
 
 MAX_FILE_SIZE_BYTES = 512 * 1024  # 512 KB
