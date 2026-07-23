@@ -61,7 +61,7 @@ async def list_tasks(
     pagination: PaginationDep,
     session: AsyncSession = Depends(get_db),
     status_filter: TaskStatus | None = None,
-) -> PaginatedResponse[Task]:
+) -> PaginatedResponse[TaskResponse]:
     await _assert_project_access(session, project_id, current_user.id)
     base = select(Task).where(
         Task.project_id == project_id,  # type: ignore[attr-defined]
@@ -74,7 +74,7 @@ async def list_tasks(
     result = await session.execute(
         base.order_by(Task.created_at.desc()).offset(pagination.offset).limit(pagination.limit)
     )
-    return PaginatedResponse[Task].build(
+    return PaginatedResponse[TaskResponse].build(
         list(result.scalars().all()), total, pagination.page, pagination.page_size
     )
 
