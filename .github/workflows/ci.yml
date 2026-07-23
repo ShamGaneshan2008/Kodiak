@@ -37,16 +37,16 @@ jobs:
           version: ${{ env.UV_VERSION }}
 
       - name: Install dependencies
-        run: uv pip install --system ruff mypy
+        run: uv pip install --system -e ".[dev]"
 
       - name: Run Ruff linter
-        run: ruff check . --output-format=github
+        run: python -m ruff check . --output-format=github
 
       - name: Run Ruff formatter
-        run: ruff format . --check
+        run: python -m ruff format . --check
 
       - name: Run mypy type check
-        run: mypy kodiak/ --ignore-missing-imports --strict
+        run: python -m mypy kodiak/ --ignore-missing-imports --strict
 
   # ─── Unit Tests ─────────────────────────────────────────────────────────────
   unit-tests:
