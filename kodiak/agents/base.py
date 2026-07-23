@@ -59,10 +59,7 @@ class AgentOutput:
 
     @property
     def total_tokens(self) -> int:
-        return (
-            self.token_usage.get("input_tokens", 0)
-            + self.token_usage.get("output_tokens", 0)
-        )
+        return self.token_usage.get("input_tokens", 0) + self.token_usage.get("output_tokens", 0)
 
 
 class BaseAgent(ABC):
