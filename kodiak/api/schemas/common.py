@@ -4,9 +4,11 @@ from collections.abc import Sequence
 from math import ceil
 
 from pydantic import BaseModel
-
+from pydantic import ConfigDict
 
 class PaginatedResponse[T](BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     items: list[T]
     total: int
     page: int
