@@ -119,7 +119,7 @@ class BaseAgent(ABC):
             duration = time.monotonic() - start
 
             AGENT_TASKS_TOTAL.labels(
-                agent=self.role,
+                agent_type=self.role,
                 status="error",
             ).inc()
 
@@ -140,7 +140,7 @@ class BaseAgent(ABC):
             ACTIVE_AGENT_TASKS.labels(agent_type=self.role.value).dec()
 
             AGENT_TASK_DURATION_SECONDS.labels(
-                agent_type=self.role,
+                agent_type=self.role.value,
             ).observe(time.monotonic() - start)
 
     @abstractmethod
