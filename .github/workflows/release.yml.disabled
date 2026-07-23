@@ -188,16 +188,16 @@ jobs:
 
       - name: Build and push Worker image
         id: build-worker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
-          file: deploy/docker/Dockerfile.worker
-          push: true
-          tags: ${{ steps.meta-worker.outputs.tags }}
-          labels: ${{ steps.meta-worker.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            file: docker/Dockerfile.worker
+            push: true
+            tags: ${{ steps.meta-worker.outputs.tags }}
+            labels: ${{ steps.meta-worker.outputs.labels }}
+            platforms: linux/amd64,linux/arm64
+            cache-from: type=gha
+            cache-to: type=gha,mode=max
 
       - name: Attest API image provenance
         uses: actions/attest-build-provenance@v1
