@@ -179,6 +179,49 @@ class FileHashTracker:
 
 
 # ---------------------------------------------------------------------------
+# Progress reporting
+# ---------------------------------------------------------------------------
+
+
+class _ProgressReporter:
+    """
+    Logs periodic progress for a batch of files being indexed, roughly every
+    `log_every` fraction of the total (10% by default) rather than once per
+    file, so a large repo doesn't flood the logs.
+    """
+
+    def __init__(self, repo_id: str, total: int, log_every: float = 0.1) -> None:
+        self._repo_id = repo_id
+        self._total = total
+        self._log_every = log_every
+        self._done = 0
+        self._last_logged_step = 0
+        self._start = time.perf_counter()
+
+    def tick(self) -> None:
+        self._done += 1
+        if self._total == 0:
+            return
+
+        fraction = self._done / self._total
+        is_final = self._done == self._total
+        # Recomputed fresh each call (not accumulated) to avoid float drift.
+        step = int(fraction / self._log_every + 1e-9)
+        if step <= self._last_logged_step and not is_final:
+            return
+        self._last_logged_step = step
+
+        logger.info(
+            "indexer_progress",
+            repo_id=self._repo_id,
+            files_processed=self._done,
+            total_files=self._total,
+            percent_complete=round(fraction * 100),
+            elapsed_sec=round(time.perf_counter() - self._start, 2),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Indexer
 # ---------------------------------------------------------------------------
 
@@ -240,7 +283,10 @@ class Indexer:
             incremental=incremental,
         )
 
-        tasks = [self._index_file(repo_id, fp, incremental) for fp in files]
+        progress = _ProgressReporter(repo_id=repo_id, total=len(files))
+        tasks = [asyncio.ensure_future(self._index_file(repo_id, fp, incremental)) for fp in files]
+        for task in tasks:
+            task.add_done_callback(lambda _task: progress.tick())
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for fp, result in zip(files, results, strict=False):
