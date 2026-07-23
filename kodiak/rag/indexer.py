@@ -68,6 +68,46 @@ IGNORED_DIRS: set[str] = {
 MAX_FILE_SIZE_BYTES = 512 * 1024  # 512 KB
 
 
+def _describe_read_error(exc: Exception, file_path: str) -> str:
+    """
+    Turn a raw file-read exception into a message that explains the likely
+    cause and suggests a fix, instead of just the exception's repr.
+
+    Keeps the "read_error:" prefix so callers/tests matching on that
+    substring (as FileIndexResult.reason already did) keep working.
+    """
+    if isinstance(exc, PermissionError):
+        detail = (
+            f"permission denied reading '{file_path}'. Check the file's read "
+            "permissions, or that the indexing process has access to this path."
+        )
+    elif isinstance(exc, FileNotFoundError):
+        detail = (
+            f"'{file_path}' no longer exists. It may have been deleted or renamed "
+            "after the repository was scanned; re-run indexing to pick up the "
+            "current file list."
+        )
+    elif isinstance(exc, IsADirectoryError):
+        detail = (
+            f"'{file_path}' is a directory, not a file. This usually means a "
+            "broken symlink or an unusual filesystem entry was picked up during "
+            "the directory walk."
+        )
+    elif isinstance(exc, UnicodeError):
+        detail = (
+            f"'{file_path}' could not be decoded even with errors='replace'; the "
+            "file may be corrupted or use an unexpected encoding."
+        )
+    elif isinstance(exc, OSError):
+        detail = (
+            f"OS error reading '{file_path}': {exc}. Check disk health and available file handles."
+        )
+    else:
+        detail = f"unexpected error reading '{file_path}': {exc}"
+
+    return f"read_error: {detail}"
+
+
 # Result types
 
 
@@ -263,7 +303,7 @@ class Indexer:
                     file_path=file_path,
                     chunks=0,
                     skipped=True,
-                    reason=f"read_error: {exc}",
+                    reason=_describe_read_error(exc, file_path),
                 )
             return await self._index_content(repo_id, file_path, content, force=not incremental)
 
