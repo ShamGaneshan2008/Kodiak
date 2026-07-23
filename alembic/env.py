@@ -8,6 +8,7 @@ import kodiak.db.models.audit  # noqa: F401
 import kodiak.db.models.learning  # noqa: F401
 import kodiak.db.models.memory  # noqa: F401
 import kodiak.db.models.plugin  # noqa: F401
+import kodiak.db.models.project
 import kodiak.db.models.pull_request  # noqa: F401
 import kodiak.db.models.repository  # noqa: F401
 import kodiak.db.models.task  # noqa: F401
@@ -15,8 +16,6 @@ import kodiak.db.models.user  # noqa: F401
 from alembic import context
 from kodiak.config.settings import get_settings
 from kodiak.db.base import Base
-import kodiak.db.models.project
-import kodiak.db.models.project  # noqa: F401
 
 target_metadata = Base.metadata
 
@@ -53,6 +52,7 @@ def run_migrations_online():
 
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()
