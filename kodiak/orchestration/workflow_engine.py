@@ -680,7 +680,8 @@ class WorkflowEngine:
         await self._run_hooks("workflow_cancelled", context)
 
     async def _finalize(self, workflow: WorkflowState, context: WorkflowContext) -> None:
-        self._finish_if_possible(workflow)
+        if workflow.status == WorkflowStatus.RUNNING:
+            self._finish_if_possible(workflow)
         if workflow.status == WorkflowStatus.COMPLETED:
             await self._run_hooks("workflow_completed", context)
             await self._persist_and_emit(workflow, WorkflowEventType.WORKFLOW_COMPLETED)
