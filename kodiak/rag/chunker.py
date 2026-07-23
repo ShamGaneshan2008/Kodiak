@@ -7,6 +7,8 @@ Supports AST-aware splitting for Python, JS/TS, and fallback line-based chunking
 
 from __future__ import annotations
 
+import ast
+import hashlib
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
