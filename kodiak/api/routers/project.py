@@ -42,7 +42,7 @@ async def list_projects(
     current_user: CurrentUser,
     pagination: PaginationDep,
     session: AsyncSession = Depends(get_db),
-) -> PaginatedResponse[Project]:
+) -> PaginatedResponse[ProjectResponse]:
     base = select(Project).where(
         Project.owner_id == current_user.id,
         Project.deleted_at.is_(None),
@@ -51,8 +51,11 @@ async def list_projects(
     result = await session.execute(
         base.order_by(Project.created_at.desc()).offset(pagination.offset).limit(pagination.limit)
     )
-    return PaginatedResponse[Project].build(
-        list(result.scalars().all()), total, pagination.page, pagination.page_size
+    return PaginatedResponse[ProjectResponse].build(
+        list(result.scalars().all()),
+        total,
+        pagination.page,
+        pagination.page_size,
     )
 
 
