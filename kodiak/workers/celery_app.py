@@ -17,6 +17,7 @@ celery_app = Celery(
         "kodiak.workers.tasks.learning_tasks",
         "kodiak.workers.tasks.maintenance_tasks",
         "kodiak.workers.tasks.metrics_tasks",
+        "kodiak.workers.tasks.run_task",
     ],
 )
 
