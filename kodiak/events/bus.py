@@ -1,7 +1,8 @@
 import asyncio
-from typing import Any, Callable, Dict, List, Optional
-from collections import defaultdict
 import logging
+from collections import defaultdict
+from collections.abc import Callable
+from typing import Any
 
 from .base import BaseEvent, EventBus
 
@@ -10,9 +11,9 @@ logger = logging.getLogger(__name__)
 
 class EventManager(EventBus):
     def __init__(self, max_queue_size: int = 1000):
-        self.subscribers: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        self.subscribers: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self.event_queue: asyncio.Queue = asyncio.Queue(maxsize=max_queue_size)
-        self.event_history: List[BaseEvent] = []
+        self.event_history: list[BaseEvent] = []
         self.max_history = 10000
         self.running = False
 
@@ -29,22 +30,23 @@ class EventManager(EventBus):
         self,
         event_type: str,
         callback: Callable,
-        filter_fn: Optional[Callable] = None,
+        filter_fn: Callable | None = None,
     ) -> str:
         subscription_id = f"{event_type}_{id(callback)}"
-        self.subscribers[event_type].append({
-            "callback": callback,
-            "filter": filter_fn,
-            "id": subscription_id,
-        })
+        self.subscribers[event_type].append(
+            {
+                "callback": callback,
+                "filter": filter_fn,
+                "id": subscription_id,
+            }
+        )
         logger.info(f"Subscribed to {event_type} with id {subscription_id}")
         return subscription_id
 
     async def unsubscribe(self, event_type: str, subscription_id: str) -> None:
         if event_type in self.subscribers:
             self.subscribers[event_type] = [
-                sub for sub in self.subscribers[event_type]
-                if sub["id"] != subscription_id
+                sub for sub in self.subscribers[event_type] if sub["id"] != subscription_id
             ]
             logger.info(f"Unsubscribed {subscription_id} from {event_type}")
 
@@ -81,7 +83,7 @@ class EventManager(EventBus):
             try:
                 event = await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
                 await self.emit(event)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except Exception as e:
                 logger.error(f"Error processing event: {e}")
@@ -95,15 +97,15 @@ class EventManager(EventBus):
             except asyncio.QueueEmpty:
                 break
 
-    def get_subscribers(self, event_type: str) -> List[str]:
+    def get_subscribers(self, event_type: str) -> list[str]:
         return [sub["id"] for sub in self.subscribers.get(event_type, [])]
 
-    def get_history(self, event_type: Optional[str] = None) -> List[BaseEvent]:
+    def get_history(self, event_type: str | None = None) -> list[BaseEvent]:
         if event_type:
             return [e for e in self.event_history if e.event_type == event_type]
         return self.event_history
 
-    async def replay_history(self, event_type: Optional[str] = None) -> None:
+    async def replay_history(self, event_type: str | None = None) -> None:
         events = self.get_history(event_type)
         for event in events:
             await self.emit(event)

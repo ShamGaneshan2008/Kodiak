@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
 import structlog
@@ -23,7 +23,7 @@ class Episode(BaseModel):
     outcome: str
     significance: float = Field(default=0.5, ge=0.0, le=1.0)
     embedding: list[float] | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class EpisodeSearchResult(BaseModel):
@@ -37,17 +37,11 @@ class EpisodeRepository(Protocol):
 
     async def get_by_id(self, episode_id: uuid.UUID) -> Episode | None: ...
 
-    async def search(
-        self, query: str, limit: int = 10
-    ) -> list[EpisodeSearchResult]: ...
+    async def search(self, query: str, limit: int = 10) -> list[EpisodeSearchResult]: ...
 
-    async def get_recent(
-        self, limit: int = 10, offset: int = 0
-    ) -> list[Episode]: ...
+    async def get_recent(self, limit: int = 10, offset: int = 0) -> list[Episode]: ...
 
-    async def update_significance(
-        self, episode_id: uuid.UUID, score: float
-    ) -> Episode: ...
+    async def update_significance(self, episode_id: uuid.UUID, score: float) -> Episode: ...
 
 
 class EpisodicMemory:
@@ -86,19 +80,13 @@ class EpisodicMemory:
             raise EpisodeNotFoundError(f"Episode {episode_id} not found")
         return episode
 
-    async def search_episodes(
-        self, query: str, limit: int = 10
-    ) -> list[EpisodeSearchResult]:
+    async def search_episodes(self, query: str, limit: int = 10) -> list[EpisodeSearchResult]:
         return await self._repo.search(query, limit)
 
-    async def get_recent_episodes(
-        self, limit: int = 10, offset: int = 0
-    ) -> list[Episode]:
+    async def get_recent_episodes(self, limit: int = 10, offset: int = 0) -> list[Episode]:
         return await self._repo.get_recent(limit=limit, offset=offset)
 
-    async def update_significance(
-        self, episode_id: uuid.UUID, score: float
-    ) -> Episode:
+    async def update_significance(self, episode_id: uuid.UUID, score: float) -> Episode:
         if not 0.0 <= score <= 1.0:
             raise ValueError("Significance score must be between 0.0 and 1.0")
         episode = await self._repo.update_significance(episode_id, score)

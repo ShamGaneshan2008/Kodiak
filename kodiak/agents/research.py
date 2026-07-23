@@ -14,10 +14,11 @@ returns structured research reports for later agents.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 try:  # pragma: no cover - exercised only in minimal environments.
     import structlog
@@ -44,7 +45,7 @@ from kodiak.rag.semantic_search import (
 logger = structlog.get_logger(__name__)
 
 
-class ResearchFindingKind(str, Enum):
+class ResearchFindingKind(StrEnum):
     """Kinds of evidence captured in a research report."""
 
     CONTEXT = "context"
@@ -178,8 +179,7 @@ class ResearchTaskReport:
             "examples": [example.to_dict() for example in self.examples],
             "related_modules": list(self.related_modules),
             "dependency_map": {
-                module: list(dependencies)
-                for module, dependencies in self.dependency_map.items()
+                module: list(dependencies) for module, dependencies in self.dependency_map.items()
             },
             "risks": [risk.to_dict() for risk in self.risks],
             "patterns": [pattern.to_dict() for pattern in self.patterns],
@@ -351,16 +351,9 @@ class ResearchAgent(BaseAgent):
         risks = self._plan_risks(task_reports, metadata)
         patterns = self._plan_patterns(task_reports)
         related_modules = self._unique_modules(
-            finding
-            for report in task_reports
-            for finding in (*report.findings, *report.examples)
+            finding for report in task_reports for finding in (*report.findings, *report.examples)
         )
-        confidence = self._aggregate_confidence(
-            [
-                report.confidence
-                for report in task_reports
-            ]
-        )
+        confidence = self._aggregate_confidence([report.confidence for report in task_reports])
 
         logger.info(
             "research.plan_complete",
@@ -655,9 +648,7 @@ class ResearchAgent(BaseAgent):
         risks = self._plan_risks(reports, metadata or {})
         patterns = self._plan_patterns(reports)
         related_modules = self._unique_modules(
-            finding
-            for report in reports
-            for finding in (*report.findings, *report.examples)
+            finding for report in reports for finding in (*report.findings, *report.examples)
         )
         confidence = self._aggregate_confidence(report.confidence for report in reports)
         return ResearchReport(
@@ -994,9 +985,7 @@ class ResearchAgent(BaseAgent):
         task_reports: Sequence[ResearchTaskReport],
     ) -> tuple[ResearchEvidence, ...]:
         modules = self._unique_modules(
-            finding
-            for report in task_reports
-            for finding in (*report.findings, *report.examples)
+            finding for report in task_reports for finding in (*report.findings, *report.examples)
         )
         total_context_blocks = sum(len(report.context.blocks) for report in task_reports)
         if not task_reports:
@@ -1025,11 +1014,7 @@ class ResearchAgent(BaseAgent):
         task_reports: Sequence[ResearchTaskReport],
         metadata: Mapping[str, Any],
     ) -> tuple[ResearchEvidence, ...]:
-        risks = [
-            risk
-            for report in task_reports
-            for risk in report.risks
-        ]
+        risks = [risk for report in task_reports for risk in report.risks]
         if metadata.get("requires_architecture_review"):
             risks.append(
                 self._risk(
@@ -1046,11 +1031,7 @@ class ResearchAgent(BaseAgent):
         self,
         task_reports: Sequence[ResearchTaskReport],
     ) -> tuple[ResearchEvidence, ...]:
-        patterns = [
-            pattern
-            for report in task_reports
-            for pattern in report.patterns
-        ]
+        patterns = [pattern for report in task_reports for pattern in report.patterns]
         return self._rank_findings(patterns)
 
     def _task_confidence(
@@ -1098,10 +1079,7 @@ class ResearchAgent(BaseAgent):
 
     @staticmethod
     def _search_tokens(text: str) -> tuple[str, ...]:
-        tokens = [
-            token.strip(".,:;()[]{}'\"`")
-            for token in text.split()
-        ]
+        tokens = [token.strip(".,:;()[]{}'\"`") for token in text.split()]
         return tuple(token for token in tokens if len(token) > 2)
 
     @staticmethod
@@ -1123,19 +1101,12 @@ class ResearchAgent(BaseAgent):
     @staticmethod
     def _example_query(task: PlannedTask) -> str:
         return (
-            f"Existing implementation examples and patterns for {task.title}. "
-            f"{task.description}"
+            f"Existing implementation examples and patterns for {task.title}. {task.description}"
         ).strip()
 
     @staticmethod
     def _unique_modules(evidence: Iterable[ResearchEvidence]) -> tuple[str, ...]:
-        modules = sorted(
-            {
-                item.module_path
-                for item in evidence
-                if item.module_path
-            }
-        )
+        modules = sorted({item.module_path for item in evidence if item.module_path})
         return tuple(modules)
 
     @staticmethod

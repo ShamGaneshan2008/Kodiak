@@ -93,9 +93,7 @@ class ThreatModel:
             )
         return ThreatAssessment(level=level, score=max_score, reasons=reasons)
 
-    async def assess_file_operation(
-        self, path: str, write: bool = False
-    ) -> ThreatAssessment:
+    async def assess_file_operation(self, path: str, write: bool = False) -> ThreatAssessment:
         max_score = 0.0
         reasons: list[str] = []
         for pattern, score, reason in self._file_rules:

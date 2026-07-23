@@ -1,5 +1,5 @@
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from kodiak.agents.base import AgentInput, AgentOutput, BaseAgent, LLMClient
 
@@ -13,7 +13,9 @@ class ReflectionOutput(AgentOutput):
 
 class ReflectionAgent(BaseAgent):
     def __init__(self, llm: LLMClient) -> None:
-        super().__init__(llm, name="reflection", description="Analyzes execution for self-improvement")
+        super().__init__(
+            llm, name="reflection", description="Analyzes execution for self-improvement"
+        )
 
     async def execute(self, input_data: AgentInput) -> ReflectionOutput:
         self._logger.info("reflecting_on_execution", task=input_data.task)
@@ -23,12 +25,15 @@ class ReflectionAgent(BaseAgent):
         prompt = self._build_prompt(input_data.task, trace, outcome)
         raw = await self._run_with_timing(prompt)
 
-        lessons = [l.strip().lstrip("- ") for l in raw.split("\n") if l.strip().startswith("- ")]
+        lessons = [
+            line.strip().lstrip("- ") for line in raw.split("\n") if line.strip().startswith("- ")
+        ]
         self._logger.info("reflection_complete", lessons=len(lessons))
         return ReflectionOutput(success=True, result=raw, lessons_learned=lessons)
 
     def _build_prompt(self, task: str, trace: str, outcome: str) -> str:
         return (
-            f"Reflect on this task execution.\nTask: {task}\nOutcome: {outcome}\nTrace:\n{trace}\n\n"
+            f"Reflect on this task execution.\nTask: {task}\nOutcome: {outcome}\n"
+            f"Trace:\n{trace}\n\n"
             "List lessons learned, each starting with '- '."
         )

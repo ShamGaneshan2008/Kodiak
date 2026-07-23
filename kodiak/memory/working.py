@@ -1,8 +1,7 @@
-
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
@@ -27,8 +26,8 @@ class WorkingMemoryItem(BaseModel):
     scratchpad: dict[str, Any] = Field(default_factory=dict)
     status: WorkingMemoryStatus = WorkingMemoryStatus.ACTIVE
     outcome: str | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class WorkingMemoryNotFoundError(Exception):
@@ -85,7 +84,7 @@ class WorkingMemory:
     ) -> WorkingMemoryItem:
         item = await self.get_working_memory(task_id)
         item.scratchpad[key] = value
-        item.updated_at = datetime.now(timezone.utc)
+        item.updated_at = datetime.now(UTC)
         updated = await self._repo.update(item)
         logger.debug(
             "scratchpad_updated",
@@ -104,13 +103,13 @@ class WorkingMemory:
         if key not in item.scratchpad or not isinstance(item.scratchpad[key], list):
             item.scratchpad[key] = []
         item.scratchpad[key].append(value)
-        item.updated_at = datetime.now(timezone.utc)
+        item.updated_at = datetime.now(UTC)
         return await self._repo.update(item)
 
     async def set_outcome(self, task_id: uuid.UUID, outcome: str) -> WorkingMemoryItem:
         item = await self.get_working_memory(task_id)
         item.outcome = outcome
-        item.updated_at = datetime.now(timezone.utc)
+        item.updated_at = datetime.now(UTC)
         logger.info(
             "working_memory_outcome_set",
             task_id=str(task_id),
@@ -121,14 +120,14 @@ class WorkingMemory:
     async def complete_working_memory(self, task_id: uuid.UUID) -> WorkingMemoryItem:
         item = await self.get_working_memory(task_id)
         item.status = WorkingMemoryStatus.COMPLETED
-        item.updated_at = datetime.now(timezone.utc)
+        item.updated_at = datetime.now(UTC)
         logger.info("working_memory_completed", task_id=str(task_id))
         return await self._repo.update(item)
 
     async def abandon_working_memory(self, task_id: uuid.UUID) -> WorkingMemoryItem:
         item = await self.get_working_memory(task_id)
         item.status = WorkingMemoryStatus.ABANDONED
-        item.updated_at = datetime.now(timezone.utc)
+        item.updated_at = datetime.now(UTC)
         logger.info("working_memory_abandoned", task_id=str(task_id))
         return await self._repo.update(item)
 

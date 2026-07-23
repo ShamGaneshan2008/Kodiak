@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kodiak.auth.api_keys import lookup_api_key
 from kodiak.auth.jwt import verify_access_token
 from kodiak.db.models.user import User
-from kodiak.db.session import get_db
+from kodiak.db.session import get_db as get_db
 
 logger = structlog.get_logger(__name__)
 
@@ -45,7 +45,7 @@ async def get_current_user(
 
     if credentials is not None:
         try:
-            user_id_str = verify_access_token(credentials.credentials)
+            user_id_str = verify_access_token(credentials.credentials).sub
             user_id = uuid.UUID(user_id_str)
         except (ValueError, AttributeError) as exc:
             raise HTTPException(

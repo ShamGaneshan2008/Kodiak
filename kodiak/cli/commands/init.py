@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -18,7 +17,7 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, TextColumn
 from rich.table import Table
 
-from kodiak.schemas.init import InitRequest, InitResult, InitStep
+from kodiak.schemas.init import InitRequest, InitResult
 from kodiak.services.exceptions import InitError
 from kodiak.services.init_service import InitService
 
@@ -40,8 +39,7 @@ def init(
         False,
         "--force",
         "-f",
-        help="Reinitialize an existing Kodiak workspace, overwriting "
-        "existing configuration.",
+        help="Reinitialize an existing Kodiak workspace, overwriting existing configuration.",
     ),
 ) -> None:
     """Initialize Kodiak inside a repository.
@@ -75,10 +73,10 @@ def init(
         result = asyncio.run(_run_init(service, request))
     except InitError as exc:
         _render_error(str(exc))
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
     except Exception as exc:  # noqa: BLE001
         _render_error(f"Unexpected error during initialization: {exc}")
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=2) from exc
 
     _render_summary(result)
     raise typer.Exit(code=0)
@@ -100,7 +98,7 @@ async def _run_init(service: InitService, request: InitRequest) -> InitResult:
             failure, such as a missing Git repository or an already
             initialized workspace without ``--force``.
     """
-    result: Optional[InitResult] = None
+    result: InitResult | None = None
 
     with Progress(
         TextColumn("[progress.description]{task.description}"),
@@ -137,9 +135,7 @@ def _render_summary(result: InitResult) -> None:
         "[green]yes[/green]" if result.git_repository else "[yellow]no[/yellow]",
     )
     table.add_row("Language", result.language or "[dim]not detected[/dim]")
-    table.add_row(
-        "Package manager", result.package_manager or "[dim]not detected[/dim]"
-    )
+    table.add_row("Package manager", result.package_manager or "[dim]not detected[/dim]")
     table.add_row("Framework", result.framework or "[dim]not detected[/dim]")
     table.add_row("Config file", str(result.config_path))
     table.add_row("Workspace", str(result.workspace_path))

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from rich.align import Align
-from rich.box import Box, DOUBLE, HEAVY, ROUNDED
+from rich.box import DOUBLE, HEAVY, ROUNDED, Box
 from rich.console import Console, Group, RenderableType
 from rich.padding import Padding
 from rich.panel import Panel
@@ -243,9 +243,7 @@ def render_version_banner(
         Text(f"Kodiak {version}", style=_STYLE_VERSION.title_style, justify="center")
     ]
     if python_version:
-        lines.append(
-            Text(f"Python {python_version}", style="dim bright_cyan", justify="center")
-        )
+        lines.append(Text(f"Python {python_version}", style="dim bright_cyan", justify="center"))
     if platform_name:
         lines.append(Text(platform_name, style="dim bright_cyan", justify="center"))
 

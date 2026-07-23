@@ -1,5 +1,4 @@
 import structlog
-from pydantic import BaseModel
 
 from kodiak.agents.base import AgentInput, AgentOutput, BaseAgent, LLMClient
 

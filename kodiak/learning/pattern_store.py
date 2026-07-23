@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -48,8 +48,8 @@ class Pattern(BaseModel):
     source_repo: str | None = None
     content_hash: str = ""
     embedding: list[float] | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def model_post_init(self, __context: Any) -> None:
         if not self.content_hash:
@@ -168,9 +168,7 @@ class PatternStore:
 
     async def get(self, pattern_id: str) -> Pattern | None:
         async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM learning_patterns WHERE id = $1", pattern_id
-            )
+            row = await conn.fetchrow("SELECT * FROM learning_patterns WHERE id = $1", pattern_id)
         return self._row_to_pattern(row) if row else None
 
     async def get_by_hash(self, content_hash: str) -> Pattern | None:
@@ -181,7 +179,7 @@ class PatternStore:
         return self._row_to_pattern(row) if row else None
 
     async def update(self, pattern: Pattern) -> Pattern | None:
-        pattern.updated_at = datetime.now(timezone.utc)
+        pattern.updated_at = datetime.now(UTC)
         async with self._pool.acquire() as conn:
             result = await conn.execute(
                 """
@@ -220,9 +218,7 @@ class PatternStore:
 
     async def delete(self, pattern_id: str) -> bool:
         async with self._pool.acquire() as conn:
-            result = await conn.execute(
-                "DELETE FROM learning_patterns WHERE id = $1", pattern_id
-            )
+            result = await conn.execute("DELETE FROM learning_patterns WHERE id = $1", pattern_id)
         deleted = result != "DELETE 0"
         if deleted:
             logger.info("Deleted pattern %s", pattern_id)
@@ -232,7 +228,7 @@ class PatternStore:
         async with self._pool.acquire() as conn:
             result = await conn.execute(
                 "UPDATE learning_patterns SET status = 'deprecated', updated_at = $1 WHERE id = $2",
-                datetime.now(timezone.utc),
+                datetime.now(UTC),
                 pattern_id,
             )
         return result != "UPDATE 0"
@@ -283,8 +279,9 @@ class PatternStore:
     async def increment_frequency(self, pattern_id: str) -> None:
         async with self._pool.acquire() as conn:
             await conn.execute(
-                "UPDATE learning_patterns SET frequency = frequency + 1, updated_at = $1 WHERE id = $2",
-                datetime.now(timezone.utc),
+                "UPDATE learning_patterns SET frequency = frequency + 1, "
+                "updated_at = $1 WHERE id = $2",
+                datetime.now(UTC),
                 pattern_id,
             )
 
@@ -293,7 +290,7 @@ class PatternStore:
             await conn.execute(
                 "UPDATE learning_patterns SET success_rate = $1, updated_at = $2 WHERE id = $3",
                 max(0.0, min(1.0, success_rate)),
-                datetime.now(timezone.utc),
+                datetime.now(UTC),
                 pattern_id,
             )
 
@@ -384,7 +381,8 @@ class PatternStore:
                 "SELECT pattern_type, COUNT(*) as cnt FROM learning_patterns GROUP BY pattern_type"
             )
             by_lang = await conn.fetch(
-                "SELECT language, COUNT(*) as cnt FROM learning_patterns GROUP BY language ORDER BY cnt DESC LIMIT 10"
+                "SELECT language, COUNT(*) as cnt FROM learning_patterns "
+                "GROUP BY language ORDER BY cnt DESC LIMIT 10"
             )
             avg_success = await conn.fetchval(
                 "SELECT AVG(success_rate) FROM learning_patterns WHERE status = 'active'"
@@ -401,7 +399,7 @@ class PatternStore:
     def _cosine_similarity(a: list[float], b: list[float]) -> float:
         if len(a) != len(b):
             return 0.0
-        dot = sum(x * y for x, y in zip(a, b))
+        dot = sum(x * y for x, y in zip(a, b, strict=False))
         mag_a = sum(x * x for x in a) ** 0.5
         mag_b = sum(x * x for x in b) ** 0.5
         if mag_a == 0 or mag_b == 0:

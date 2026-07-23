@@ -1,11 +1,8 @@
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
-from datetime import datetime
 
 from .base import BaseEvent
-from .types import EventType
 
 logger = logging.getLogger(__name__)
 
@@ -16,22 +13,22 @@ class EventPublisherBackend(ABC):
         pass
 
     @abstractmethod
-    async def batch_publish(self, events: List[BaseEvent]) -> int:
+    async def batch_publish(self, events: list[BaseEvent]) -> int:
         pass
 
 
 class EventPublisher:
     def __init__(self):
-        self.backends: Dict[str, EventPublisherBackend] = {}
-        self.routes: Dict[str, List[str]] = {}
-        self.failed_events: List[BaseEvent] = []
+        self.backends: dict[str, EventPublisherBackend] = {}
+        self.routes: dict[str, list[str]] = {}
+        self.failed_events: list[BaseEvent] = []
         self.max_retries = 3
 
     def register_backend(self, name: str, backend: EventPublisherBackend) -> None:
         self.backends[name] = backend
         logger.info(f"Registered event backend: {name}")
 
-    def add_route(self, event_type: str, backend_names: List[str]) -> None:
+    def add_route(self, event_type: str, backend_names: list[str]) -> None:
         self.routes[event_type] = backend_names
 
     def remove_route(self, event_type: str) -> None:
@@ -41,8 +38,8 @@ class EventPublisher:
     async def publish(
         self,
         event: BaseEvent,
-        backends: Optional[List[str]] = None,
-    ) -> Dict[str, bool]:
+        backends: list[str] | None = None,
+    ) -> dict[str, bool]:
         target_backends = backends or self.routes.get(event.event_type, [])
         results = {}
 
@@ -75,18 +72,18 @@ class EventPublisher:
             return await backend.publish(event)
         except Exception as e:
             if attempt < self.max_retries:
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
                 return await self._publish_with_retry(backend, event, attempt + 1)
             logger.error(f"Failed to publish after {self.max_retries} retries: {e}")
             return False
 
     async def batch_publish(
         self,
-        events: List[BaseEvent],
-        backends: Optional[List[str]] = None,
-    ) -> Dict[str, int]:
+        events: list[BaseEvent],
+        backends: list[str] | None = None,
+    ) -> dict[str, int]:
         results = {}
-        grouped_events: Dict[str, List[BaseEvent]] = {}
+        grouped_events: dict[str, list[BaseEvent]] = {}
 
         for event in events:
             target_backends = backends or self.routes.get(event.event_type, [])
@@ -112,7 +109,7 @@ class EventPublisher:
 
         return results
 
-    def get_failed_events(self) -> List[BaseEvent]:
+    def get_failed_events(self) -> list[BaseEvent]:
         return self.failed_events
 
     async def retry_failed_events(self) -> int:
@@ -136,20 +133,21 @@ class LogEventBackend(EventPublisherBackend):
         logger.info(f"Event: {event.event_type} - {event.to_dict()}")
         return True
 
-    async def batch_publish(self, events: List[BaseEvent]) -> int:
+    async def batch_publish(self, events: list[BaseEvent]) -> int:
         for event in events:
             await self.publish(event)
         return len(events)
 
 
 class WebhookEventBackend(EventPublisherBackend):
-    def __init__(self, webhook_url: str, headers: Optional[Dict[str, str]] = None):
+    def __init__(self, webhook_url: str, headers: dict[str, str] | None = None):
         self.webhook_url = webhook_url
         self.headers = headers or {"Content-Type": "application/json"}
 
     async def publish(self, event: BaseEvent) -> bool:
         try:
             import aiohttp
+
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     self.webhook_url,
@@ -162,7 +160,7 @@ class WebhookEventBackend(EventPublisherBackend):
             logger.error(f"Webhook publish failed: {e}")
             return False
 
-    async def batch_publish(self, events: List[BaseEvent]) -> int:
+    async def batch_publish(self, events: list[BaseEvent]) -> int:
         success_count = 0
         for event in events:
             if await self.publish(event):

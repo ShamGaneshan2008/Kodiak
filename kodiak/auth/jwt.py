@@ -7,7 +7,7 @@ tokens). API-key auth lives separately in kodiak.auth.api_keys.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -51,7 +51,7 @@ def _encode(
     roles: list[str] | None = None,
     scopes: list[str] | None = None,
 ) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": user_id,
         "iat": now,

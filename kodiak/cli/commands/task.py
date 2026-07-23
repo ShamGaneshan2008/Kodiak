@@ -25,7 +25,9 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-app = typer.Typer(name="task", help="Kodiak autonomous task workflows (currently unavailable via CLI).")
+app = typer.Typer(
+    name="task", help="Kodiak autonomous task workflows (currently unavailable via CLI)."
+)
 
 console = Console()
 

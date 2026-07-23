@@ -35,18 +35,13 @@ async def exchange_code(code: str) -> dict:
 
     async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
         try:
-            response = await client.post(
-                _GITHUB_OAUTH_TOKEN_URL, data=payload, headers=headers
-            )
+            response = await client.post(_GITHUB_OAUTH_TOKEN_URL, data=payload, headers=headers)
         except httpx.RequestError as exc:
-            raise OAuthError(
-                f"Network error while exchanging OAuth code: {exc}"
-            ) from exc
+            raise OAuthError(f"Network error while exchanging OAuth code: {exc}") from exc
 
     if response.status_code != 200:
         raise OAuthError(
-            f"GitHub token exchange failed with status {response.status_code}: "
-            f"{response.text}"
+            f"GitHub token exchange failed with status {response.status_code}: {response.text}"
         )
 
     data = response.json()
@@ -56,9 +51,7 @@ async def exchange_code(code: str) -> dict:
         raise OAuthError(f"GitHub OAuth error: {description}")
 
     if "access_token" not in data:
-        raise OAuthError(
-            f"GitHub token exchange response missing access_token: {data}"
-        )
+        raise OAuthError(f"GitHub token exchange response missing access_token: {data}")
 
     return data
 
@@ -74,14 +67,11 @@ async def fetch_github_user(access_token: str) -> dict:
         try:
             response = await client.get(_GITHUB_USER_URL, headers=headers)
         except httpx.RequestError as exc:
-            raise OAuthError(
-                f"Network error while fetching GitHub user profile: {exc}"
-            ) from exc
+            raise OAuthError(f"Network error while fetching GitHub user profile: {exc}") from exc
 
     if response.status_code != 200:
         raise OAuthError(
-            f"GitHub user profile fetch failed with status "
-            f"{response.status_code}: {response.text}"
+            f"GitHub user profile fetch failed with status {response.status_code}: {response.text}"
         )
 
     return response.json()
@@ -98,14 +88,11 @@ async def fetch_primary_email(access_token: str) -> str:
         try:
             response = await client.get(_GITHUB_USER_EMAILS_URL, headers=headers)
         except httpx.RequestError as exc:
-            raise OAuthError(
-                f"Network error while fetching GitHub user emails: {exc}"
-            ) from exc
+            raise OAuthError(f"Network error while fetching GitHub user emails: {exc}") from exc
 
     if response.status_code != 200:
         raise OAuthError(
-            f"GitHub email fetch failed with status {response.status_code}: "
-            f"{response.text}"
+            f"GitHub email fetch failed with status {response.status_code}: {response.text}"
         )
 
     emails = response.json()

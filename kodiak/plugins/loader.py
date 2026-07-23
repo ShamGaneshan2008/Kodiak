@@ -62,8 +62,6 @@ class PluginLoader:
         logger.info("plugin_unloaded", name=name)
         return True
 
-    async def reload_plugin(
-        self, name: str, module_path: str, class_name: str
-    ) -> Plugin:
+    async def reload_plugin(self, name: str, module_path: str, class_name: str) -> Plugin:
         await self.unload_plugin(name)
         return await self.load_plugin(module_path, class_name)

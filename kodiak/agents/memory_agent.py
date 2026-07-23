@@ -1,5 +1,4 @@
 import structlog
-from pydantic import BaseModel
 
 from kodiak.agents.base import AgentInput, AgentOutput, BaseAgent, LLMClient
 
@@ -20,7 +19,9 @@ class MemoryAgent(BaseAgent):
         mem_type = input_data.context.get("memory_type", "semantic")
         query = input_data.context.get("query", input_data.task)
 
-        prompt = self._build_prompt(query, mem_type, input_data.context.get("existing_memories", ""))
+        prompt = self._build_prompt(
+            query, mem_type, input_data.context.get("existing_memories", "")
+        )
         result = await self._run_with_timing(prompt)
 
         self._logger.info("memory_access_complete", memory_type=mem_type)

@@ -25,7 +25,7 @@ class FileSyncManager:
     async def sync_to_sandbox(
         self, container: SandboxContainer, local_path: Path, remote_path: str
     ) -> FileSyncResult:
-        if not local_path.exists():
+        if not await asyncio.to_thread(local_path.exists):
             logger.error("local_path_missing", path=str(local_path))
             return FileSyncResult(success=False)
 
@@ -33,14 +33,14 @@ class FileSyncManager:
 
         files_copied = 0
         bytes_transferred = 0
-        if local_path.is_file():
+        if await asyncio.to_thread(local_path.is_file):
             files_copied = 1
-            bytes_transferred = local_path.stat().st_size
-        elif local_path.is_dir():
-            for f in local_path.rglob("*"):
-                if f.is_file():
-                    files_copied += 1
-                    bytes_transferred += f.stat().st_size
+            bytes_transferred = await asyncio.to_thread(lambda: local_path.stat().st_size)
+        elif await asyncio.to_thread(local_path.is_dir):
+            files_copied, bytes_transferred = await asyncio.to_thread(
+                self._count_files,
+                local_path,
+            )
 
         logger.info(
             "synced_to_sandbox",
@@ -60,6 +60,7 @@ class FileSyncManager:
         client = await self._backend.get_client()
 
         try:
+
             def _get_archive() -> bytes:
                 c = client.containers.get(container.container_id)
                 bits, _ = c.get_archive(remote_path)
@@ -97,14 +98,26 @@ class FileSyncManager:
 
     async def delete_synced_files(self, local_path: Path) -> bool:
         try:
-            if local_path.is_file():
-                local_path.unlink()
-            elif local_path.is_dir():
-                shutil.rmtree(local_path)
+            await asyncio.to_thread(self._delete_path, local_path)
             logger.info("synced_files_deleted", path=str(local_path))
             return True
         except Exception as e:
-            logger.error(
-                "delete_synced_files_failed", path=str(local_path), error=str(e)
-            )
+            logger.error("delete_synced_files_failed", path=str(local_path), error=str(e))
             return False
+
+    @staticmethod
+    def _count_files(local_path: Path) -> tuple[int, int]:
+        files_copied = 0
+        bytes_transferred = 0
+        for file_path in local_path.rglob("*"):
+            if file_path.is_file():
+                files_copied += 1
+                bytes_transferred += file_path.stat().st_size
+        return files_copied, bytes_transferred
+
+    @staticmethod
+    def _delete_path(local_path: Path) -> None:
+        if local_path.is_file():
+            local_path.unlink()
+        elif local_path.is_dir():
+            shutil.rmtree(local_path)

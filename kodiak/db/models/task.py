@@ -8,6 +8,7 @@ One Task fans out into many AgentRuns.
 from __future__ import annotations
 
 import enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -16,12 +17,16 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from kodiak.db.base import (
     KodiakBase,
     SoftDeleteMixin,
-    UUIDMixin,
     TimestampMixin,
+    UUIDMixin,
 )
 
+if TYPE_CHECKING:
+    from kodiak.db.models.agent_run import AgentRun
+    from kodiak.db.models.repository import Repository
 
-class TaskStatus(str, enum.Enum):
+
+class TaskStatus(enum.StrEnum):
     PENDING = "pending"
     PLANNING = "planning"
     IN_PROGRESS = "in_progress"
@@ -33,14 +38,14 @@ class TaskStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
-class TaskPriority(str, enum.Enum):
+class TaskPriority(enum.StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
 
 
-class TaskSource(str, enum.Enum):
+class TaskSource(enum.StrEnum):
     GITHUB_ISSUE = "github_issue"
     GITHUB_PR = "github_pr"
     API = "api"
@@ -59,9 +64,7 @@ class Task(KodiakBase, UUIDMixin, TimestampMixin, SoftDeleteMixin):
         index=True,
     )
 
-    created_by: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=False), nullable=True, index=True
-    )
+    created_by: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
 
     # Description
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
@@ -110,11 +113,11 @@ class Task(KodiakBase, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Relationships
-    repository: Mapped["Repository"] = relationship(
+    repository: Mapped[Repository] = relationship(
         "Repository", back_populates="tasks", lazy="raise"
     )
 
-    agent_runs: Mapped[list["AgentRun"]] = relationship(
+    agent_runs: Mapped[list[AgentRun]] = relationship(
         "AgentRun",
         back_populates="task",
         lazy="raise",

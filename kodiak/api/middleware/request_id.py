@@ -19,6 +19,7 @@ from contextvars import ContextVar
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 REQUEST_ID_HEADER = "X-Request-ID"
 
@@ -28,7 +29,7 @@ request_id_ctx: ContextVar[str | None] = ContextVar("request_id", default=None)
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, *, trust_incoming_header: bool = True) -> None:
+    def __init__(self, app: ASGIApp, *, trust_incoming_header: bool = True) -> None:
         super().__init__(app)
         # In production, only trust an incoming X-Request-ID if it came through
         # a trusted ingress (e.g. an internal load balancer that strips/sets it).

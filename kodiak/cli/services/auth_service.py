@@ -147,9 +147,7 @@ class AuthService:
                 "scope": credentials.scope,
             }
 
-            self.credentials_path.write_text(
-                json.dumps(payload, indent=2), encoding="utf-8"
-            )
+            self.credentials_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
             os.chmod(self.credentials_path, _FILE_MODE)
         except OSError as exc:
             raise CredentialStorageError(

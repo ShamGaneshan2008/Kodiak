@@ -3,6 +3,10 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from kodiak.api.dependencies import CurrentUser, PaginationDep, get_db
 from kodiak.api.schemas.common import PaginatedResponse
 from kodiak.api.schemas.task import (
     TaskApprove,
@@ -12,10 +16,6 @@ from kodiak.api.schemas.task import (
     TaskUpdate,
 )
 from kodiak.db.models.project import Project
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from kodiak.api.dependencies import CurrentUser, PaginationDep, get_db
 from kodiak.db.models.task import Task, TaskStatus
 
 router = APIRouter(prefix="/projects/{project_id}/tasks", tags=["tasks"])
@@ -61,10 +61,10 @@ async def list_tasks(
     pagination: PaginationDep,
     session: AsyncSession = Depends(get_db),
     status_filter: TaskStatus | None = None,
-) -> PaginatedResponse[TaskResponse]:
+) -> PaginatedResponse[Task]:
     await _assert_project_access(session, project_id, current_user.id)
     base = select(Task).where(
-        Task.project_id == project_id,
+        Task.project_id == project_id,  # type: ignore[attr-defined]
         Task.deleted_at.is_(None),
     )
     if status_filter:
@@ -74,7 +74,7 @@ async def list_tasks(
     result = await session.execute(
         base.order_by(Task.created_at.desc()).offset(pagination.offset).limit(pagination.limit)
     )
-    return PaginatedResponse.build(
+    return PaginatedResponse[Task].build(
         list(result.scalars().all()), total, pagination.page, pagination.page_size
     )
 
@@ -130,12 +130,12 @@ async def approve_task(
         )
 
     target = TaskStatus.APPROVED if body.approved else TaskStatus.REJECTED
-    if not task.can_transition_to(target):
+    if not task.can_transition_to(target):  # type: ignore[attr-defined]
         raise HTTPException(status.HTTP_409_CONFLICT, detail=f"Cannot transition to {target}")
 
     task.status = target
     if body.comment:
-        task.metadata_["approval_comment"] = body.comment
+        task.metadata_["approval_comment"] = body.comment  # type: ignore[attr-defined]
     return task
 
 
@@ -147,7 +147,7 @@ async def cancel_task(
     session: AsyncSession = Depends(get_db),
 ) -> None:
     task = await _get_task(session, task_id, project_id, current_user.id)
-    if not task.can_transition_to(TaskStatus.CANCELLED):
+    if not task.can_transition_to(TaskStatus.CANCELLED):  # type: ignore[attr-defined]
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail=f"Cannot cancel task in status {task.status}",
@@ -165,7 +165,7 @@ async def _get_task(
     result = await session.execute(
         select(Task).where(
             Task.id == task_id,
-            Task.project_id == project_id,
+            Task.project_id == project_id,  # type: ignore[attr-defined]
             Task.deleted_at.is_(None),
         )
     )

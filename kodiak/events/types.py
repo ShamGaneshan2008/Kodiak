@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     TASK_CREATED = "task.created"
     TASK_STARTED = "task.started"
     TASK_COMPLETED = "task.completed"

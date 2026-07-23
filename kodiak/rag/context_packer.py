@@ -1,5 +1,5 @@
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from kodiak.rag.vector_store import SearchResult as RetrievalResult
 
@@ -18,9 +18,9 @@ class ContextPacker:
         self._chars_per_token = chars_per_token
 
     def pack(
-            self,
-            chunks: list[RetrievalResult],
-            max_tokens: int = 4000,
+        self,
+        chunks: list[RetrievalResult],
+        max_tokens: int = 4000,
     ) -> PackedContext:
         max_chars = int(max_tokens * self._chars_per_token)
         unique_chunks = self._deduplicate(chunks)
@@ -30,7 +30,8 @@ class ContextPacker:
         discarded = 0
 
         for chunk in unique_chunks:
-            chunk_content = f"---\nFile: {chunk.metadata.get('file_path', 'unknown')}\n```\n{chunk.content}\n```\n"
+            file_path = chunk.metadata.get("file_path", "unknown")
+            chunk_content = f"---\nFile: {file_path}\n```\n{chunk.content}\n```\n"
             chunk_len = len(chunk_content)
 
             if current_chars + chunk_len > max_chars:

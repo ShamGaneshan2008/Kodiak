@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime
-from typing import Optional
 
 import structlog
 import typer
@@ -67,7 +66,7 @@ _JSON_OPTION = typer.Option(
 @app.command("add")
 def add(
     content: str = typer.Argument(..., help="The text content to remember."),
-    tag: Optional[list[str]] = _TAG_OPTION,
+    tag: list[str] | None = _TAG_OPTION,
     json_output: bool = _JSON_OPTION,
 ) -> None:
     """Add a new memory."""
@@ -89,20 +88,18 @@ def add(
     )
 
 
-async def _add(*, content: str, tags: Optional[list[str]]) -> Memory:
+async def _add(*, content: str, tags: list[str] | None) -> Memory:
     service = MemoryService()
     return await service.add(content=content, tags=tags or [])
-
 
 
 # kodiak memory search
 
 
-
 @app.command("search")
 def search(
     query: str = typer.Argument(..., help="Natural-language query to search memories for."),
-    tag: Optional[list[str]] = _TAG_OPTION,
+    tag: list[str] | None = _TAG_OPTION,
     limit: int = _LIMIT_OPTION,
     json_output: bool = _JSON_OPTION,
 ) -> None:
@@ -144,7 +141,7 @@ def search(
     console.print(table)
 
 
-async def _search(*, query: str, tags: Optional[list[str]], limit: int) -> list[SearchResult]:
+async def _search(*, query: str, tags: list[str] | None, limit: int) -> list[SearchResult]:
     service = MemoryService()
     return await service.search(query=query, tags=tags or [], limit=limit)
 
@@ -154,7 +151,7 @@ async def _search(*, query: str, tags: Optional[list[str]], limit: int) -> list[
 
 @app.command("list")
 def list_memories(
-    tag: Optional[list[str]] = _TAG_OPTION,
+    tag: list[str] | None = _TAG_OPTION,
     limit: int = _LIMIT_OPTION,
     json_output: bool = _JSON_OPTION,
 ) -> None:
@@ -198,7 +195,7 @@ def list_memories(
     console.print(f"[dim]{len(memories)} memor{'y' if len(memories) == 1 else 'ies'} shown.[/dim]")
 
 
-async def _list(*, tags: Optional[list[str]], limit: int) -> list[Memory]:
+async def _list(*, tags: list[str] | None, limit: int) -> list[Memory]:
     service = MemoryService()
     return await service.list(tags=tags or [], limit=limit)
 
@@ -208,10 +205,10 @@ async def _list(*, tags: Optional[list[str]], limit: int) -> list[Memory]:
 
 @app.command("delete")
 def delete(
-    memory_id: Optional[str] = typer.Argument(
+    memory_id: str | None = typer.Argument(
         None, help="ID of the memory to delete. Omit when using --tag to bulk-delete."
     ),
-    tag: Optional[list[str]] = typer.Option(
+    tag: list[str] | None = typer.Option(
         None,
         "--tag",
         "-t",
@@ -253,7 +250,8 @@ def delete(
         _print_json({"deleted": deleted_count})
         return
 
-    console.print(f"[bold green]Deleted {deleted_count} memor{'y' if deleted_count == 1 else 'ies'}.[/bold green]")
+    plural = "y" if deleted_count == 1 else "ies"
+    console.print(f"[bold green]Deleted {deleted_count} memor{plural}.[/bold green]")
 
 
 async def _delete_one(memory_id: str) -> None:
@@ -300,7 +298,7 @@ def _short_id(memory_id: str, width: int = 8) -> str:
     return memory_id[:width]
 
 
-def _format_dt(value: Optional[datetime]) -> str:
+def _format_dt(value: datetime | None) -> str:
     if value is None:
         return "—"
     return value.strftime("%Y-%m-%d %H:%M")

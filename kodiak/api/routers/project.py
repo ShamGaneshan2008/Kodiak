@@ -5,16 +5,17 @@ kodiak/api/routers/projects.py
 from __future__ import annotations
 
 import uuid
+from datetime import UTC
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kodiak.api.dependencies import CurrentUser, PaginationDep
-from kodiak.db.session import get_db
 from kodiak.api.schemas.common import PaginatedResponse
 from kodiak.api.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
 from kodiak.db.models.project import Project
+from kodiak.db.session import get_db
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -41,7 +42,7 @@ async def list_projects(
     current_user: CurrentUser,
     pagination: PaginationDep,
     session: AsyncSession = Depends(get_db),
-) -> PaginatedResponse[ProjectResponse]:
+) -> PaginatedResponse[Project]:
     base = select(Project).where(
         Project.owner_id == current_user.id,
         Project.deleted_at.is_(None),
@@ -50,7 +51,7 @@ async def list_projects(
     result = await session.execute(
         base.order_by(Project.created_at.desc()).offset(pagination.offset).limit(pagination.limit)
     )
-    return PaginatedResponse.build(
+    return PaginatedResponse[Project].build(
         list(result.scalars().all()), total, pagination.page, pagination.page_size
     )
 
@@ -84,14 +85,12 @@ async def delete_project(
     session: AsyncSession = Depends(get_db),
 ) -> None:
     project = await _get_project(session, project_id, current_user.id)
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    project.deleted_at = datetime.now(timezone.utc)
+    project.deleted_at = datetime.now(UTC)
 
 
-async def _get_project(
-    session: AsyncSession, project_id: uuid.UUID, user_id: uuid.UUID
-) -> Project:
+async def _get_project(session: AsyncSession, project_id: uuid.UUID, user_id: uuid.UUID) -> Project:
     result = await session.execute(
         select(Project).where(
             Project.id == project_id,

@@ -14,7 +14,7 @@ import inspect
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
@@ -90,7 +90,7 @@ class FailurePolicy(BaseModel):
 
 
 class WorkflowLogEntry(BaseModel):
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     level: str = "info"
     event: str
     workflow_id: str
@@ -104,7 +104,7 @@ class WorkflowEvent(BaseModel):
     workflow_id: str
     node_id: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
@@ -156,31 +156,31 @@ class WorkflowNode(BaseModel):
 
     def start(self) -> None:
         self.status = WorkflowNodeStatus.RUNNING
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = datetime.now(UTC)
         self.finished_at = None
         self.error = None
 
     def complete(self, output: Any) -> None:
         self.status = WorkflowNodeStatus.COMPLETED
         self.outputs = {"value": output} if not isinstance(output, Mapping) else dict(output)
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
         self.execution_time_ms = self._duration_ms()
 
     def fail(self, error: str, status: WorkflowNodeStatus = WorkflowNodeStatus.FAILED) -> None:
         self.status = status
         self.error = error
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
         self.execution_time_ms = self._duration_ms()
 
     def skip(self, reason: str) -> None:
         self.status = WorkflowNodeStatus.SKIPPED
         self.error = reason
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
         self.execution_time_ms = self._duration_ms()
 
     def cancel(self) -> None:
         self.status = WorkflowNodeStatus.CANCELLED
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
         self.execution_time_ms = self._duration_ms()
 
     def reset_for_resume(self) -> None:
@@ -205,7 +205,7 @@ class WorkflowState(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     outputs: dict[str, Any] = Field(default_factory=dict)
     logs: list[WorkflowLogEntry] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error: str | None = None
@@ -221,20 +221,20 @@ class WorkflowState(BaseModel):
         description: str = "",
         workflow_id: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "WorkflowState":
+    ) -> WorkflowState:
         """Create a workflow from existing orchestration task objects.
 
         This adapter keeps the Workflow Engine aligned with TaskPlanner and
         scheduler-style models without requiring those modules to change.
         """
-        task_ids = {str(getattr(task, "id")) for task in tasks}
+        task_ids = {str(task.id) for task in tasks}
         nodes = [
             WorkflowNode(
-                id=str(getattr(task, "id")),
-                name=str(getattr(task, "name")),
+                id=str(task.id),
+                name=str(task.name),
                 description=str(getattr(task, "description", "")),
                 node_type=WorkflowNodeType.AGENT,
-                executor=str(getattr(task, "agent_type")),
+                executor=str(task.agent_type),
                 dependencies=[
                     str(dependency)
                     for dependency in getattr(task, "dependencies", [])
@@ -308,8 +308,7 @@ class WorkflowContext(BaseModel):
 
     def dependency_outputs(self, node: WorkflowNode) -> dict[str, dict[str, Any]]:
         return {
-            dependency: self.node_outputs.get(dependency, {})
-            for dependency in node.dependencies
+            dependency: self.node_outputs.get(dependency, {}) for dependency in node.dependencies
         }
 
 
@@ -392,7 +391,7 @@ class WorkflowEngine:
         self._validate_workflow(workflow)
         self._cancelled.discard(workflow.workflow_id)
         workflow.status = WorkflowStatus.RUNNING
-        workflow.started_at = workflow.started_at or datetime.now(timezone.utc)
+        workflow.started_at = workflow.started_at or datetime.now(UTC)
         context = WorkflowContext(
             workflow=workflow,
             node_outputs=self._completed_outputs(workflow),
@@ -455,7 +454,7 @@ class WorkflowEngine:
         state = await self._state_store.load(workflow_id)
         if state is not None and not state.is_terminal:
             state.status = WorkflowStatus.CANCELLED
-            state.cancelled_at = datetime.now(timezone.utc)
+            state.cancelled_at = datetime.now(UTC)
             for node in state.nodes:
                 if node.status in {WorkflowNodeStatus.PENDING, WorkflowNodeStatus.RUNNING}:
                     node.cancel()
@@ -531,7 +530,7 @@ class WorkflowEngine:
             )
             await self._persist_and_emit(workflow, WorkflowEventType.NODE_COMPLETED, node)
             await self._run_hooks("node_completed", context, node)
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             await self._handle_node_failure(
                 workflow,
                 context,
@@ -571,9 +570,7 @@ class WorkflowEngine:
         status = WorkflowNodeStatus.TIMED_OUT if timed_out else WorkflowNodeStatus.FAILED
         node.fail(str(exc) or "Node execution failed.", status=status)
         event_type = (
-            WorkflowEventType.NODE_TIMED_OUT
-            if timed_out
-            else WorkflowEventType.NODE_FAILED
+            WorkflowEventType.NODE_TIMED_OUT if timed_out else WorkflowEventType.NODE_FAILED
         )
         self._log(workflow, event_type.value, node.id, node.error or "")
         await self._persist_and_emit(workflow, event_type, node)
@@ -664,7 +661,7 @@ class WorkflowEngine:
                 self._fail_workflow(workflow, failed[0].error or "Workflow node failed.")
                 return
             workflow.status = WorkflowStatus.COMPLETED
-            workflow.finished_at = datetime.now(timezone.utc)
+            workflow.finished_at = datetime.now(UTC)
             workflow.outputs = {
                 node.id: node.outputs
                 for node in workflow.nodes
@@ -673,7 +670,7 @@ class WorkflowEngine:
 
     async def _cancel(self, workflow: WorkflowState, context: WorkflowContext) -> None:
         workflow.status = WorkflowStatus.CANCELLED
-        workflow.cancelled_at = datetime.now(timezone.utc)
+        workflow.cancelled_at = datetime.now(UTC)
         workflow.finished_at = workflow.cancelled_at
         for node in workflow.nodes:
             if node.status in {WorkflowNodeStatus.PENDING, WorkflowNodeStatus.RUNNING}:
@@ -683,7 +680,8 @@ class WorkflowEngine:
         await self._run_hooks("workflow_cancelled", context)
 
     async def _finalize(self, workflow: WorkflowState, context: WorkflowContext) -> None:
-        self._finish_if_possible(workflow)
+        if workflow.status == WorkflowStatus.RUNNING:
+            self._finish_if_possible(workflow)
         if workflow.status == WorkflowStatus.COMPLETED:
             await self._run_hooks("workflow_completed", context)
             await self._persist_and_emit(workflow, WorkflowEventType.WORKFLOW_COMPLETED)
@@ -698,7 +696,7 @@ class WorkflowEngine:
     def _fail_workflow(self, workflow: WorkflowState, error: str) -> None:
         workflow.status = WorkflowStatus.FAILED
         workflow.error = error
-        workflow.finished_at = datetime.now(timezone.utc)
+        workflow.finished_at = datetime.now(UTC)
 
     async def _run_hooks(
         self,
@@ -794,9 +792,7 @@ class WorkflowEngine:
         for node in workflow.nodes:
             missing = set(node.dependencies) - node_ids
             if missing:
-                raise ValueError(
-                    f"Node {node.id} depends on unknown node(s): {sorted(missing)}"
-                )
+                raise ValueError(f"Node {node.id} depends on unknown node(s): {sorted(missing)}")
             if node.failure_policy.recovery_node_id:
                 if node.failure_policy.recovery_node_id not in node_ids:
                     raise ValueError(

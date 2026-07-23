@@ -18,7 +18,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import structlog
 
@@ -74,9 +74,7 @@ class EmbeddingDimensionMismatchError(EmbeddingError):
     """Raised when a provider returns a vector of an unexpected dimension."""
 
     def __init__(self, *, expected: int, actual: int, provider: str) -> None:
-        super().__init__(
-            f"{provider} returned a {actual}-dimensional vector, expected {expected}"
-        )
+        super().__init__(f"{provider} returned a {actual}-dimensional vector, expected {expected}")
         self.expected = expected
         self.actual = actual
         self.provider = provider
@@ -157,7 +155,7 @@ class AsyncHTTPResponse(Protocol):
 
     status_code: int
 
-    def json(self) -> dict:
+    def json(self) -> dict[str, Any]:
         """Parse and return the response body as JSON."""
         ...
 
@@ -445,9 +443,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         body = response.json()
         vector = body.get("embedding", {}).get("values")
         if vector is None:
-            raise ProviderRequestError(
-                "Gemini response missing embedding values", retryable=False
-            )
+            raise ProviderRequestError("Gemini response missing embedding values", retryable=False)
         return EmbeddingResult(vector=vector, model=self._model, provider=self.provider_name())
 
     async def embed_batch(self, texts: Sequence[str]) -> list[EmbeddingResult]:

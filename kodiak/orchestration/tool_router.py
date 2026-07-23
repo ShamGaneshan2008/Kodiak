@@ -1,4 +1,5 @@
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import structlog
 from pydantic import BaseModel, Field
@@ -25,15 +26,10 @@ class ToolRouter:
         self._tools[tool.name] = tool
         logger.info("tool_registered", name=tool.name)
 
-    def route(
-        self, action: str, required_capability: str | None = None
-    ) -> ToolDefinition | None:
+    def route(self, action: str, required_capability: str | None = None) -> ToolDefinition | None:
         for tool in self._tools.values():
             if tool.name == action:
-                if (
-                    required_capability
-                    and required_capability not in tool.capabilities
-                ):
+                if required_capability and required_capability not in tool.capabilities:
                     logger.warning(
                         "tool_missing_capability",
                         tool=tool.name,
@@ -45,9 +41,7 @@ class ToolRouter:
             if required_capability and required_capability in tool.capabilities:
                 return tool
 
-        logger.warning(
-            "no_tool_found", action=action, capability=required_capability
-        )
+        logger.warning("no_tool_found", action=action, capability=required_capability)
         return None
 
     def validate(self, tool_name: str, params: dict[str, Any]) -> bool:

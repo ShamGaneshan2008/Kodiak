@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 
 import structlog
@@ -66,14 +66,14 @@ class RewardSignal(BaseModel):
     reward: float
     components: dict[str, float] = Field(default_factory=dict)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class LearningSignal(BaseModel):
     pattern_id: uuid.UUID
     reward: float
     reinforce: bool
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class RewardConfig(BaseModel):
@@ -107,9 +107,7 @@ class RewardRepository(ABC):
     async def store_learning_signals(self, signals: list[LearningSignal]) -> None: ...
 
     @abstractmethod
-    async def get_pattern_success_rates(
-        self, ids: list[uuid.UUID]
-    ) -> dict[uuid.UUID, float]: ...
+    async def get_pattern_success_rates(self, ids: list[uuid.UUID]) -> dict[uuid.UUID, float]: ...
 
 
 def _calc_outcome(outcome: Outcome, weights: dict[Outcome, float]) -> float:
@@ -185,9 +183,7 @@ class RewardModel:
         total = round(sum(components.values()), 6)
         confidence = self._calc_confidence(result, feedback)
 
-        signal = RewardSignal(
-            reward=total, components=components, confidence=confidence
-        )
+        signal = RewardSignal(reward=total, components=components, confidence=confidence)
 
         logger.info(
             "reward_calculated",

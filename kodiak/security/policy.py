@@ -54,9 +54,7 @@ class PolicyEngine:
                 )
         return PolicyDecision(allowed=True, reason="Command allowed")
 
-    async def evaluate_file_access(
-        self, path: str, write: bool = False
-    ) -> PolicyDecision:
+    async def evaluate_file_access(self, path: str, write: bool = False) -> PolicyDecision:
         if not any(p.enabled for p in self._policies):
             return PolicyDecision(allowed=True, reason="No active policies")
 
@@ -87,9 +85,7 @@ class PolicyEngine:
                 )
 
         if url.startswith("file://"):
-            return PolicyDecision(
-                allowed=False, reason="file:// protocol is blocked"
-            )
+            return PolicyDecision(allowed=False, reason="file:// protocol is blocked")
 
         return PolicyDecision(allowed=True, reason="Network access allowed")
 

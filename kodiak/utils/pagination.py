@@ -1,5 +1,5 @@
 import math
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -15,7 +15,7 @@ class PaginationParams(BaseModel):
         return calculate_offset(self.page, self.page_size)
 
 
-class PaginatedResult(BaseModel, Generic[T]):
+class PaginatedResult[T](BaseModel):
     items: list[T] = Field(default_factory=list)
     total: int = Field(default=0, ge=0)
     page: int = Field(default=1, ge=1)

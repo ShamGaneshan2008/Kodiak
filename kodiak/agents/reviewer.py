@@ -15,7 +15,7 @@ import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -77,7 +77,7 @@ Output schema:
 """
 
 
-class ReviewRecommendation(str, Enum):
+class ReviewRecommendation(StrEnum):
     """Final review recommendation."""
 
     APPROVE = "APPROVE"
@@ -85,7 +85,7 @@ class ReviewRecommendation(str, Enum):
     REJECT = "REJECT"
 
 
-class ReviewSeverity(str, Enum):
+class ReviewSeverity(StrEnum):
     """Severity levels assigned to review issues."""
 
     CRITICAL = "critical"
@@ -95,7 +95,7 @@ class ReviewSeverity(str, Enum):
     INFO = "info"
 
 
-class ReviewCategory(str, Enum):
+class ReviewCategory(StrEnum):
     """Review issue categories."""
 
     CORRECTNESS = "correctness"
@@ -645,9 +645,7 @@ class ReviewAgent(BaseAgent):
         }
         approved_files = tuple(path for path in changed_files if path not in blocking_files)
         must_fix = tuple(
-            issue.title
-            for issue in all_issues
-            if issue.severity in self._blocking_severities()
+            issue.title for issue in all_issues if issue.severity in self._blocking_severities()
         )
 
         summary = self._summary(recommendation, score, all_issues, llm_report)
@@ -723,8 +721,7 @@ class ReviewAgent(BaseAgent):
         if patch_diff:
             parts.append(f"## Generated patch\n```diff\n{patch_diff}\n```")
         parts.append(
-            "## Changed files\n"
-            f"{self._to_pretty_json([file.to_dict() for file in files])}"
+            f"## Changed files\n{self._to_pretty_json([file.to_dict() for file in files])}"
         )
         if static_issues:
             parts.append(
@@ -754,8 +751,7 @@ class ReviewAgent(BaseAgent):
             return (patch,)
         if isinstance(patch, Sequence) and not isinstance(patch, str | bytes | Mapping):
             return tuple(
-                item if isinstance(item, ReviewFile) else self._from_mapping(item)
-                for item in patch
+                item if isinstance(item, ReviewFile) else self._from_mapping(item) for item in patch
             )
         if isinstance(patch, Mapping):
             files = patch.get("files") or patch.get("code_changes")

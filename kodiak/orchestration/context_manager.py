@@ -22,9 +22,10 @@ from __future__ import annotations
 
 import logging
 import textwrap
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -64,16 +65,14 @@ class SectionPriority(IntEnum):
     Higher values are included first when the token budget is tight.
     """
 
-    CRITICAL = 100   # Objective, current step — always included.
-    HIGH = 75        # Repository metadata, pending approval.
-    MEDIUM = 50      # Recent step history, working memory highlights.
-    LOW = 25         # Reflections, full working memory.
-    OPTIONAL = 10    # Extra metadata, tags.
-
+    CRITICAL = 100  # Objective, current step — always included.
+    HIGH = 75  # Repository metadata, pending approval.
+    MEDIUM = 50  # Recent step history, working memory highlights.
+    LOW = 25  # Reflections, full working memory.
+    OPTIONAL = 10  # Extra metadata, tags.
 
 
 # Section descriptor
-
 
 
 @dataclass
@@ -169,6 +168,7 @@ def _format_step(step: ExecutionStep, *, include_output: bool = True) -> str:
 
 # Built-in section builders
 
+
 def _build_objective_section(state: TaskState, _role: AgentRole) -> ContextSection:
     """Always-included section describing the task objective."""
     content = (
@@ -243,7 +243,8 @@ def _build_step_history_section(
 ) -> ContextSection | None:
     """Include the most recent completed/failed steps as execution history."""
     terminal_steps = [
-        s for s in state.steps
+        s
+        for s in state.steps
         if s.status in {StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.SKIPPED}
     ]
     if not terminal_steps:
@@ -279,8 +280,7 @@ def _build_reflections_section(
 ) -> ContextSection | None:
     """Include the most recent reflections, optionally filtered by role."""
     relevant: list[ReflectionEntry] = [
-        r for r in state.reflections
-        if r.agent_role == role or r.agent_role == AgentRole.REFLECTION
+        r for r in state.reflections if r.agent_role == role or r.agent_role == AgentRole.REFLECTION
     ]
     if not relevant:
         return None
@@ -292,10 +292,7 @@ def _build_reflections_section(
             if r.suggested_actions
             else "    (none)"
         )
-        parts.append(
-            f"  [{r.agent_role.value}] {r.summary}\n"
-            f"  Suggested actions:\n{actions}"
-        )
+        parts.append(f"  [{r.agent_role.value}] {r.summary}\n  Suggested actions:\n{actions}")
     content = "## Recent Reflections\n" + "\n\n".join(parts)
     return ContextSection(
         name="reflections",
@@ -414,18 +411,20 @@ class ContextManager:
         """
         priority = int(priority_override) if priority_override is not None else 0
         self._builders.append((priority, builder))
-        logger.debug("Registered context section builder: %s", getattr(builder, "__name__", repr(builder)))
+        logger.debug(
+            "Registered context section builder: %s", getattr(builder, "__name__", repr(builder))
+        )
 
     def _register_defaults(self) -> None:
         """Register the built-in section builders in priority order."""
         defaults: list[tuple[SectionPriority, SectionBuilder]] = [
             (SectionPriority.CRITICAL, _build_objective_section),
             (SectionPriority.CRITICAL, _build_current_step_section),
-            (SectionPriority.HIGH,     _build_repository_section),
-            (SectionPriority.HIGH,     _build_pending_approval_section),
-            (SectionPriority.MEDIUM,   self._history_builder),
-            (SectionPriority.MEDIUM,   _build_working_memory_section),
-            (SectionPriority.LOW,      self._reflection_builder),
+            (SectionPriority.HIGH, _build_repository_section),
+            (SectionPriority.HIGH, _build_pending_approval_section),
+            (SectionPriority.MEDIUM, self._history_builder),
+            (SectionPriority.MEDIUM, _build_working_memory_section),
+            (SectionPriority.LOW, self._reflection_builder),
             (SectionPriority.OPTIONAL, _build_tags_section),
             (SectionPriority.OPTIONAL, _build_progress_section),
         ]

@@ -1,4 +1,3 @@
-
 """Reusable Rich progress components for the Kodiak CLI.
 
 This module is a pure presentation layer: it provides factory functions

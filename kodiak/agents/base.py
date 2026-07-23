@@ -59,10 +59,7 @@ class AgentOutput:
 
     @property
     def total_tokens(self) -> int:
-        return (
-            self.token_usage.get("input_tokens", 0)
-            + self.token_usage.get("output_tokens", 0)
-        )
+        return self.token_usage.get("input_tokens", 0) + self.token_usage.get("output_tokens", 0)
 
 
 class BaseAgent(ABC):
@@ -93,7 +90,7 @@ class BaseAgent(ABC):
 
         log.info("agent.start")
 
-        ACTIVE_AGENT_TASKS.labels(agent=self.role).inc()
+        ACTIVE_AGENT_TASKS.labels(agent_type=self.role.value).inc()
 
         start = time.monotonic()
 
@@ -105,7 +102,7 @@ class BaseAgent(ABC):
             status = "success" if output.success else "failure"
 
             AGENT_TASKS_TOTAL.labels(
-                agent=self.role,
+                agent_type=self.role,
                 status=status,
             ).inc()
 
@@ -122,7 +119,7 @@ class BaseAgent(ABC):
             duration = time.monotonic() - start
 
             AGENT_TASKS_TOTAL.labels(
-                agent=self.role,
+                agent_type=self.role,
                 status="error",
             ).inc()
 
@@ -140,10 +137,10 @@ class BaseAgent(ABC):
             )
 
         finally:
-            ACTIVE_AGENT_TASKS.labels(agent=self.role).dec()
+            ACTIVE_AGENT_TASKS.labels(agent_type=self.role.value).dec()
 
             AGENT_TASK_DURATION_SECONDS.labels(
-                agent=self.role,
+                agent_type=self.role.value,
             ).observe(time.monotonic() - start)
 
     @abstractmethod

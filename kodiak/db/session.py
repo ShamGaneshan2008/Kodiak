@@ -1,7 +1,6 @@
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from kodiak.config.settings import settings
-
 
 # ================= DB ENGINE =================
 engine = create_async_engine(
@@ -31,6 +30,7 @@ def get_redis_client():
 
     if _redis_client is None:
         import redis.asyncio as redis  # lazy import prevents startup crash
+
         _redis_client = redis.from_url(str(settings.REDIS_URL))
 
     return _redis_client

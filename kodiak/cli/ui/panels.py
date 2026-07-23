@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
-from rich.box import Box, HEAVY, ROUNDED
+from rich.box import HEAVY, ROUNDED, Box
 from rich.console import Group, RenderableType
 from rich.padding import Padding
 from rich.panel import Panel

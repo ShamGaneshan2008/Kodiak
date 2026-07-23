@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
@@ -36,8 +36,8 @@ class Alert(BaseModel):
     source: str
     fingerprint: str = ""
     context: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     acknowledged_at: datetime | None = None
     escalated_at: datetime | None = None
 
@@ -89,7 +89,7 @@ class AlertManager:
         fingerprint = self.generate_fingerprint(name, source, ctx)
 
         existing = await self._repo.get_by_fingerprint(fingerprint)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         if (
             existing
@@ -129,7 +129,7 @@ class AlertManager:
         if not alert or alert.state != AlertState.ACTIVE:
             return None
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         alert.state = AlertState.ACKNOWLEDGED
         alert.acknowledged_at = now
         alert.updated_at = now
@@ -145,7 +145,7 @@ class AlertManager:
         ):
             return None
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         alert.state = AlertState.ESCALATED
         alert.escalated_at = now
         alert.updated_at = now
@@ -163,7 +163,7 @@ class AlertManager:
             return None
 
         alert.state = AlertState.RESOLVED
-        alert.updated_at = datetime.now(timezone.utc)
+        alert.updated_at = datetime.now(UTC)
 
         logger.info("alert_resolved", alert_id=str(alert_id))
         return await self._repo.update(alert)

@@ -7,16 +7,17 @@ counters, histograms, and gauges used across Kodiak.
 
 from __future__ import annotations
 
+from typing import Any
 
 try:
     from prometheus_client import (
         CONTENT_TYPE_LATEST,
         REGISTRY,
+        CollectorRegistry,
         Counter,
         Gauge,
         Histogram,
         Info,
-        CollectorRegistry,
         generate_latest,
         multiprocess,
     )
@@ -32,23 +33,7 @@ except ImportError:
     multiprocess = None
 
 REQUESTS_TOTAL = (
-    Counter("kodiak_requests_total", "Total API requests")
-    if Counter is not None
-    else None
-)
-
-from typing import Any
-
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    REGISTRY,
-    Counter,
-    Gauge,
-    Histogram,
-    Info,
-    generate_latest,
-    multiprocess,
-    CollectorRegistry,
+    Counter("kodiak_requests_total", "Total API requests") if Counter is not None else None
 )
 
 # ── Application info ──────────────────────────────────────────────────────────
@@ -192,6 +177,7 @@ DB_POOL_CHECKED_OUT = Gauge(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def configure_metrics(settings: Any | None = None) -> None:
     """
     Initialise metrics metadata. Call once at startup.
@@ -231,6 +217,7 @@ def metrics_response() -> tuple[bytes, str]:
         body = generate_latest(REGISTRY)
 
     return body, CONTENT_TYPE_LATEST
+
 
 # ============================================================================
 # Compatibility aliases for BaseAgent

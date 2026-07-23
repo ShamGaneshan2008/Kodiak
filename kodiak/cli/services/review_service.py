@@ -4,8 +4,8 @@ from pathlib import Path
 
 import structlog
 
-from kodiak.agents.review_agent import ReviewAgent
 from kodiak.agents.models.review import ReviewResult
+from kodiak.agents.review_agent import ReviewAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -66,9 +66,7 @@ class ReviewService:
                 path=str(validated_path),
                 error=str(exc),
             )
-            raise ReviewFailedError(
-                f"Repository review failed for path: {validated_path}"
-            ) from exc
+            raise ReviewFailedError(f"Repository review failed for path: {validated_path}") from exc
 
         logger.info("review_service.review_completed", path=str(validated_path))
 
@@ -90,13 +88,9 @@ class ReviewService:
         resolved_path = Path(repository_path).resolve()
 
         if not resolved_path.exists():
-            raise InvalidRepositoryPathError(
-                f"Repository path does not exist: {resolved_path}"
-            )
+            raise InvalidRepositoryPathError(f"Repository path does not exist: {resolved_path}")
 
         if not resolved_path.is_dir():
-            raise InvalidRepositoryPathError(
-                f"Repository path is not a directory: {resolved_path}"
-            )
+            raise InvalidRepositoryPathError(f"Repository path is not a directory: {resolved_path}")
 
         return resolved_path

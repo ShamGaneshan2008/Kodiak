@@ -16,18 +16,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 from pathlib import Path
-from typing import Optional
 
 import structlog
 import typer
 from rich.console import Console, Group
 from rich.markdown import Markdown
-from rich.padding import Padding
 from rich.panel import Panel
-from rich.progress import SpinnerColumn, TextColumn
 from rich.progress import Progress as RichProgress
+from rich.progress import SpinnerColumn, TextColumn
 from rich.table import Table
 from rich.text import Text
 
@@ -84,7 +81,7 @@ _SECTION_SPECS: list[tuple[str, str, str]] = [
 
 @app.callback(invoke_without_command=True)
 def review(
-    diff: Optional[Path] = typer.Option(
+    diff: Path | None = typer.Option(
         None,
         "--diff",
         exists=True,
@@ -92,12 +89,12 @@ def review(
         dir_okay=False,
         help="Review a unified diff read from FILE instead of live Git changes.",
     ),
-    commit: Optional[str] = typer.Option(
+    commit: str | None = typer.Option(
         None,
         "--commit",
         help="Review the changes introduced by a single commit (SHA or ref).",
     ),
-    branch: Optional[str] = typer.Option(
+    branch: str | None = typer.Option(
         None,
         "--branch",
         help="Review changes on BRANCH relative to its merge base with HEAD.",
@@ -107,7 +104,7 @@ def review(
         "--json",
         help="Emit machine-readable JSON instead of a Rich report.",
     ),
-    fail_under: Optional[int] = typer.Option(
+    fail_under: int | None = typer.Option(
         None,
         "--fail-under",
         min=0,
@@ -122,7 +119,9 @@ def review(
     changes). Use --diff, --commit, or --branch to review a specific source
     of changes instead; these are mutually exclusive.
     """
-    selected = [name for name, val in (("--diff", diff), ("--commit", commit), ("--branch", branch)) if val]
+    selected = [
+        name for name, val in (("--diff", diff), ("--commit", commit), ("--branch", branch)) if val
+    ]
     if len(selected) > 1:
         err_console.print(
             f"[bold red]Error:[/bold red] {', '.join(selected)} are mutually exclusive. "
@@ -163,10 +162,7 @@ def review(
 # Helpers
 
 
-
-def _build_target(
-    *, diff: Optional[Path], commit: Optional[str], branch: Optional[str]
-) -> ReviewTarget:
+def _build_target(*, diff: Path | None, commit: str | None, branch: str | None) -> ReviewTarget:
     """Translate CLI flags into a ReviewTarget for the service layer."""
     if diff is not None:
         return ReviewTarget.from_diff_file(diff)
@@ -262,15 +258,23 @@ def _render_section(title: str, findings: list[Finding], empty_message: str) -> 
                 description += f"\n[dim]→ {finding.suggestion}[/dim]"
             table.add_row(Text(icon, style=style), location, description)
         body = table
-        border_style = "red" if any(f.severity in (Severity.CRITICAL, Severity.HIGH) for f in findings) else "yellow"
+        border_style = (
+            "red"
+            if any(f.severity in (Severity.CRITICAL, Severity.HIGH) for f in findings)
+            else "yellow"
+        )
 
-    return Panel(body, title=f"{title} ({len(findings)})", border_style=border_style, padding=(1, 2))
+    return Panel(
+        body, title=f"{title} ({len(findings)})", border_style=border_style, padding=(1, 2)
+    )
 
 
 def _render_suggestions(suggestions: list[str]) -> Panel:
     """Render suggested improvements as a bulleted markdown list."""
     md = "\n".join(f"- {s}" for s in suggestions)
-    return Panel(Markdown(md), title=f"Suggested Improvements ({len(suggestions)})", border_style="magenta")
+    return Panel(
+        Markdown(md), title=f"Suggested Improvements ({len(suggestions)})", border_style="magenta"
+    )
 
 
 def _count_by_severity(result: ReviewResult) -> dict[Severity, int]:

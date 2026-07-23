@@ -9,19 +9,18 @@ the state the single source of truth for a running task.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
-
 
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     """Lifecycle status of a top-level task."""
 
     PENDING = "pending"
@@ -34,7 +33,7 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class StepStatus(str, Enum):
+class StepStatus(StrEnum):
     """Lifecycle status of an individual execution step."""
 
     PENDING = "pending"
@@ -44,7 +43,7 @@ class StepStatus(str, Enum):
     SKIPPED = "skipped"
 
 
-class AgentRole(str, Enum):
+class AgentRole(StrEnum):
     """The functional role of an agent within the orchestration graph."""
 
     SUPERVISOR = "supervisor"
@@ -59,7 +58,7 @@ class AgentRole(str, Enum):
     MEMORY = "memory"
 
 
-class ApprovalStatus(str, Enum):
+class ApprovalStatus(StrEnum):
     """Status of a human-in-the-loop approval request."""
 
     PENDING = "pending"
@@ -81,13 +80,13 @@ class ToolCall(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
     result: Any | None = Field(None, description="Serialisable result returned by the tool.")
     error: str | None = Field(None, description="Error message if the call failed.")
-    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     finished_at: datetime | None = None
     duration_ms: int | None = None
 
     def mark_finished(self, result: Any | None = None, error: str | None = None) -> None:
         """Record the completion time and outcome of this tool call."""
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
         delta = self.finished_at - self.started_at
         self.duration_ms = int(delta.total_seconds() * 1000)
         self.result = result
@@ -117,24 +116,24 @@ class ExecutionStep(BaseModel):
     def start(self) -> None:
         """Transition the step to the running state."""
         self.status = StepStatus.RUNNING
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = datetime.now(UTC)
 
     def complete(self, output: str) -> None:
         """Mark the step as successfully completed."""
         self.status = StepStatus.COMPLETED
         self.output = output
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
 
     def fail(self, error: str) -> None:
         """Mark the step as failed with a reason."""
         self.status = StepStatus.FAILED
         self.error = error
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
 
     def skip(self) -> None:
         """Mark the step as skipped (e.g. dependency failed)."""
         self.status = StepStatus.SKIPPED
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
 
     @property
     def is_terminal(self) -> bool:
@@ -160,7 +159,7 @@ class ApprovalRequest(BaseModel):
         description="Additional information presented to the approver.",
     )
     status: ApprovalStatus = Field(ApprovalStatus.PENDING)
-    requested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    requested_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     resolved_at: datetime | None = None
     resolved_by: str | None = Field(None, description="User ID or system that resolved this.")
     resolution_note: str | None = None
@@ -168,21 +167,21 @@ class ApprovalRequest(BaseModel):
     def approve(self, resolved_by: str, note: str | None = None) -> None:
         """Record an approval decision."""
         self.status = ApprovalStatus.APPROVED
-        self.resolved_at = datetime.now(timezone.utc)
+        self.resolved_at = datetime.now(UTC)
         self.resolved_by = resolved_by
         self.resolution_note = note
 
     def reject(self, resolved_by: str, note: str | None = None) -> None:
         """Record a rejection decision."""
         self.status = ApprovalStatus.REJECTED
-        self.resolved_at = datetime.now(timezone.utc)
+        self.resolved_at = datetime.now(UTC)
         self.resolved_by = resolved_by
         self.resolution_note = note
 
     def timeout(self) -> None:
         """Mark the request as timed out when no human responds in time."""
         self.status = ApprovalStatus.TIMED_OUT
-        self.resolved_at = datetime.now(timezone.utc)
+        self.resolved_at = datetime.now(UTC)
 
 
 class ReflectionEntry(BaseModel):
@@ -202,7 +201,7 @@ class ReflectionEntry(BaseModel):
         le=1.0,
         description="Agent's confidence in the reflection (0 = low, 1 = high).",
     )
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class TokenUsage(BaseModel):
@@ -253,7 +252,7 @@ class TaskState(BaseModel):
 
     # Lifecycle
     status: TaskStatus = Field(TaskStatus.PENDING)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     started_at: datetime | None = None
     finished_at: datetime | None = None
 
@@ -291,9 +290,7 @@ class TaskState(BaseModel):
     result: str | None = Field(
         None, description="Final textual result produced when the task completes."
     )
-    error: str | None = Field(
-        None, description="Top-level error message if the task failed."
-    )
+    error: str | None = Field(None, description="Top-level error message if the task failed.")
 
     # Arbitrary metadata (agent versions, feature flags, etc.)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -308,9 +305,7 @@ class TaskState(BaseModel):
         """Ensure step indices match their position in the list."""
         for i, step in enumerate(steps):
             if step.index != i:
-                raise ValueError(
-                    f"Step at position {i} has index={step.index}; expected {i}."
-                )
+                raise ValueError(f"Step at position {i} has index={step.index}; expected {i}.")
         return steps
 
     # ------------------------------------------------------------------
@@ -320,24 +315,24 @@ class TaskState(BaseModel):
     def start(self) -> None:
         """Transition the task to the running state."""
         self.status = TaskStatus.RUNNING
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = datetime.now(UTC)
 
     def complete(self, result: str) -> None:
         """Mark the task as successfully completed."""
         self.status = TaskStatus.COMPLETED
         self.result = result
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
 
     def fail(self, error: str) -> None:
         """Mark the task as failed."""
         self.status = TaskStatus.FAILED
         self.error = error
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
 
     def cancel(self) -> None:
         """Cancel the task, regardless of current state."""
         self.status = TaskStatus.CANCELLED
-        self.finished_at = datetime.now(timezone.utc)
+        self.finished_at = datetime.now(UTC)
 
     def pause(self) -> None:
         """Pause execution (e.g. waiting for an external signal)."""
@@ -391,7 +386,9 @@ class TaskState(BaseModel):
 
     # --- Approval ---
 
-    def request_approval(self, reason: str, context: dict[str, Any] | None = None) -> ApprovalRequest:
+    def request_approval(
+        self, reason: str, context: dict[str, Any] | None = None
+    ) -> ApprovalRequest:
         """
         Create and register a new approval gate.
 

@@ -1,15 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from math import ceil
-from typing import Generic, Sequence, TypeVar
 
 from pydantic import BaseModel
-from pydantic.generics import GenericModel
-
-T = TypeVar("T")
 
 
-class PaginatedResponse(GenericModel, Generic[T]):
+class PaginatedResponse[T](BaseModel):
     items: list[T]
     total: int
     page: int
@@ -23,7 +20,7 @@ class PaginatedResponse(GenericModel, Generic[T]):
         total: int,
         page: int,
         page_size: int,
-    ) -> "PaginatedResponse[T]":
+    ) -> PaginatedResponse[T]:
         return cls(
             items=list(items),
             total=total,

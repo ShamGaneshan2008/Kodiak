@@ -14,14 +14,15 @@ class GoParser(BaseParser):
 
     def parse(self, path: Path, content: str) -> ParsedFile:
         return ParsedFile(
-            path=str(path), language="go",
+            path=str(path),
+            language="go",
             symbols=self.extract_symbols(content),
             imports=self.extract_imports(content),
             chunks=self.extract_chunks(content, path),
         )
 
     def extract_symbols(self, content: str) -> list[ParsedSymbol]:
-        symbols = []
+        symbols: list[ParsedSymbol] = []
         for match in re.finditer(r"type\s+(\w+)\s+struct\s*\{", content):
             self._add_symbol(symbols, content, match, "struct")
         for match in re.finditer(r"type\s+(\w+)\s+interface\s*\{", content):
@@ -32,12 +33,18 @@ class GoParser(BaseParser):
             self._add_symbol(symbols, content, match, "function")
         return symbols
 
-    def _add_symbol(self, symbols: list[ParsedSymbol], content: str, match: re.Match[str], sym_type: str) -> None:
-        start = content[:match.start()].count('\n') + 1
-        symbols.append(ParsedSymbol(
-            name=match.group(1), symbol_type=sym_type,
-            start_line=start, end_line=start,
-        ))
+    def _add_symbol(
+        self, symbols: list[ParsedSymbol], content: str, match: re.Match[str], sym_type: str
+    ) -> None:
+        start = content[: match.start()].count("\n") + 1
+        symbols.append(
+            ParsedSymbol(
+                name=match.group(1),
+                symbol_type=sym_type,
+                start_line=start,
+                end_line=start,
+            )
+        )
 
     def extract_imports(self, content: str) -> list[str]:
         imports = re.findall(r'import\s+"([^"]+)"', content)
@@ -46,20 +53,24 @@ class GoParser(BaseParser):
         return imports
 
     def extract_chunks(self, content: str, path: Path) -> list[SourceChunk]:
-        chunks = []
+        chunks: list[SourceChunk] = []
         lines = content.splitlines()
         pattern = re.compile(r"^(?:func|type)\s+\w+", re.MULTILINE)
         matches = list(pattern.finditer(content))
         for i, match in enumerate(matches):
-            start_line = content[:match.start()].count('\n') + 1
+            start_line = content[: match.start()].count("\n") + 1
             end_pos = matches[i + 1].start() if i + 1 < len(matches) else len(content)
-            chunk_content = content[match.start():end_pos].strip()
+            chunk_content = content[match.start() : end_pos].strip()
             if chunk_content:
-                end_line = content[:end_pos].count('\n')
-                chunks.append(SourceChunk(
-                    content=chunk_content, start_line=start_line,
-                    end_line=end_line, chunk_type="block",
-                ))
+                end_line = content[:end_pos].count("\n")
+                chunks.append(
+                    SourceChunk(
+                        content=chunk_content,
+                        start_line=start_line,
+                        end_line=end_line,
+                        chunk_type="block",
+                    )
+                )
         if not chunks and content.strip():
             chunks.append(SourceChunk(content=content, start_line=1, end_line=len(lines)))
         return chunks

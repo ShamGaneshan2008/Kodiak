@@ -1,4 +1,3 @@
-
 """CLI configuration management for the Kodiak command-line interface.
 
 This module is responsible solely for locating, loading, saving, and
@@ -11,7 +10,7 @@ from __future__ import annotations
 
 import platform
 import tomllib
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any
 

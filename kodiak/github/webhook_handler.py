@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from kodiak.github.client import GitHubClient, get_client_for_repo
+from kodiak.github.client import get_client_for_repo
 from kodiak.orchestration.reflection_loop import enqueue_revision_request
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,11 @@ async def post_agent_review(
         )
         logger.info(
             "Posted %s review on %s/%s#%s (%d line comments)",
-            result.verdict, repo_owner, repo_name, pr_number, len(result.line_comments),
+            result.verdict,
+            repo_owner,
+            repo_name,
+            pr_number,
+            len(result.line_comments),
         )
         return review
     finally:
@@ -125,7 +129,9 @@ async def handle_review_comment_event(payload: dict[str, Any]) -> None:
 
     logger.info(
         "Routing human review feedback (state=%s) for %s#%s back to reflection loop",
-        state, repo.get("full_name"), pr.get("number"),
+        state,
+        repo.get("full_name"),
+        pr.get("number"),
     )
 
     await enqueue_revision_request(

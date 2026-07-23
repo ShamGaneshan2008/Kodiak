@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
 
-import kodiak.db.models
-
 logger = structlog.get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("starting_kodiak_api")
 
     # Initialize tracing if available
@@ -74,7 +73,6 @@ if middleware_dir.exists():
 routers_dir = Path(__file__).parent / "routers"
 
 for router_file in routers_dir.glob("*.py"):
-
     if router_file.name.startswith("_"):
         continue
 
@@ -106,7 +104,7 @@ for router_file in routers_dir.glob("*.py"):
 
 
 @app.get("/", tags=["system"])
-async def root():
+async def root() -> dict[str, str]:
     return {
         "name": "Kodiak API",
         "status": "running",

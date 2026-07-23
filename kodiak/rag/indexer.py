@@ -12,9 +12,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import AsyncIterator
+from typing import Any
 
 import structlog
 
@@ -27,17 +28,41 @@ logger = structlog.get_logger(__name__)
 
 # Config
 
-IGNORED_EXTENSIONS = {
-    ".pyc", ".pyo", ".pyd", ".so", ".dll", ".exe",
-    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
-    ".lock", ".sum", ".mod",
-    ".min.js", ".min.css",
+
+IGNORED_EXTENSIONS: set[str] = {
+    ".pyc",
+    ".pyo",
+    ".pyd",
+    ".so",
+    ".dll",
+    ".exe",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".ico",
+    ".lock",
+    ".sum",
+    ".mod",
+    ".min.js",
+    ".min.css",
 }
 
-IGNORED_DIRS = {
-    ".git", "__pycache__", "node_modules", ".venv", "venv",
-    "env", "dist", "build", ".mypy_cache", ".pytest_cache",
-    ".tox", "coverage", ".eggs",
+IGNORED_DIRS: set[str] = {
+    ".git",
+    "__pycache__",
+    "node_modules",
+    ".venv",
+    "venv",
+    "env",
+    "dist",
+    "build",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    "coverage",
+    ".eggs",
 }
 
 MAX_FILE_SIZE_BYTES = 512 * 1024  # 512 KB
@@ -71,7 +96,7 @@ class IndexingReport:
             return 0.0
         return self.indexed_files / self.total_files
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "repo_id": self.repo_id,
             "total_files": self.total_files,
@@ -90,7 +115,7 @@ class IndexingReport:
 
 
 class FileHashTracker:
-    def __init__(self):
+    def __init__(self) -> None:
         self._hashes: dict[str, str] = {}
 
     def compute(self, content: str) -> str:
@@ -135,7 +160,7 @@ class Indexer:
         symbol_index: SymbolIndex,
         chunker: Chunker | None = None,
         max_concurrency: int = 8,
-    ):
+    ) -> None:
         self.embedder = embedder
         self.vector_store = vector_store
         self.symbol_index = symbol_index
@@ -175,13 +200,10 @@ class Indexer:
             incremental=incremental,
         )
 
-        tasks = [
-            self._index_file(repo_id, fp, incremental)
-            for fp in files
-        ]
+        tasks = [self._index_file(repo_id, fp, incremental) for fp in files]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for fp, result in zip(files, results):
+        for fp, result in zip(files, results, strict=False):
             if isinstance(result, Exception):
                 report.errors.append(f"{fp}: {result}")
                 report.skipped_files += 1
@@ -231,7 +253,11 @@ class Indexer:
     ) -> FileIndexResult:
         async with self._semaphore:
             try:
-                content = Path(file_path).read_text(encoding="utf-8", errors="replace")
+                content = await asyncio.to_thread(
+                    Path(file_path).read_text,
+                    encoding="utf-8",
+                    errors="replace",
+                )
             except Exception as exc:
                 return FileIndexResult(
                     file_path=file_path,
@@ -239,9 +265,7 @@ class Indexer:
                     skipped=True,
                     reason=f"read_error: {exc}",
                 )
-            return await self._index_content(
-                repo_id, file_path, content, force=not incremental
-            )
+            return await self._index_content(repo_id, file_path, content, force=not incremental)
 
     async def _index_content(
         self,
@@ -295,11 +319,11 @@ class Indexer:
     # File discovery
     # ------------------------------------------------------------------
 
-    def _iter_files(self, root: str) -> AsyncIterator[str]:
+    def _iter_files(self, root: str) -> Iterator[str]:
         """Yield file paths worth indexing under root."""
         from pathlib import Path as P
 
-        def _walk(p: P):
+        def _walk(p: P) -> Iterator[str]:
             for item in p.iterdir():
                 if item.is_dir():
                     if item.name not in IGNORED_DIRS:

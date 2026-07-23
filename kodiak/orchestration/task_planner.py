@@ -35,8 +35,7 @@ class ExecutionPlan(BaseModel):
             "goal": self.goal,
             "execution_order": [str(task_id) for task_id in self.execution_order],
             "parallel_groups": [
-                [str(task_id) for task_id in group]
-                for group in self.parallel_groups
+                [str(task_id) for task_id in group] for group in self.parallel_groups
             ],
             "tasks": [
                 {
@@ -58,9 +57,7 @@ class ExecutionPlan(BaseModel):
 
 
 class TaskPlanner:
-    async def plan(
-        self, goal: str, context: dict[str, Any] | None = None
-    ) -> list[ExecutableTask]:
+    async def plan(self, goal: str, context: dict[str, Any] | None = None) -> list[ExecutableTask]:
         return (await self.plan_execution(goal, context)).tasks
 
     async def plan_execution(
@@ -148,9 +145,7 @@ class TaskPlanner:
             metadata={
                 "source": "planner_agent",
                 "plan_version": planner_plan.get("plan_version", "1.0"),
-                "acceptance_criteria": self._string_list(
-                    planner_plan.get("acceptance_criteria")
-                ),
+                "acceptance_criteria": self._string_list(planner_plan.get("acceptance_criteria")),
                 "repository_files": self._string_list(planner_plan.get("repository_files")),
                 "estimated_dependencies": planner_plan.get("estimated_dependencies", []),
                 "estimated_total_complexity": planner_plan.get(
@@ -172,9 +167,7 @@ class TaskPlanner:
             return self._plan_review(goal, ctx)
         return self._plan_generic(goal, ctx)
 
-    def _plan_implementation(
-        self, goal: str, ctx: dict[str, Any]
-    ) -> list[ExecutableTask]:
+    def _plan_implementation(self, goal: str, ctx: dict[str, Any]) -> list[ExecutableTask]:
         retrieval = ExecutableTask(
             name="retrieve_context",
             agent_type="retrieval",
@@ -217,9 +210,7 @@ class TaskPlanner:
         logger.info("implementation_plan_created", tasks=5)
         return [retrieval, plan, code, test, review]
 
-    def _plan_debugging(
-        self, goal: str, ctx: dict[str, Any]
-    ) -> list[ExecutableTask]:
+    def _plan_debugging(self, goal: str, ctx: dict[str, Any]) -> list[ExecutableTask]:
         retrieval = ExecutableTask(
             name="retrieve_context",
             agent_type="retrieval",
@@ -250,9 +241,7 @@ class TaskPlanner:
         logger.info("debugging_plan_created", tasks=4)
         return [retrieval, debug, fix, test]
 
-    def _plan_review(
-        self, goal: str, ctx: dict[str, Any]
-    ) -> list[ExecutableTask]:
+    def _plan_review(self, goal: str, ctx: dict[str, Any]) -> list[ExecutableTask]:
         retrieval = ExecutableTask(
             name="get_code",
             agent_type="retrieval",
@@ -269,9 +258,7 @@ class TaskPlanner:
         logger.info("review_plan_created", tasks=2)
         return [retrieval, review]
 
-    def _plan_generic(
-        self, goal: str, ctx: dict[str, Any]
-    ) -> list[ExecutableTask]:
+    def _plan_generic(self, goal: str, ctx: dict[str, Any]) -> list[ExecutableTask]:
         retrieval = ExecutableTask(
             name="retrieve_context",
             agent_type="retrieval",
@@ -392,11 +379,7 @@ class TaskPlanner:
         completed: set[uuid.UUID] = set()
         groups: list[list[uuid.UUID]] = []
         while remaining:
-            ready = [
-                task
-                for task in remaining
-                if set(task.dependencies).issubset(completed)
-            ]
+            ready = [task for task in remaining if set(task.dependencies).issubset(completed)]
             if not ready:
                 ready = [remaining[0]]
             groups.append([task.id for task in ready])

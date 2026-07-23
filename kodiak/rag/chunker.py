@@ -9,17 +9,22 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
+ add-type-hints
 from enum import Enum
 from typing import Any,Iterator
+
+from enum import StrEnum
+from typing import Any
+ main
 
 import structlog
 
 logger = structlog.get_logger(__name__)
 
 
-class ChunkType(str, Enum):
+class ChunkType(StrEnum):
     FUNCTION = "function"
     CLASS = "class"
     MODULE = "module"
@@ -54,7 +59,7 @@ class Chunk:
         """Rough token estimate (4 chars ≈ 1 token)."""
         return len(self.content) // 4
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "chunk_id": self.chunk_id,
             "content": self.content,
@@ -73,7 +78,11 @@ class Chunk:
 class PythonASTChunker:
     """AST-aware chunker for Python source files."""
 
+ add-type-hints
     def __init__(self, max_tokens: int = 512, overlap_lines: int = 3) -> None :
+
+    def __init__(self, max_tokens: int = 512, overlap_lines: int = 3) -> None:
+ main
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
 
@@ -99,7 +108,7 @@ class PythonASTChunker:
                     chunks.append(chunk)
 
         # Collect module-level imports as a single chunk
-        import_lines = []
+        import_lines: list[int] = []
         for node in ast.iter_child_nodes(tree):
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 import_lines.append(node.lineno)
@@ -174,21 +183,23 @@ class PythonASTChunker:
         return content[:max_chars] + "\n# ... (truncated)"
 
     def _fallback_chunk(self, source: str, file_path: str) -> list[Chunk]:
-        return LineBasedChunker(
-            max_tokens=self.max_tokens, overlap_lines=self.overlap_lines
-        ).chunk(source, file_path, language="python")
+        return LineBasedChunker(max_tokens=self.max_tokens, overlap_lines=self.overlap_lines).chunk(
+            source, file_path, language="python"
+        )
 
 
 class LineBasedChunker:
     """Generic line-based chunker for any language."""
 
+ add-type-hints
     def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None :
+
+    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None:
+ main
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
 
-    def chunk(
-        self, source: str, file_path: str, language: str = "text"
-    ) -> list[Chunk]:
+    def chunk(self, source: str, file_path: str, language: str = "text") -> list[Chunk]:
         lines = source.splitlines()
         chunks: list[Chunk] = []
         max_chars = self.max_tokens * 4
@@ -217,7 +228,7 @@ class LineBasedChunker:
                 overlap = current_lines[-self.overlap_lines :]
                 current_start = i - self.overlap_lines + 1
                 current_lines = overlap
-                current_chars = sum(len(l) + 1 for l in overlap)
+                current_chars = sum(len(line) + 1 for line in overlap)
 
         # Remaining lines
         if current_lines:
@@ -260,6 +271,7 @@ LANGUAGE_MAP: dict[str, str] = {
 
 def detect_language(file_path: str) -> str:
     import os
+
     ext = os.path.splitext(file_path)[1].lower()
     return LANGUAGE_MAP.get(ext, "text")
 
@@ -269,7 +281,11 @@ class Chunker:
     Main entry point. Dispatches to language-specific chunker.
     """
 
+add-type-hints
     def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None :
+
+    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None:
+ main
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
         self._python = PythonASTChunker(max_tokens=max_tokens, overlap_lines=overlap_lines)

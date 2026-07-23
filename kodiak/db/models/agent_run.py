@@ -14,10 +14,10 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from kodiak.db.base import(KodiakBase, UUIDMixin, TimestampMixin)
+from kodiak.db.base import KodiakBase, TimestampMixin, UUIDMixin
 
 
-class AgentType(str, enum.Enum):
+class AgentType(enum.StrEnum):
     PLANNER = "planner"
     REPOSITORY = "repository"
     RETRIEVAL = "retrieval"
@@ -34,7 +34,7 @@ class AgentType(str, enum.Enum):
     EVALUATION = "evaluation"
 
 
-class RunStatus(str, enum.Enum):
+class RunStatus(enum.StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -62,9 +62,7 @@ class AgentRun(KodiakBase, UUIDMixin, TimestampMixin):
     )
 
     # Agent identity
-    agent_type: Mapped[AgentType] = mapped_column(
-        Enum(AgentType), nullable=False, index=True
-    )
+    agent_type: Mapped[AgentType] = mapped_column(Enum(AgentType), nullable=False, index=True)
     agent_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # LLM details
@@ -78,12 +76,8 @@ class AgentRun(KodiakBase, UUIDMixin, TimestampMixin):
     step_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Timing
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Token / cost
@@ -102,15 +96,12 @@ class AgentRun(KodiakBase, UUIDMixin, TimestampMixin):
     reflection_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
-    task: Mapped["Task"] = relationship(  # noqa: F821
+    task: Mapped[Task] = relationship(  # noqa: F821
         "Task", back_populates="agent_runs", lazy="raise"
     )
-    parent_run: Mapped["AgentRun | None"] = relationship(
+    parent_run: Mapped[AgentRun | None] = relationship(
         "AgentRun", remote_side="AgentRun.id", lazy="raise"
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<AgentRun id={self.id!r} agent={self.agent_type!r} "
-            f"status={self.status!r}>"
-        )
+        return f"<AgentRun id={self.id!r} agent={self.agent_type!r} status={self.status!r}>"

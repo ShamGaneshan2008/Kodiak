@@ -39,14 +39,16 @@ class Reranker:
         raw_scores = await self._provider.score_batch(query, documents)
 
         scored_results: list[RankedResult] = []
-        for result, score in zip(results, raw_scores):
+        for result, score in zip(results, raw_scores, strict=False):
             if score >= self._score_threshold:
-                scored_results.append(RankedResult(
-                    id=str(result.chunk_id),
-                    content=result.content,
-                    score=score,
-                    metadata=result.metadata,
-                ))
+                scored_results.append(
+                    RankedResult(
+                        id=str(result.chunk_id),
+                        content=result.content,
+                        score=score,
+                        metadata=result.metadata,
+                    )
+                )
 
         scored_results.sort(key=lambda x: x.score, reverse=True)
         logger.info(

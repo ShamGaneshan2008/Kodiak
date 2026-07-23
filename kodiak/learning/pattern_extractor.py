@@ -5,7 +5,7 @@ import logging
 import re
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -35,7 +35,7 @@ class ExecutionRecord(BaseModel):
     execution_time_ms: float | None = None
     test_results: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    recorded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    recorded_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class ExtractedPattern(BaseModel):
@@ -168,7 +168,7 @@ class PatternExtractor:
         all_patterns: list[Pattern] = []
         grouped = self._group_by_language(records)
 
-        for language, lang_records in grouped.items():
+        for _language, lang_records in grouped.items():
             cross_patterns = await self._extract_cross_execution_patterns(lang_records)
             for ep in cross_patterns:
                 pattern = self._to_pattern(ep, source_repo=None)
@@ -220,7 +220,8 @@ class PatternExtractor:
                 ExtractedPattern(
                     name=f"Anti-pattern: {label}",
                     description=(
-                        f"Detected {label} associated with execution failure in task {record.task_id}. "
+                        f"Detected {label} associated with execution failure in task "
+                        f"{record.task_id}. "
                         f"Error: {record.error_message or 'unknown'}"
                     ),
                     pattern_type=PatternType.ANTI_PATTERN,
@@ -349,9 +350,15 @@ class PatternExtractor:
             return None
 
         error_map: dict[str, tuple[str, list[str]]] = {
-            "ImportError": ("Missing dependency or incorrect import path", ["import", "dependency"]),
+            "ImportError": (
+                "Missing dependency or incorrect import path",
+                ["import", "dependency"],
+            ),
             "ModuleNotFoundError": ("Module not found at runtime", ["import", "module_missing"]),
-            "AttributeError": ("Attribute access on wrong type or None", ["type_error", "none_check"]),
+            "AttributeError": (
+                "Attribute access on wrong type or None",
+                ["type_error", "none_check"],
+            ),
             "KeyError": ("Unguarded dict key access", ["dict_safety", "key_guard"]),
             "TypeError": ("Type mismatch in function call or operation", ["type_safety"]),
             "asyncio.TimeoutError": ("Unhandled async timeout", ["async", "timeout", "resilience"]),
@@ -389,7 +396,9 @@ class PatternExtractor:
         for record in records:
             if record.outcome != ExecutionOutcome.SUCCESS:
                 continue
-            for signal, label in self._scan_code_signals(record.code_after, self._GOOD_PATTERN_SIGNALS):
+            for _signal, label in self._scan_code_signals(
+                record.code_after, self._GOOD_PATTERN_SIGNALS
+            ):
                 signal_counts[label].append(record.id)
 
         for label, record_ids in signal_counts.items():
@@ -414,9 +423,7 @@ class PatternExtractor:
         return patterns
 
     @staticmethod
-    def _scan_code_signals(
-        code: str, signal_map: dict[str, str]
-    ) -> list[tuple[str, str]]:
+    def _scan_code_signals(code: str, signal_map: dict[str, str]) -> list[tuple[str, str]]:
         found: list[tuple[str, str]] = []
         for pattern, label in signal_map.items():
             if re.search(pattern, code, re.MULTILINE | re.IGNORECASE):
@@ -470,6 +477,10 @@ class PatternExtractor:
             code_template=ep.code_template,
             example_before=ep.example_before,
             example_after=ep.example_after,
-            context={**ep.context, "confidence": ep.confidence, "source_records": ep.source_records},
+            context={
+                **ep.context,
+                "confidence": ep.confidence,
+                "source_records": ep.source_records,
+            },
             source_repo=source_repo,
         )

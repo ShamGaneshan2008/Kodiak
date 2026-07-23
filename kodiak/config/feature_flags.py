@@ -112,9 +112,7 @@ class FeatureFlags:
         if settings.UNLEASH_URL and settings.UNLEASH_API_TOKEN:
             self._setup_unleash(settings)
         else:
-            logger.info(
-                "feature_flags: Unleash not configured, using defaults only"
-            )
+            logger.info("feature_flags: Unleash not configured, using defaults only")
 
         self._ready = True
 
@@ -129,7 +127,9 @@ class FeatureFlags:
             )
             client.initialize_client()
             self._client = client
-            logger.info("feature_flags: Unleash client initialised", extra={"url": settings.UNLEASH_URL})
+            logger.info(
+                "feature_flags: Unleash client initialised", extra={"url": settings.UNLEASH_URL}
+            )
         except ImportError:
             logger.warning(
                 "feature_flags: UnleashClient package not installed; "

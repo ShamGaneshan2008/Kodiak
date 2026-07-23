@@ -18,29 +18,29 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
+from kodiak.db.models.audit_log import AuditLog  # ORM model: id, org_id, actor_id,
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kodiak.db.models.audit_log import AuditLog  # ORM model: id, org_id, actor_id,
-                                                  # actor_type, action, target_type,
-                                                  # target_id, metadata, ip_address,
-                                                  # user_agent, created_at
+# actor_type, action, target_type,
+# target_id, metadata, ip_address,
+# user_agent, created_at
 from kodiak.events.bus import publish
 from kodiak.events.types import EventType
 
 
-class ActorType(str, Enum):
+class ActorType(StrEnum):
     USER = "user"
     API_KEY = "api_key"
     SERVICE = "service"
     AGENT = "agent"  # an autonomous Kodiak agent acted on behalf of an org
 
 
-class AuditAction(str, Enum):
+class AuditAction(StrEnum):
     # Session lifecycle
     LOGIN_SUCCEEDED = "login.succeeded"
     LOGIN_FAILED = "login.failed"
@@ -110,7 +110,7 @@ async def record(
         metadata={**context.metadata, **(metadata or {})},
         ip_address=context.ip_address,
         user_agent=context.user_agent,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(entry)
     await db.flush()  # caller controls the final commit

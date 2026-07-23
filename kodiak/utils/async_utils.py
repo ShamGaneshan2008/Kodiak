@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, Coroutine, TypeVar
+from collections.abc import Coroutine, Sequence
+from typing import Any, TypeVar
 
 import structlog
 
@@ -28,15 +29,14 @@ async def gather_with_limit(
         async with semaphore:
             results[index] = await coro
 
-    tasks = [
-        _bounded_task(i, c) for i, c in enumerate(coros)
-    ]
+    tasks = [_bounded_task(i, c) for i, c in enumerate(coros)]
     await asyncio.gather(*tasks, return_exceptions=True)
     return results
 
 
 async def wait_with_timeout(
-    coro: Coroutine[Any, Any, T], timeout: float
+    coro: Coroutine[Any, Any, T],
+    timeout: float,  # noqa: ASYNC109
 ) -> T:
     """Wait for a coroutine to complete, raising TimeoutError if it exceeds the limit."""
     return await asyncio.wait_for(coro, timeout=timeout)

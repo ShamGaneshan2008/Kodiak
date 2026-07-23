@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -24,7 +24,7 @@ class TraceSpan(BaseModel):
     trace_id: uuid.UUID
     operation_name: str
     status: TraceStatus = TraceStatus.STARTED
-    start_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    start_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
     end_time: datetime | None = None
     duration_ms: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -33,7 +33,7 @@ class TraceSpan(BaseModel):
 class TraceRecord(BaseModel):
     trace_id: uuid.UUID
     spans: list[TraceSpan]
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class TraceManager:
@@ -81,9 +81,7 @@ class TraceManager:
         span_id: uuid.UUID,
         metadata: dict[str, Any] | None = None,
     ) -> TraceSpan | None:
-        return await self._finish_span(
-            trace_id, span_id, TraceStatus.COMPLETED, metadata
-        )
+        return await self._finish_span(trace_id, span_id, TraceStatus.COMPLETED, metadata)
 
     async def fail_span(
         self,
@@ -91,9 +89,7 @@ class TraceManager:
         span_id: uuid.UUID,
         metadata: dict[str, Any] | None = None,
     ) -> TraceSpan | None:
-        return await self._finish_span(
-            trace_id, span_id, TraceStatus.FAILED, metadata
-        )
+        return await self._finish_span(trace_id, span_id, TraceStatus.FAILED, metadata)
 
     async def _finish_span(
         self,
@@ -110,7 +106,7 @@ class TraceManager:
             if span is None:
                 return None
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             duration = (now - span.start_time).total_seconds() * 1000.0
 
             span.status = status

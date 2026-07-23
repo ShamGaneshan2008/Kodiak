@@ -448,7 +448,9 @@ class DependencyGraph:
                 return candidate
         return None
 
-    def _resolve_class_reference(self, current_module: str, reference: str) -> tuple[str, str] | None:
+    def _resolve_class_reference(
+        self, current_module: str, reference: str
+    ) -> tuple[str, str] | None:
         normalized = self._strip_reference_suffix(reference)
         candidates = (
             normalized,

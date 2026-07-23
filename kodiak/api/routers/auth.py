@@ -4,12 +4,12 @@ import uuid
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
-from kodiak.api.schemas.user import RefreshRequest, TokenResponse, UserCreate, UserResponse
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kodiak.api.dependencies import CurrentUser, get_db
+from kodiak.api.schemas.user import RefreshRequest, TokenResponse, UserCreate, UserResponse
 from kodiak.auth.jwt import create_access_token, create_refresh_token, verify_refresh_token
 from kodiak.auth.oauth import exchange_code, fetch_github_user, fetch_primary_email
 from kodiak.db.models.user import User
@@ -100,7 +100,7 @@ async def github_callback(
         logger.warning("github_oauth.failed", error=str(exc))
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="GitHub OAuth failed") from exc
 
-    result = await session.execute(select(User).where(User.github_user_id == gh_user["id"]))
+    result = await session.execute(select(User).where(User.github_user_id == gh_user["id"]))  # type: ignore[attr-defined]
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -117,7 +117,7 @@ async def github_callback(
         session.add(user)
         await session.flush()
     else:
-        user.github_access_token = access_token
+        user.github_access_token = access_token  # type: ignore[attr-defined]
         user.avatar_url = gh_user.get("avatar_url")
 
     return TokenResponse(

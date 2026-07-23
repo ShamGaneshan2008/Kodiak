@@ -49,7 +49,7 @@ class PluginSandbox:
     async def enforce_timeout(self, coro: Any, timeout_secs: float) -> Any:
         try:
             return await asyncio.wait_for(coro, timeout=timeout_secs)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("plugin_execution_timeout", timeout_secs=timeout_secs)
             raise
 
@@ -63,9 +63,7 @@ class PluginSandbox:
         permissions: PluginPermission | None = None,
         timeout_secs: float | None = None,
     ) -> PluginExecutionResult:
-        timeout = (
-            timeout_secs if timeout_secs is not None else self._default_timeout_secs
-        )
+        timeout = timeout_secs if timeout_secs is not None else self._default_timeout_secs
         start_time = time.perf_counter()
 
         try:
@@ -79,7 +77,7 @@ class PluginSandbox:
                 output=output,
                 execution_time_ms=elapsed_ms,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             elapsed_ms = (time.perf_counter() - start_time) * 1000
             return PluginExecutionResult(
                 success=False,
