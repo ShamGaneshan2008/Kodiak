@@ -231,13 +231,9 @@ class Embedder:
             total_tokens=total_tokens,
         )
 
-<<<<<<< HEAD
-        results = []
-        for item, text in zip(response.data, texts, strict=False):
-=======
         results: list[EmbeddingResult] = []
-        for item, text in zip(response.data, texts):
->>>>>>> narasimha/refactor/3-rag-type-hints
+
+        for item, text in zip(response.data, texts, strict=False):
             results.append(
                 EmbeddingResult(
                     text=text,
@@ -246,6 +242,7 @@ class Embedder:
                     token_count=total_tokens // len(texts),
                 )
             )
+
         return results
 
     # ------------------------------------------------------------------

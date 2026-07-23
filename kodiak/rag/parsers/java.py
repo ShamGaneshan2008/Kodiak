@@ -1,3 +1,7 @@
+"""
+Java parser for extracting symbols, imports, and chunks.
+"""
+
 import re
 from pathlib import Path
 
@@ -22,44 +26,56 @@ class JavaParser(BaseParser):
         )
 
     def extract_symbols(self, content: str) -> list[ParsedSymbol]:
-<<<<<<< HEAD
-        symbols = []
+        symbols: list[ParsedSymbol] = []
+
+        # Classes / Interfaces / Enums
         for match in re.finditer(
             r"(?:public|private|protected)?\s*(?:abstract\s+)?(?:class|interface|enum)\s+(\w+)",
             content,
         ):
-=======
-        symbols: list[ParsedSymbol] = []
-        for match in re.finditer(r"(?:public|private|protected)?\s*(?:abstract\s+)?(?:class|interface|enum)\s+(\w+)", content):
->>>>>>> narasimha/refactor/3-rag-type-hints
             self._add_symbol(symbols, content, match, "class")
+
+        # Annotations
         for match in re.finditer(r"(@\w+)", content):
             self._add_symbol(symbols, content, match, "annotation")
+
+        # Methods
         for match in re.finditer(
             r"(?:public|private|protected)?\s*(?:static\s+)?(?:final\s+)?(?:synchronized\s+)?[\w<>\[\]]+\s+(\w+)\s*\([^)]*\)\s*(?:throws\s+[\w,\s]+)?\s*\{",
             content,
         ):
             self._add_symbol(symbols, content, match, "method")
+
+        # Fields
         for match in re.finditer(
             r"(?:public|private|protected)?\s*(?:static\s+)?(?:final\s+)?([\w<>\[\]]+)\s+(\w+)\s*[;=]",
             content,
         ):
             start = content[: match.start()].count("\n") + 1
+
             symbols.append(
                 ParsedSymbol(
                     name=match.group(2),
                     symbol_type="field",
                     start_line=start,
                     end_line=start,
-                    metadata={"field_type": match.group(1)},
+                    metadata={
+                        "field_type": match.group(1),
+                    },
                 )
             )
+
         return symbols
 
     def _add_symbol(
-        self, symbols: list[ParsedSymbol], content: str, match: re.Match[str], sym_type: str
+        self,
+        symbols: list[ParsedSymbol],
+        content: str,
+        match: re.Match[str],
+        sym_type: str,
     ) -> None:
         start = content[: match.start()].count("\n") + 1
+
         symbols.append(
             ParsedSymbol(
                 name=match.group(1),
@@ -70,22 +86,41 @@ class JavaParser(BaseParser):
         )
 
     def extract_imports(self, content: str) -> list[str]:
-        return re.findall(r"import\s+(?:static\s+)?([\w.]+)", content)
+        return re.findall(
+            r"import\s+(?:static\s+)?([\w.]+)",
+            content,
+        )
 
-    def extract_chunks(self, content: str, path: Path) -> list[SourceChunk]:
+    def extract_chunks(
+        self,
+        content: str,
+        path: Path,
+    ) -> list[SourceChunk]:
         chunks: list[SourceChunk] = []
+
         lines = content.splitlines()
+
         pattern = re.compile(
             r"^(?:public|private|protected)?\s*(?:abstract\s+)?(?:class|interface|enum)\s+\w+",
             re.MULTILINE,
         )
+
         matches = list(pattern.finditer(content))
+
         for i, match in enumerate(matches):
             start_line = content[: match.start()].count("\n") + 1
-            end_pos = matches[i + 1].start() if i + 1 < len(matches) else len(content)
+
+            end_pos = (
+                matches[i + 1].start()
+                if i + 1 < len(matches)
+                else len(content)
+            )
+
             chunk_content = content[match.start() : end_pos].strip()
+
             if chunk_content:
                 end_line = content[:end_pos].count("\n")
+
                 chunks.append(
                     SourceChunk(
                         content=chunk_content,
@@ -94,6 +129,15 @@ class JavaParser(BaseParser):
                         chunk_type="class",
                     )
                 )
+
+        # Fallback: entire file as one chunk
         if not chunks and content.strip():
-            chunks.append(SourceChunk(content=content, start_line=1, end_line=len(lines)))
+            chunks.append(
+                SourceChunk(
+                    content=content,
+                    start_line=1,
+                    end_line=len(lines),
+                )
+            )
+
         return chunks
