@@ -40,6 +40,7 @@ dev = [
 rag = [
     "chromadb>=0.5",
     "sentence-transformers>=3.0",
+    "openai>=1.0",
 ]
 security = [
     "bandit>=1.7",

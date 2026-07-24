@@ -11,13 +11,8 @@ import ast
 import hashlib
 from collections.abc import Iterator
 from dataclasses import dataclass, field
- add-type-hints
-from enum import Enum
-from typing import Any,Iterator
-
 from enum import StrEnum
 from typing import Any
- main
 
 import structlog
 
@@ -78,11 +73,7 @@ class Chunk:
 class PythonASTChunker:
     """AST-aware chunker for Python source files."""
 
- add-type-hints
-    def __init__(self, max_tokens: int = 512, overlap_lines: int = 3) -> None :
-
     def __init__(self, max_tokens: int = 512, overlap_lines: int = 3) -> None:
- main
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
 
@@ -191,11 +182,7 @@ class PythonASTChunker:
 class LineBasedChunker:
     """Generic line-based chunker for any language."""
 
- add-type-hints
-    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None :
-
     def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None:
- main
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
 
@@ -281,11 +268,7 @@ class Chunker:
     Main entry point. Dispatches to language-specific chunker.
     """
 
-add-type-hints
-    def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None :
-
     def __init__(self, max_tokens: int = 512, overlap_lines: int = 5) -> None:
- main
         self.max_tokens = max_tokens
         self.overlap_lines = overlap_lines
         self._python = PythonASTChunker(max_tokens=max_tokens, overlap_lines=overlap_lines)

@@ -68,6 +68,46 @@ IGNORED_DIRS: set[str] = {
 MAX_FILE_SIZE_BYTES = 512 * 1024  # 512 KB
 
 
+def _describe_read_error(exc: Exception, file_path: str) -> str:
+    """
+    Turn a raw file-read exception into a message that explains the likely
+    cause and suggests a fix, instead of just the exception's repr.
+
+    Keeps the "read_error:" prefix so callers/tests matching on that
+    substring (as FileIndexResult.reason already did) keep working.
+    """
+    if isinstance(exc, PermissionError):
+        detail = (
+            f"permission denied reading '{file_path}'. Check the file's read "
+            "permissions, or that the indexing process has access to this path."
+        )
+    elif isinstance(exc, FileNotFoundError):
+        detail = (
+            f"'{file_path}' no longer exists. It may have been deleted or renamed "
+            "after the repository was scanned; re-run indexing to pick up the "
+            "current file list."
+        )
+    elif isinstance(exc, IsADirectoryError):
+        detail = (
+            f"'{file_path}' is a directory, not a file. This usually means a "
+            "broken symlink or an unusual filesystem entry was picked up during "
+            "the directory walk."
+        )
+    elif isinstance(exc, UnicodeError):
+        detail = (
+            f"'{file_path}' could not be decoded even with errors='replace'; the "
+            "file may be corrupted or use an unexpected encoding."
+        )
+    elif isinstance(exc, OSError):
+        detail = (
+            f"OS error reading '{file_path}': {exc}. Check disk health and available file handles."
+        )
+    else:
+        detail = f"unexpected error reading '{file_path}': {exc}"
+
+    return f"read_error: {detail}"
+
+
 # Result types
 
 
@@ -139,6 +179,49 @@ class FileHashTracker:
 
 
 # ---------------------------------------------------------------------------
+# Progress reporting
+# ---------------------------------------------------------------------------
+
+
+class _ProgressReporter:
+    """
+    Logs periodic progress for a batch of files being indexed, roughly every
+    `log_every` fraction of the total (10% by default) rather than once per
+    file, so a large repo doesn't flood the logs.
+    """
+
+    def __init__(self, repo_id: str, total: int, log_every: float = 0.1) -> None:
+        self._repo_id = repo_id
+        self._total = total
+        self._log_every = log_every
+        self._done = 0
+        self._last_logged_step = 0
+        self._start = time.perf_counter()
+
+    def tick(self) -> None:
+        self._done += 1
+        if self._total == 0:
+            return
+
+        fraction = self._done / self._total
+        is_final = self._done == self._total
+        # Recomputed fresh each call (not accumulated) to avoid float drift.
+        step = int(fraction / self._log_every + 1e-9)
+        if step <= self._last_logged_step and not is_final:
+            return
+        self._last_logged_step = step
+
+        logger.info(
+            "indexer_progress",
+            repo_id=self._repo_id,
+            files_processed=self._done,
+            total_files=self._total,
+            percent_complete=round(fraction * 100),
+            elapsed_sec=round(time.perf_counter() - self._start, 2),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Indexer
 # ---------------------------------------------------------------------------
 
@@ -200,7 +283,10 @@ class Indexer:
             incremental=incremental,
         )
 
-        tasks = [self._index_file(repo_id, fp, incremental) for fp in files]
+        progress = _ProgressReporter(repo_id=repo_id, total=len(files))
+        tasks = [asyncio.ensure_future(self._index_file(repo_id, fp, incremental)) for fp in files]
+        for task in tasks:
+            task.add_done_callback(lambda _task: progress.tick())
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for fp, result in zip(files, results, strict=False):
@@ -263,7 +349,7 @@ class Indexer:
                     file_path=file_path,
                     chunks=0,
                     skipped=True,
-                    reason=f"read_error: {exc}",
+                    reason=_describe_read_error(exc, file_path),
                 )
             return await self._index_content(repo_id, file_path, content, force=not incremental)
 
