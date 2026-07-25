@@ -338,9 +338,21 @@ class Indexer:
         incremental: bool,
     ) -> FileIndexResult:
         async with self._semaphore:
+            path = Path(file_path)
+
+            # Explicitly reject directories before attempting to read them.
+            # This keeps behavior consistent across operating systems.
+            if await asyncio.to_thread(path.is_dir):
+                return FileIndexResult(
+                    file_path=file_path,
+                    chunks=0,
+                    skipped=True,
+                    reason="directory, not a file",
+                )
+
             try:
                 content = await asyncio.to_thread(
-                    Path(file_path).read_text,
+                    path.read_text,
                     encoding="utf-8",
                     errors="replace",
                 )
@@ -351,7 +363,13 @@ class Indexer:
                     skipped=True,
                     reason=_describe_read_error(exc, file_path),
                 )
-            return await self._index_content(repo_id, file_path, content, force=not incremental)
+
+            return await self._index_content(
+                repo_id,
+                file_path,
+                content,
+                force=not incremental,
+            )
 
     async def _index_content(
         self,

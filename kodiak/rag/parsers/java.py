@@ -110,11 +110,7 @@ class JavaParser(BaseParser):
         for i, match in enumerate(matches):
             start_line = content[: match.start()].count("\n") + 1
 
-            end_pos = (
-                matches[i + 1].start()
-                if i + 1 < len(matches)
-                else len(content)
-            )
+            end_pos = matches[i + 1].start() if i + 1 < len(matches) else len(content)
 
             chunk_content = content[match.start() : end_pos].strip()
 

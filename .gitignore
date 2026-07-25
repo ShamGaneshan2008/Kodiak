@@ -12,3 +12,6 @@ build/
 .venv/
 .idea/workspace.xml
 .aider*
+.venv312/
+coverage.xml
+reports/

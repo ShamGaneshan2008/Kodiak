@@ -80,7 +80,7 @@ jobs:
             uv-${{ runner.os }}-${{ matrix.python-version }}-
 
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev]"
+        run: uv pip install --system -e ".[dev,rag]"
 
       - name: Run unit tests
         run: |

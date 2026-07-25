@@ -96,7 +96,10 @@ def test_unrecognized_exception_falls_back_without_crashing():
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
-@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file permission bits")
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root ignores file permission bits",
+)
 async def test_permission_denied_file_is_skipped_with_descriptive_reason(tmp_path):
     unreadable = tmp_path / "unreadable.py"
     unreadable.write_text("def foo():\n    return 1\n")

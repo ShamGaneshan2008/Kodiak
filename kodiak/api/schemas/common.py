@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from math import ceil
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
+
 
 class PaginatedResponse[T](BaseModel):
     model_config = ConfigDict(from_attributes=True)

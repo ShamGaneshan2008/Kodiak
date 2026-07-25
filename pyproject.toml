@@ -28,6 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
@@ -37,11 +38,13 @@ dev = [
     "mypy>=1.10",
     "pre-commit>=3.7",
 ]
+
 rag = [
     "chromadb>=0.5",
     "sentence-transformers>=3.0",
     "openai>=1.0",
 ]
+
 security = [
     "bandit>=1.7",
 ]
