@@ -159,7 +159,7 @@ jobs:
           version: ${{ env.UV_VERSION }}
 
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev]"
+        run: uv pip install --system -e ".[dev,rag]"
 
       - name: Run database migrations
         run: alembic upgrade head
