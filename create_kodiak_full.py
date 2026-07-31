@@ -169,7 +169,7 @@ files = [
     "kodiak/events/publishers.py",
     "kodiak/plugins/loader.py",
     "kodiak/plugins/registry.py",
-    "kodiak/plugins/interface.py",
+    "kodiak/plugins/interfaces.py",
     "kodiak/plugins/sandbox.py",
     "kodiak/learning/feedback_collector.py",
     "kodiak/learning/pattern_extractor.py",
