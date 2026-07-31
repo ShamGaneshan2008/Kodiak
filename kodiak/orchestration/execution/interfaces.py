@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from kodiak.db.models.task import Task, TaskStatus
-from kodiak.execution.models import AgentManagerResult, ExecutionContext
+from kodiak.orchestration.execution.models import AgentManagerResult, ExecutionContext
 
 
 @runtime_checkable
