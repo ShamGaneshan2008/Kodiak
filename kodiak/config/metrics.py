@@ -105,7 +105,26 @@ ACTIVE_AGENT_TASKS = Gauge(
     ["agent_type"],
 )
 
-# ── RAG / retrieval metrics ───────────────────────────────────────────────────
+AGENT_SELECTIONS_TOTAL = Counter(
+    "kodiak_agent_selections_total",
+    "Total agent selection attempts",
+    ["strategy", "fallback"],
+)
+
+AGENT_SELECTION_DURATION_SECONDS = Histogram(
+    "kodiak_agent_selection_duration_seconds",
+    "Agent selection latency",
+    ["strategy"],
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
+)
+
+AGENT_REGISTRATIONS_TOTAL = Counter(
+    "kodiak_agent_registrations_total",
+    "Total agent registrations",
+    ["action"],  # action: register, unregister, enable, disable
+)
+
+# ── RAG / retrieval metrics ──────────────────────────────
 RAG_RETRIEVALS_TOTAL = Counter(
     "kodiak_rag_retrievals_total",
     "Total RAG retrieval operations",
