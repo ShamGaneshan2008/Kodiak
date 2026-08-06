@@ -1,3 +1,6 @@
+# kodiak/memory/consolidation.py
+"""Memory Consolidation background process for transferring working memory to long-term stores."""
+
 from __future__ import annotations
 
 import uuid
@@ -8,10 +11,24 @@ from typing import Any, Protocol, runtime_checkable
 import structlog
 from pydantic import BaseModel, Field
 
+from .procedural import ProcedureStep
+
 logger = structlog.get_logger(__name__)
+
+__all__ = [
+    "ConsolidationStatus",
+    "ConsolidationResult",
+    "WorkingMemoryReader",
+    "EpisodicMemoryWriter",
+    "SemanticMemoryWriter",
+    "ProceduralMemoryWriter",
+    "MemoryConsolidator",
+]
 
 
 class ConsolidationStatus(StrEnum):
+    """Lifecycle status for a memory consolidation job."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -19,6 +36,8 @@ class ConsolidationStatus(StrEnum):
 
 
 class ConsolidationResult(BaseModel):
+    """Result summary of consolidating a completed working memory task."""
+
     task_id: uuid.UUID
     status: ConsolidationStatus
     episodes_created: int = 0
@@ -30,25 +49,57 @@ class ConsolidationResult(BaseModel):
 
 @runtime_checkable
 class WorkingMemoryReader(Protocol):
+    """Protocol for reading unconsolidated task working memories."""
+
     async def get_unconsolidated_tasks(self, limit: int) -> list[dict[str, Any]]: ...
 
 
 @runtime_checkable
 class EpisodicMemoryWriter(Protocol):
-    async def create_episode(self, data: dict[str, Any]) -> uuid.UUID: ...
+    """Protocol for writing extracted episodes to long-term memory."""
+
+    async def create_episode(
+        self,
+        goal: str,
+        outcome: str,
+        task_id: uuid.UUID | None = None,
+        context: dict[str, Any] | None = None,
+        steps: list[str] | None = None,
+        embedding: list[float] | None = None,
+    ) -> Any: ...
 
 
 @runtime_checkable
 class SemanticMemoryWriter(Protocol):
-    async def store_fact(self, data: dict[str, Any]) -> uuid.UUID: ...
+    """Protocol for writing extracted facts to long-term memory."""
+
+    async def store_fact(
+        self,
+        content: str,
+        category: str = "general",
+        source_task_id: uuid.UUID | None = None,
+        confidence: float = 1.0,
+        embedding: list[float] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> Any: ...
 
 
 @runtime_checkable
 class ProceduralMemoryWriter(Protocol):
-    async def create_procedure(self, data: dict[str, Any]) -> uuid.UUID: ...
+    """Protocol for writing extracted procedures to long-term memory."""
+
+    async def create_procedure(
+        self,
+        name: str,
+        description: str,
+        steps: list[ProcedureStep],
+        tags: list[str] | None = None,
+    ) -> Any: ...
 
 
 class MemoryConsolidator:
+    """Consolidates working memory entries into episodic, semantic, and procedural memories."""
+
     def __init__(
         self,
         working_memory: WorkingMemoryReader,
@@ -56,12 +107,28 @@ class MemoryConsolidator:
         semantic_memory: SemanticMemoryWriter,
         procedural_memory: ProceduralMemoryWriter,
     ) -> None:
+        """Initialize MemoryConsolidator.
+
+        Args:
+            working_memory: WorkingMemoryReader component.
+            episodic_memory: EpisodicMemoryWriter component.
+            semantic_memory: SemanticMemoryWriter component.
+            procedural_memory: ProceduralMemoryWriter component.
+        """
         self._working = working_memory
         self._episodic = episodic_memory
         self._semantic = semantic_memory
         self._procedural = procedural_memory
 
     async def run_pending_consolidations(self, limit: int = 50) -> list[ConsolidationResult]:
+        """Fetch and consolidate all pending completed or abandoned task working memories.
+
+        Args:
+            limit: Maximum task records to consolidate in batch.
+
+        Returns:
+            List of ConsolidationResult summaries.
+        """
         tasks = await self._working.get_unconsolidated_tasks(limit)
         if not tasks:
             return []
@@ -70,10 +137,11 @@ class MemoryConsolidator:
         results: list[ConsolidationResult] = []
 
         for task in tasks:
-            task_id = task.get("id")
-            if not task_id:
+            task_id_raw = task.get("id") or task.get("task_id")
+            if not task_id_raw:
                 continue
-            result = await self.consolidate_task(uuid.UUID(task_id), task)
+            task_id = uuid.UUID(str(task_id_raw)) if not isinstance(task_id_raw, uuid.UUID) else task_id_raw
+            result = await self.consolidate_task(task_id, task)
             results.append(result)
 
         completed = sum(1 for r in results if r.status == ConsolidationStatus.COMPLETED)
@@ -88,11 +156,20 @@ class MemoryConsolidator:
     async def consolidate_task(
         self, task_id: uuid.UUID, task_data: dict[str, Any]
     ) -> ConsolidationResult:
+        """Consolidate single task memory.
+
+        Args:
+            task_id: Task UUID.
+            task_data: Dictionary of task memory properties.
+
+        Returns:
+            ConsolidationResult details.
+        """
         result = ConsolidationResult(task_id=task_id, status=ConsolidationStatus.PROCESSING)
         try:
-            result.episodes_created = await self._extract_episodic(task_data)
-            result.facts_stored = await self._extract_semantic(task_data)
-            result.procedures_created = await self._extract_procedural(task_data)
+            result.episodes_created = await self._extract_episodic(task_id, task_data)
+            result.facts_stored = await self._extract_semantic(task_id, task_data)
+            result.procedures_created = await self._extract_procedural(task_id, task_data)
             result.status = ConsolidationStatus.COMPLETED
         except Exception as e:
             logger.exception("task_consolidation_failed", task_id=str(task_id))
@@ -100,56 +177,97 @@ class MemoryConsolidator:
             result.error = str(e)
         return result
 
-    async def _extract_episodic(self, task_data: dict[str, Any]) -> int:
-        outcome = task_data.get("outcome")
+    async def _extract_episodic(self, task_id: uuid.UUID, task_data: dict[str, Any]) -> int:
+        outcome = task_data.get("outcome") or task_data.get("status")
         if not outcome:
             return 0
-        episode_data = {
-            "task_id": task_data.get("id"),
-            "goal": task_data.get("goal", ""),
-            "context": task_data.get("context", {}),
-            "outcome": outcome,
-            "timestamp": task_data.get("completed_at"),
-        }
-        await self._episodic.create_episode(episode_data)
-        logger.debug("episodic_memory_extracted", task_id=task_data.get("id"))
+
+        goal = str(task_data.get("goal", ""))
+        context = dict(task_data.get("context") or {})
+        steps_raw = task_data.get("steps") or task_data.get("steps_taken") or []
+        steps = [str(s) for s in steps_raw]
+
+        await self._episodic.create_episode(
+            goal=goal,
+            outcome=str(outcome),
+            task_id=task_id,
+            context=context,
+            steps=steps,
+        )
+        logger.debug("episodic_memory_extracted", task_id=str(task_id))
         return 1
 
-    async def _extract_semantic(self, task_data: dict[str, Any]) -> int:
-        learnings = task_data.get("learnings") or task_data.get("facts")
+    async def _extract_semantic(self, task_id: uuid.UUID, task_data: dict[str, Any]) -> int:
+        scratchpad = task_data.get("scratchpad") if isinstance(task_data.get("scratchpad"), dict) else {}
+        learnings = (
+            task_data.get("learnings")
+            or task_data.get("facts")
+            or scratchpad.get("learnings")
+            or scratchpad.get("facts")
+        )
         if not learnings or not isinstance(learnings, list):
             return 0
+
+        category = str(task_data.get("domain") or task_data.get("category") or "general")
         count = 0
         for fact in learnings:
             if not isinstance(fact, str):
                 continue
-            fact_data = {
-                "content": fact,
-                "source_task_id": task_data.get("id"),
-                "domain": task_data.get("domain", "general"),
-            }
-            await self._semantic.store_fact(fact_data)
+            await self._semantic.store_fact(
+                content=fact,
+                category=category,
+                source_task_id=task_id,
+            )
             count += 1
+
         if count > 0:
             logger.debug(
                 "semantic_memory_extracted",
-                task_id=task_data.get("id"),
+                task_id=str(task_id),
                 count=count,
             )
         return count
 
-    async def _extract_procedural(self, task_data: dict[str, Any]) -> int:
-        if task_data.get("outcome") != "success":
+    async def _extract_procedural(self, task_id: uuid.UUID, task_data: dict[str, Any]) -> int:
+        outcome = str(task_data.get("outcome", "")).lower()
+        if outcome not in ("success", "completed") and task_data.get("status") != "completed":
             return 0
-        steps = task_data.get("steps_taken") or task_data.get("actions")
-        if not steps or not isinstance(steps, list):
+
+        steps_raw = task_data.get("steps_taken") or task_data.get("actions") or task_data.get("steps")
+        if not steps_raw or not isinstance(steps_raw, list):
             return 0
-        procedure_data = {
-            "name": task_data.get("goal", "Unnamed Procedure"),
-            "description": f"Auto-extracted from task {task_data.get('id')}",
-            "steps": steps,
-            "tags": task_data.get("tags", []),
-        }
-        await self._procedural.create_procedure(procedure_data)
-        logger.debug("procedural_memory_extracted", task_id=task_data.get("id"))
+
+        steps_list: list[ProcedureStep] = []
+        for i, step in enumerate(steps_raw):
+            if isinstance(step, ProcedureStep):
+                steps_list.append(step)
+            elif isinstance(step, dict):
+                steps_list.append(
+                    ProcedureStep(
+                        step_number=step.get("step_number", i + 1),
+                        action=str(step.get("action", "")),
+                        tool_name=step.get("tool_name"),
+                        parameters=dict(step.get("parameters") or {}),
+                        expected_outcome=step.get("expected_outcome"),
+                    )
+                )
+            else:
+                steps_list.append(
+                    ProcedureStep(
+                        step_number=i + 1,
+                        action=str(step),
+                    )
+                )
+
+        name = str(task_data.get("goal", "Extracted Procedure"))[:80]
+        description = f"Auto-extracted procedure from task {task_id}"
+        tags = [str(t) for t in task_data.get("tags", [])]
+
+        await self._procedural.create_procedure(
+            name=name,
+            description=description,
+            steps=steps_list,
+            tags=tags,
+        )
+        logger.debug("procedural_memory_extracted", task_id=str(task_id))
         return 1
