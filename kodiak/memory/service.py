@@ -1,18 +1,27 @@
 # kodiak/memory/service.py
-"""Unified facade over Kodiak's episodic, semantic, and procedural memories."""
+"""Unified facade over Kodiak's Working, Short-Term, Episodic, Semantic, and Procedural Memory systems."""
 
 from __future__ import annotations
 
 import uuid
-from typing import Any, Final
+from pathlib import Path
+from typing import Any, Final, Sequence
 
 import structlog
 
-from .episodic import Episode
+from .consolidation import ConsolidationResult, MemoryConsolidator
+from .context import MemoryContextBuilder
+from .episodic import Episode, EpisodicMemory
 from .errors import MemoryNotFoundError, MemoryServiceError
+from .long_term import LongTermMemory
 from .models import Memory, MemoryType, SearchResult
-from .procedural import Procedure, ProcedureStep
-from .semantic import SemanticEntity
+from .persistence import JSONFileMemoryPersistence
+from .procedural import ProceduralMemory, Procedure, ProcedureStep
+from .ranking import MemoryRanker
+from .retrieval import MemoryRetriever
+from .semantic import SemanticEntity, SemanticMemory
+from .short_term import ShortTermMemory, ShortTermMemoryItem
+from .working import WorkingMemory, WorkingMemoryItem
 
 logger = structlog.get_logger(__name__)
 
@@ -23,18 +32,76 @@ _DEFAULT_LIST_LIMIT: Final[int] = 100
 
 
 class MemoryService:
-    """Unified CRUD and search interface over Kodiak's memory models.
+    """Master facade and Dependency Injection container for the Kodiak Memory System.
 
-    The repository contains domain models for episodic, semantic, and
-    procedural memory, but no concrete repository implementations. This service
-    therefore owns the in-process stores directly instead of requiring
-    repository objects that do not exist in the project.
+    Unifies Working Memory, Short-Term Memory, Long-Term Memory (Episodic,
+    Semantic, Procedural), Retrieval, Ranking, Context Building, Persistence,
+    and Consolidation into a clean, async-first API.
     """
 
-    def __init__(self) -> None:
-        self._episodes: dict[uuid.UUID, Episode] = {}
-        self._entities: dict[uuid.UUID, SemanticEntity] = {}
-        self._procedures: dict[uuid.UUID, Procedure] = {}
+    def __init__(
+        self,
+        working: WorkingMemory | None = None,
+        short_term: ShortTermMemory | None = None,
+        episodic: EpisodicMemory | None = None,
+        semantic: SemanticMemory | None = None,
+        procedural: ProceduralMemory | None = None,
+        long_term: LongTermMemory | None = None,
+        ranker: MemoryRanker | None = None,
+        retriever: MemoryRetriever | None = None,
+        context_builder: MemoryContextBuilder | None = None,
+        consolidator: MemoryConsolidator | None = None,
+        persistence_path: str | Path | None = None,
+    ) -> None:
+        """Initialize MemoryService.
+
+        Args:
+            working: WorkingMemory component instance.
+            short_term: ShortTermMemory component instance.
+            episodic: EpisodicMemory component instance.
+            semantic: SemanticMemory component instance.
+            procedural: ProceduralMemory component instance.
+            long_term: LongTermMemory composite component.
+            ranker: MemoryRanker scoring engine.
+            retriever: MemoryRetriever concurrent retriever.
+            context_builder: MemoryContextBuilder context formatting component.
+            consolidator: MemoryConsolidator task consolidation worker.
+            persistence_path: File path for JSON disk persistence driver.
+        """
+        self.working = working or WorkingMemory()
+        self.short_term = short_term or ShortTermMemory()
+        self.episodic = episodic or EpisodicMemory()
+        self.semantic = semantic or SemanticMemory()
+        self.procedural = procedural or ProceduralMemory()
+
+        self.long_term = long_term or LongTermMemory(
+            episodic=self.episodic,
+            semantic=self.semantic,
+            procedural=self.procedural,
+        )
+
+        self.ranker = ranker or MemoryRanker()
+        self.retriever = retriever or MemoryRetriever(
+            working=self.working,
+            short_term=self.short_term,
+            long_term=self.long_term,
+            ranker=self.ranker,
+        )
+        self.context_builder = context_builder or MemoryContextBuilder(
+            retriever=self.retriever
+        )
+        self.consolidator = consolidator or MemoryConsolidator(
+            working_memory=self.working,
+            episodic_memory=self.episodic,
+            semantic_memory=self.semantic,
+            procedural_memory=self.procedural,
+        )
+
+        self.persistence = (
+            JSONFileMemoryPersistence(persistence_path) if persistence_path else None
+        )
+
+    # Core CLI and Facade CRUD Operations
 
     async def add(
         self,
@@ -43,53 +110,47 @@ class MemoryService:
         tags: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Memory:
-        """Add a new memory record."""
+        """Add a new memory record.
+
+        Args:
+            content: Main text content to store.
+            memory_type: Type of memory store (EPISODIC, SEMANTIC, PROCEDURAL, WORKING, SHORT_TERM).
+            tags: Filter or labeling tags.
+            metadata: Additional metadata key-value dictionary.
+
+        Returns:
+            Normalized Memory instance.
+        """
         tags = tags or []
         metadata = metadata or {}
 
         try:
-            if memory_type is MemoryType.EPISODIC:
-                episode = Episode(
+            if memory_type is MemoryType.WORKING:
+                task_id = self._coerce_uuid(metadata.get("task_id")) or uuid.uuid4()
+                item = await self.working.create_working_memory(
+                    task_id=task_id,
                     goal=content,
-                    outcome=str(metadata.get("outcome", "")),
-                    task_id=self._coerce_uuid(metadata.get("task_id")),
                     context=dict(metadata.get("context") or {}),
-                    steps=[str(step) for step in metadata.get("steps", [])],
                 )
-                self._episodes[episode.id] = episode
-                logger.info("episode_created", episode_id=str(episode.id))
-                return self._episode_to_memory(episode)
+                return self.working.to_memory(item)
 
-            if memory_type is MemoryType.PROCEDURAL:
-                raw_steps = metadata.get("steps") or [content]
-                steps = [
-                    ProcedureStep(step_number=i + 1, action=str(step))
-                    for i, step in enumerate(raw_steps)
-                ]
-                procedure = Procedure(
-                    name=str(metadata.get("name", content[:80])),
-                    description=content,
-                    steps=steps,
-                    tags=tags,
+            if memory_type is MemoryType.SHORT_TERM:
+                session_id = str(metadata.get("session_id", "default"))
+                role = str(metadata.get("role", "user"))
+                item = await self.short_term.add_item(
+                    session_id=session_id,
+                    content=content,
+                    role=role,
+                    metadata=metadata,
                 )
-                self._procedures[procedure.id] = procedure
-                logger.info("procedure_created", procedure_id=str(procedure.id))
-                return self._procedure_to_memory(procedure)
+                return self.short_term.to_memory(item)
 
-            entity = SemanticEntity(
+            return await self.long_term.add_memory(
                 content=content,
-                category=str(metadata.get("category", "general")),
-                source_task_id=self._coerce_uuid(metadata.get("source_task_id")),
-                confidence=float(metadata.get("confidence", 1.0)),
-                metadata={
-                    str(key): str(value)
-                    for key, value in metadata.items()
-                    if key not in {"category", "source_task_id", "confidence"}
-                },
+                memory_type=memory_type,
+                tags=tags,
+                metadata=metadata,
             )
-            self._entities[entity.id] = entity
-            logger.info("fact_stored", entity_id=str(entity.id))
-            return self._semantic_to_memory(entity)
         except Exception as exc:
             logger.exception("memory_add_failed", memory_type=str(memory_type))
             raise MemoryServiceError(f"Failed to add {memory_type} memory") from exc
@@ -101,42 +162,32 @@ class MemoryService:
         limit: int = _DEFAULT_SEARCH_LIMIT,
         tags: list[str] | None = None,
     ) -> list[SearchResult]:
-        """Search across one or all memory stores."""
-        wanted_tags = set(tags or [])
-        results: list[SearchResult] = []
+        """Search memories across requested store(s).
 
-        if memory_type in (None, MemoryType.EPISODIC):
-            for episode in self._episodes.values():
-                memory = self._episode_to_memory(episode)
-                if self._matches_tags(memory, wanted_tags):
-                    score = self._score(query, episode.goal, episode.outcome, *episode.steps)
-                    if score > 0:
-                        results.append(SearchResult(memory=memory, relevance_score=score))
+        Args:
+            query: Natural language query string.
+            memory_type: Optional scope to specific MemoryType.
+            limit: Maximum items to return.
+            tags: Filter by tag labels.
 
-        if memory_type in (None, MemoryType.SEMANTIC):
-            for entity in self._entities.values():
-                memory = self._semantic_to_memory(entity)
-                if self._matches_tags(memory, wanted_tags):
-                    score = self._score(query, entity.content, entity.category)
-                    if score > 0:
-                        results.append(SearchResult(memory=memory, relevance_score=score))
+        Returns:
+            List of SearchResult items ranked by relevance.
+        """
+        if memory_type in (None, MemoryType.EPISODIC, MemoryType.SEMANTIC, MemoryType.PROCEDURAL):
+            return await self.long_term.search(
+                query=query,
+                memory_type=memory_type,
+                limit=limit,
+                tags=tags,
+            )
 
-        if memory_type in (None, MemoryType.PROCEDURAL):
-            for procedure in self._procedures.values():
-                memory = self._procedure_to_memory(procedure)
-                if self._matches_tags(memory, wanted_tags):
-                    score = self._score(
-                        query,
-                        procedure.name,
-                        procedure.description,
-                        *procedure.tags,
-                        *(step.action for step in procedure.steps),
-                    )
-                    if score > 0:
-                        results.append(SearchResult(memory=memory, relevance_score=score))
-
-        results.sort(key=lambda r: r.relevance_score, reverse=True)
-        return results[:limit]
+        memory_types = [memory_type] if memory_type else None
+        return await self.retriever.retrieve(
+            query=query,
+            memory_types=memory_types,
+            tags=tags,
+            limit=limit,
+        )
 
     async def list(
         self,
@@ -145,20 +196,34 @@ class MemoryService:
         limit: int = _DEFAULT_LIST_LIMIT,
         offset: int = 0,
     ) -> list[Memory]:
-        """List memories, optionally filtered by store and tags."""
+        """List memories across stores.
+
+        Args:
+            memory_type: Optional scope to MemoryType.
+            tags: Filter by tag labels.
+            limit: Maximum items to return.
+            offset: Offset index for pagination.
+
+        Returns:
+            List of Memory models.
+        """
         memories: list[Memory] = []
 
-        if memory_type in (None, MemoryType.EPISODIC):
-            memories.extend(self._episode_to_memory(e) for e in self._episodes.values())
+        if memory_type in (None, MemoryType.WORKING):
+            working_items = await self.working.list_working_memories(limit=limit)
+            memories.extend(self.working.to_memory(w) for w in working_items)
 
-        if memory_type in (None, MemoryType.SEMANTIC):
-            memories.extend(self._semantic_to_memory(e) for e in self._entities.values())
-
-        if memory_type in (None, MemoryType.PROCEDURAL):
-            memories.extend(self._procedure_to_memory(p) for p in self._procedures.values())
+        if memory_type in (None, MemoryType.EPISODIC, MemoryType.SEMANTIC, MemoryType.PROCEDURAL):
+            lt_memories = await self.long_term.list_memories(
+                memory_type=memory_type,
+                tags=tags,
+                limit=limit,
+                offset=offset,
+            )
+            memories.extend(lt_memories)
 
         wanted = set(tags or [])
-        memories = [m for m in memories if self._matches_tags(m, wanted)]
+        memories = [m for m in memories if not wanted or bool(wanted & set(m.tags))]
         memories.sort(key=lambda m: m.created_at, reverse=True)
         return memories[offset : offset + limit]
 
@@ -167,74 +232,171 @@ class MemoryService:
         memory_id: uuid.UUID | str,
         memory_type: MemoryType | None = None,
     ) -> bool:
-        """Delete a single memory by id."""
+        """Delete a single memory record by ID.
+
+        Args:
+            memory_id: UUID or string identifier of memory.
+            memory_type: Optional memory type hint.
+
+        Returns:
+            True if memory was located and deleted.
+
+        Raises:
+            MemoryNotFoundError: If memory record could not be located.
+        """
         parsed_id = self._coerce_uuid(memory_id)
         if parsed_id is None:
-            raise MemoryNotFoundError(
-                str(memory_id), memory_type=str(memory_type) if memory_type else None
-            )
+            raise MemoryNotFoundError(str(memory_id), memory_type=str(memory_type) if memory_type else None)
 
-        if memory_type in (None, MemoryType.EPISODIC) and self._episodes.pop(parsed_id, None):
-            logger.info(
-                "memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.EPISODIC)
-            )
-            return True
+        if memory_type in (None, MemoryType.WORKING):
+            if await self.working.delete_working_memory(parsed_id):
+                return True
 
-        if memory_type in (None, MemoryType.SEMANTIC) and self._entities.pop(parsed_id, None):
-            logger.info(
-                "memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.SEMANTIC)
-            )
-            return True
+        if memory_type in (None, MemoryType.EPISODIC, MemoryType.SEMANTIC, MemoryType.PROCEDURAL):
+            try:
+                if await self.long_term.delete(parsed_id, memory_type=memory_type):
+                    return True
+            except MemoryNotFoundError:
+                pass
 
-        if memory_type in (None, MemoryType.PROCEDURAL) and self._procedures.pop(parsed_id, None):
-            logger.info(
-                "memory_deleted", memory_id=str(parsed_id), memory_type=str(MemoryType.PROCEDURAL)
-            )
-            return True
-
-        raise MemoryNotFoundError(
-            str(memory_id), memory_type=str(memory_type) if memory_type else None
-        )
+        raise MemoryNotFoundError(str(memory_id), memory_type=str(memory_type) if memory_type else None)
 
     async def delete_by_tags(
         self,
         tags: list[str],
         memory_type: MemoryType | None = None,
     ) -> int:
-        """Delete every memory matching any of the given tags."""
-        if not tags:
-            return 0
+        """Delete memories matching any of the given tags.
 
-        wanted = set(tags)
-        deleted_count = 0
+        Args:
+            tags: List of target tags.
+            memory_type: Optional memory type filter.
 
-        if memory_type in (None, MemoryType.SEMANTIC):
-            for entity_id, entity in list(self._entities.items()):
-                if entity.category in wanted:
-                    del self._entities[entity_id]
-                    deleted_count += 1
+        Returns:
+            Number of deleted memory records.
+        """
+        return await self.long_term.delete_by_tags(tags, memory_type=memory_type)
 
-        if memory_type in (None, MemoryType.PROCEDURAL):
-            for procedure_id, procedure in list(self._procedures.items()):
-                if wanted & set(procedure.tags):
-                    del self._procedures[procedure_id]
-                    deleted_count += 1
+    # Retrieval, Context, Consolidation, and Persistence Operations
 
-        logger.info("memories_deleted_by_tags", tags=tags, count=deleted_count)
-        return deleted_count
+    async def retrieve(
+        self,
+        query: str,
+        session_id: str | None = None,
+        task_id: uuid.UUID | None = None,
+        memory_types: Sequence[MemoryType] | None = None,
+        tags: Sequence[str] | None = None,
+        limit: int = 10,
+    ) -> list[SearchResult]:
+        """Perform unified retrieval across all memory systems.
 
-    @staticmethod
-    def _matches_tags(memory: Memory, tags: set[str]) -> bool:
-        return not tags or bool(tags & set(memory.tags))
+        Args:
+            query: Query text string.
+            session_id: Session ID string.
+            task_id: Task UUID.
+            memory_types: Target memory types.
+            tags: Filter tags.
+            limit: Maximum items to return.
 
-    @staticmethod
-    def _score(query: str, *parts: str) -> float:
-        text = " ".join(part for part in parts if part).lower()
-        terms = [term for term in query.lower().split() if term]
-        if not terms:
-            return 1.0
-        matches = sum(1 for term in terms if term in text)
-        return matches / len(terms)
+        Returns:
+            List of SearchResult objects.
+        """
+        return await self.retriever.retrieve(
+            query=query,
+            session_id=session_id,
+            task_id=task_id,
+            memory_types=memory_types,
+            tags=tags,
+            limit=limit,
+        )
+
+    async def build_context(
+        self,
+        query: str,
+        session_id: str | None = None,
+        task_id: uuid.UUID | None = None,
+        working_memory_item: WorkingMemoryItem | None = None,
+        short_term_items: Sequence[ShortTermMemoryItem] | None = None,
+        token_budget: int | None = None,
+    ) -> str:
+        """Build token-budgeted prompt context for LLMs.
+
+        Args:
+            query: Retrieval query.
+            session_id: Session ID string.
+            task_id: Task UUID.
+            working_memory_item: Active working memory item.
+            short_term_items: Explicit short-term items list.
+            token_budget: Token limit integer.
+
+        Returns:
+            Formatted Markdown context string.
+        """
+        return await self.context_builder.build_context(
+            query=query,
+            session_id=session_id,
+            task_id=task_id,
+            working_memory_item=working_memory_item,
+            short_term_items=short_term_items,
+            token_budget=token_budget,
+        )
+
+    async def consolidate(self, limit: int = 50) -> list[ConsolidationResult]:
+        """Run pending working memory consolidation jobs.
+
+        Args:
+            limit: Maximum tasks to consolidate.
+
+        Returns:
+            List of ConsolidationResult summaries.
+        """
+        return await self.consolidator.run_pending_consolidations(limit=limit)
+
+    async def save_to_disk(self, file_path: str | Path | None = None) -> None:
+        """Save memory states to disk via JSON file persistence.
+
+        Args:
+            file_path: Optional destination path override.
+        """
+        persistence = (
+            JSONFileMemoryPersistence(file_path) if file_path else self.persistence
+        )
+        if persistence is None:
+            raise MemoryServiceError("No persistence file path configured")
+
+        working_items = await self.working.list_working_memories(limit=10000)
+        episodes = await self.episodic.get_recent_episodes(limit=10000)
+        facts = await self.semantic.list_facts(limit=10000)
+        procedures = await self.procedural.list_procedures(limit=10000)
+
+        await persistence.save(
+            working_items=working_items,
+            episodes=episodes,
+            semantic_entities=facts,
+            procedures=procedures,
+        )
+
+    async def load_from_disk(self, file_path: str | Path | None = None) -> None:
+        """Load memory states from disk via JSON file persistence.
+
+        Args:
+            file_path: Optional source path override.
+        """
+        persistence = (
+            JSONFileMemoryPersistence(file_path) if file_path else self.persistence
+        )
+        if persistence is None:
+            raise MemoryServiceError("No persistence file path configured")
+
+        data = await persistence.load()
+        for wi in data.get("working_items", []):
+            await self.working._repo.create(wi)
+        for ep in data.get("episodes", []):
+            await self.episodic._repo.create(ep)
+        for se in data.get("semantic_entities", []):
+            await self.semantic._repo.create(se)
+        for pr in data.get("procedures", []):
+            await self.procedural._repo.create(pr)
 
     @staticmethod
     def _coerce_uuid(value: Any) -> uuid.UUID | None:
@@ -243,53 +405,3 @@ class MemoryService:
         if isinstance(value, uuid.UUID):
             return value
         return uuid.UUID(str(value))
-
-    @staticmethod
-    def _episode_to_memory(episode: Episode) -> Memory:
-        return Memory(
-            id=episode.id,
-            type=MemoryType.EPISODIC,
-            title=episode.goal,
-            content=episode.outcome,
-            tags=[],
-            metadata={
-                "context": episode.context,
-                "steps": episode.steps,
-                "task_id": str(episode.task_id) if episode.task_id else None,
-            },
-            confidence=episode.significance,
-            created_at=episode.created_at,
-        )
-
-    @staticmethod
-    def _semantic_to_memory(entity: SemanticEntity) -> Memory:
-        return Memory(
-            id=entity.id,
-            type=MemoryType.SEMANTIC,
-            title=entity.content[:80],
-            content=entity.content,
-            tags=[entity.category] if entity.category else [],
-            metadata=dict(entity.metadata),
-            confidence=entity.confidence,
-            created_at=entity.created_at,
-            updated_at=entity.updated_at,
-        )
-
-    @staticmethod
-    def _procedure_to_memory(procedure: Procedure) -> Memory:
-        return Memory(
-            id=procedure.id,
-            type=MemoryType.PROCEDURAL,
-            title=procedure.name,
-            content=procedure.description,
-            tags=list(procedure.tags),
-            metadata={
-                "steps": [s.action for s in procedure.steps],
-                "success_count": procedure.success_count,
-                "failure_count": procedure.failure_count,
-                "success_rate": procedure.success_rate,
-            },
-            confidence=procedure.success_rate,
-            created_at=procedure.created_at,
-            updated_at=procedure.updated_at,
-        )
