@@ -12,7 +12,7 @@ It intentionally does not:
 - handle retries
 - manage infrastructure
 
-Those responsibilities belong to AgentManager and ExecutionEngine.
+Those responsibilities belong to AgentManager and ExecutionEnfrom .base import Agentgine.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import asyncio
 
 import structlog
 
-from .base import Agent
+
 
 logger = structlog.get_logger(__name__)
 
