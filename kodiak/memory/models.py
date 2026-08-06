@@ -16,6 +16,8 @@ __all__ = ["MemoryType", "Memory", "SearchResult"]
 class MemoryType(StrEnum):
     """Which underlying memory store a `Memory` record originated from."""
 
+    WORKING = "working"
+    SHORT_TERM = "short_term"
     EPISODIC = "episodic"
     SEMANTIC = "semantic"
     PROCEDURAL = "procedural"
