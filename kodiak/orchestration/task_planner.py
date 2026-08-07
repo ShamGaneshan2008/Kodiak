@@ -21,6 +21,15 @@ class ExecutableTask(BaseModel):
     files_to_inspect: list[str] = Field(default_factory=list)
     parallel_group: str | None = None
     can_run_parallel: bool = False
+    description: str = ""
+    priority: str = "medium"
+    priority_score: float = 0.0
+    estimated_complexity: str = "medium"
+    estimated_duration: float = 0.0
+    confidence_score: float = 1.0
+    parent_id: uuid.UUID | None = None
+    subtask_ids: list[uuid.UUID] = Field(default_factory=list)
+    status: str = "pending"
 
 
 class ExecutionPlan(BaseModel):
@@ -29,6 +38,11 @@ class ExecutionPlan(BaseModel):
     execution_order: list[uuid.UUID]
     parallel_groups: list[list[uuid.UUID]]
     metadata: dict[str, Any] = Field(default_factory=dict)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    requires_architecture_review: bool = False
+    estimated_total_complexity: str = "medium"
+    estimated_total_duration: float = 0.0
+    validation_result: dict[str, Any] | None = None
 
     def machine_readable(self) -> dict[str, Any]:
         return {
@@ -49,14 +63,31 @@ class ExecutionPlan(BaseModel):
                     "parallel_group": task.parallel_group,
                     "can_run_parallel": task.can_run_parallel,
                     "input_data": task.input_data,
+                    "description": task.description,
+                    "priority": task.priority,
+                    "priority_score": task.priority_score,
+                    "estimated_complexity": task.estimated_complexity,
+                    "estimated_duration": task.estimated_duration,
+                    "confidence_score": task.confidence_score,
+                    "parent_id": str(task.parent_id) if task.parent_id else None,
+                    "subtask_ids": [str(sid) for sid in task.subtask_ids],
+                    "status": task.status,
                 }
                 for task in self.tasks
             ],
             "metadata": self.metadata,
+            "acceptance_criteria": self.acceptance_criteria,
+            "requires_architecture_review": self.requires_architecture_review,
+            "estimated_total_complexity": self.estimated_total_complexity,
+            "estimated_total_duration": self.estimated_total_duration,
+            "validation_result": self.validation_result,
         }
 
 
 class TaskPlanner:
+    def __init__(self, pipeline: Any | None = None) -> None:
+        self._pipeline = pipeline
+
     async def plan(self, goal: str, context: dict[str, Any] | None = None) -> list[ExecutableTask]:
         return (await self.plan_execution(goal, context)).tasks
 
@@ -65,19 +96,12 @@ class TaskPlanner:
         goal: str,
         context: dict[str, Any] | None = None,
     ) -> ExecutionPlan:
-        ctx = context or {}
-        planner_plan = self._extract_planner_plan(ctx)
-        if planner_plan is not None:
-            return self._plan_from_planner_output(goal, planner_plan, ctx)
+        if self._pipeline is not None:
+            return await self._pipeline.plan(goal, context)
 
-        tasks = self._legacy_tasks(goal, ctx)
-        return ExecutionPlan(
-            goal=goal,
-            tasks=tasks,
-            execution_order=[task.id for task in tasks],
-            parallel_groups=self._parallel_groups_from_tasks(tasks),
-            metadata={"source": "heuristic"},
-        )
+        from kodiak.orchestration.planning.pipeline import PlanningPipeline
+
+        return await PlanningPipeline().plan(goal, context)
 
     def _plan_from_planner_output(
         self,
