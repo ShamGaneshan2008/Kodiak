@@ -27,18 +27,25 @@ import asyncio
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
 import structlog
 
+from kodiak.agents import selector as agent_selector
+from kodiak.agents.registry import (
+    AgentAlreadyRegisteredError as RegistryAgentAlreadyRegisteredError,
+)
+from kodiak.agents.registry import (
+    AgentNotFoundError as RegistryAgentNotFoundError,
+)
+from kodiak.agents.registry import AgentRegistry
 from kodiak.config.metrics import (
+    ACTIVE_AGENT_TASKS,
     AGENT_SELECTIONS_TOTAL,
     AGENT_TASK_DURATION_SECONDS,
     AGENT_TASKS_TOTAL,
-    ACTIVE_AGENT_TASKS,
 )
-from kodiak.db.models.task import TaskPriority
+from kodiak.db.models.task import Task, TaskPriority
 from kodiak.orchestration.execution.interfaces import AgentManager as AgentManagerProtocol
 from kodiak.orchestration.execution.models import AgentManagerResult, ExecutionContext
 
@@ -63,60 +70,11 @@ __all__ = [
 ]
 
 
-class AgentHealthStatus(StrEnum):
-    """Health status of an agent."""
-
-    HEALTHY = "healthy"
-    UNHEALTHY = "unhealthy"
-    UNKNOWN = "unknown"
-
-
-class AgentSelectionStrategy(StrEnum):
-    """Strategy for selecting an agent."""
-
-    CAPABILITY_BASED = "capability_based"
-    WEIGHTED_RANKING = "weighted_ranking"
-    HEALTH_AWARE = "health_aware"
-    FALLBACK = "fallback"
-    DETERMINISTIC = "deterministic"
-
-
-@dataclass(frozen=True)
-class AgentScore:
-    """Score calculated for an agent during selection."""
-
-    agent_name: str
-    total_score: float
-    capability_score: float
-    health_score: float
-    load_score: float
-    priority_score: float
-    confidence_score: float
-    is_available: bool
-    health_status: AgentHealthStatus
-    raw_metrics: dict[str, float | int | str] = field(default_factory=dict)
-
-
-@dataclass(slots=True)
-class SelectionContext:
-    """Context passed to the selection engine."""
-
-    required_capabilities: frozenset[str]
-    priority: TaskPriority
-    attempt: int
-    fallback_allowed: bool
-    health_check_required: bool
-    task_id: str | None = None
-
-
-@dataclass(frozen=True)
-class SelectionResult:
-    """Result of agent selection."""
-
-    selected_agent_name: str
-    is_fallback: bool
-    scores: tuple[AgentScore, ...]
-    selection_strategy: AgentSelectionStrategy
+AgentHealthStatus = agent_selector.AgentHealthStatus
+AgentSelectionStrategy = agent_selector.AgentSelectionStrategy
+AgentScore = agent_selector.AgentScore
+SelectionContext = agent_selector.SelectionContext
+SelectionResult = agent_selector.SelectionResult
 
 
 @runtime_checkable
@@ -235,235 +193,6 @@ class _AgentEntry:
     health_status: AgentHealthStatus = AgentHealthStatus.UNKNOWN
 
 
-class AgentSelectionEngine:
-    """Intelligent agent selection engine with multiple strategies.
-
-    Provides capability-based routing, priority-based routing, confidence
-    scoring, weighted ranking, fallback routing, and health-aware routing.
-
-    Args:
-        default_timeout_seconds: Maximum time for selection before timeout.
-    """
-
-    def __init__(self, default_timeout_seconds: float = 5.0) -> None:
-        self._default_timeout_seconds = default_timeout_seconds
-        self._logger = logger.bind(component="selection_engine")
-
-    async def select(
-        self,
-        candidates: list[tuple[str, _AgentEntry]],
-        context: SelectionContext,
-        *,
-        timeout_seconds: float | None = None,
-    ) -> SelectionResult:
-        """Select the best agent from candidates using intelligent scoring.
-
-        Implements multi-criteria scoring with weighted ranking.
-
-        Args:
-            candidates: List of (agent_name, entry) tuples from registry.
-            context: Selection context with requirements.
-            timeout_seconds: Optional timeout for selection.
-
-        Returns:
-            SelectionResult with the chosen agent and score details.
-
-        Raises:
-            NoSuitableAgentError: If no agent matches requirements.
-            SelectionTimeoutError: If selection takes too long.
-        """
-        timeout = timeout_seconds or self._default_timeout_seconds
-
-        selected: AgentScore | None = None
-        scores: list[AgentScore] = []
-        strategy = AgentSelectionStrategy.CAPABILITY_BASED
-        is_fallback = False
-
-        try:
-            await asyncio.wait_for(
-                self._compute_scores(candidates, context, scores),
-                timeout=timeout,
-            )
-        except asyncio.TimeoutError:
-            self._logger.warning(
-                "agent_selection_timeout",
-                timeout_seconds=timeout,
-                candidate_count=len(candidates),
-            )
-            raise SelectionTimeoutError(
-                f"Agent selection timed out after {timeout}s"
-            ) from None
-
-        # Filter out unavailable agents
-        available_scores = [s for s in scores if s.is_available and s.health_status != AgentHealthStatus.UNHEALTHY]
-
-        # If no available agents, try fallback
-        if not available_scores:
-            if context.fallback_allowed:
-                is_fallback = True
-                strategy = AgentSelectionStrategy.FALLBACK
-                # Include unhealthy agents as fallback
-                available_scores = [s for s in scores if s.agent_name]
-                if not available_scores:
-                    raise NoSuitableAgentError(
-                        f"No agents available for task {context.task_id or 'unknown'}"
-                    )
-            else:
-                raise NoSuitableAgentError(
-                    f"No healthy agents available for task {context.task_id or 'unknown'}"
-                )
-
-        if not available_scores:
-            raise NoSuitableAgentError(
-                f"No agents match capabilities {sorted(context.required_capabilities)}"
-            )
-
-        # Find best score
-        available_scores.sort(key=lambda s: s.total_score, reverse=True)
-        selected = available_scores[0]
-
-        self._logger.debug(
-            "agent_selected",
-            agent_name=selected.agent_name,
-            strategy=strategy.value,
-            total_score=selected.total_score,
-            capability_score=selected.capability_score,
-        )
-
-        # Record metrics
-        AGENT_SELECTIONS_TOTAL.labels(
-            strategy=strategy.value,
-            fallback=str(is_fallback).lower(),
-        ).inc()
-
-        return SelectionResult(
-            selected_agent_name=selected.agent_name,
-            is_fallback=is_fallback,
-            scores=tuple(scores),
-            selection_strategy=strategy,
-        )
-
-    async def _compute_scores(
-        self,
-        candidates: list[tuple[str, _AgentEntry]],
-        context: SelectionContext,
-        scores: list[AgentScore],
-    ) -> None:
-        """Compute scores for all candidate agents."""
-        for agent_name, entry in candidates:
-            score = self._score_agent(agent_name, entry, context)
-            scores.append(score)
-
-    def _score_agent(
-        self,
-        agent_name: str,
-        entry: _AgentEntry,
-        context: SelectionContext,
-    ) -> AgentScore:
-        """Calculate a composite score for an agent.
-
-        Scoring components (weights sum to 1.0):
-        - capability_score: 0.4 - Matches required capabilities
-        - health_score: 0.25 - Health status and recent failures
-        - load_score: 0.2 - Current in-flight count vs capacity
-        - priority_score: 0.1 - Priority alignment
-        - confidence_score: 0.05 - Historical success rate
-        """
-        # Capability score: ratio of matched capabilities
-        cap_overlap = len(entry.agent.capabilities & context.required_capabilities)
-        if context.required_capabilities:
-            capability_score = cap_overlap / len(context.required_capabilities)
-        else:
-            capability_score = 1.0 if entry.agent.capabilities else 0.5
-
-        # Health score: 1.0 = healthy, 0.0 = unhealthy, 0.5 = unknown
-        if not entry.enabled:
-            health_status = AgentHealthStatus.UNHEALTHY
-            health_score = 0.0
-        elif entry.health_status == AgentHealthStatus.HEALTHY:
-            health_score = 1.0
-        elif entry.health_status == AgentHealthStatus.UNHEALTHY:
-            health_score = 0.0
-        else:
-            health_score = 0.5
-            health_status = AgentHealthStatus.UNKNOWN
-
-        # Load score: lower is better (inverse of in-flight ratio)
-        capacity = 10  # Default capacity, could be configurable
-        load_ratio = entry.in_flight / max(capacity, 1)
-        load_score = max(0.0, 1.0 - load_ratio)
-
-        # Priority score: match priority level
-        priority_score = self._compute_priority_score(entry.agent, context.priority)
-
-        # Confidence score: success rate
-        confidence_score = entry.metrics.success_rate
-
-        # Check availability
-        is_available = entry.enabled and health_status != AgentHealthStatus.UNHEALTHY
-
-        # Weighted total
-        weights = {
-            "capability": 0.4,
-            "health": 0.25,
-            "load": 0.2,
-            "priority": 0.1,
-            "confidence": 0.05,
-        }
-
-        total_score = (
-            capability_score * weights["capability"]
-            + health_score * weights["health"]
-            + load_score * weights["load"]
-            + priority_score * weights["priority"]
-            + confidence_score * weights["confidence"]
-        )
-
-        # Zero out score if capabilities don't match
-        if context.required_capabilities and capability_score == 0:
-            total_score = 0.0
-            is_available = False
-
-        return AgentScore(
-            agent_name=agent_name,
-            total_score=total_score,
-            capability_score=capability_score,
-            health_score=health_score,
-            load_score=load_score,
-            priority_score=priority_score,
-            confidence_score=confidence_score,
-            is_available=is_available,
-            health_status=health_status,
-            raw_metrics={
-                "in_flight": entry.in_flight,
-                "total_executions": entry.metrics.total_executions,
-                "success_rate": entry.metrics.success_rate,
-            },
-        )
-
-    def _compute_priority_score(self, agent: Agent, task_priority: TaskPriority) -> float:
-        """Compute priority alignment score."""
-        # Map agent name prefixes to priorities (could be extended)
-        priority_mapping = {
-            "planner": TaskPriority.HIGH,
-            "coder": TaskPriority.HIGH,
-            "reviewer": TaskPriority.MEDIUM,
-            "tester": TaskPriority.MEDIUM,
-            "debugger": TaskPriority.HIGH,
-            "memory": TaskPriority.LOW,
-            "learning": TaskPriority.LOW,
-            "evaluation": TaskPriority.MEDIUM,
-        }
-
-        agent_priority = priority_mapping.get(agent.name, TaskPriority.MEDIUM)
-
-        if agent_priority == task_priority:
-            return 1.0
-        if abs(agent_priority.value - task_priority.value) == 1:
-            return 0.7
-        return 0.3
-
-
 class AgentManager(AgentManagerProtocol):
     """Registers, selects, and dispatches agents on behalf of the ExecutionEngine.
 
@@ -486,15 +215,18 @@ class AgentManager(AgentManagerProtocol):
         max_concurrent_executions: int = 10,
         clock: Callable[[], float] = time.monotonic,
         selection_timeout_seconds: float = 5.0,
+        registry: AgentRegistry | None = None,
+        selector: agent_selector.AgentSelector | None = None,
     ) -> None:
         self._entries: dict[str, _AgentEntry] = {}
         self._registry_lock = asyncio.Lock()
+        self._registry = registry or AgentRegistry()
         self._execution_semaphore = asyncio.Semaphore(max_concurrent_executions)
         self._clock = clock
         self._logger = logger.bind(component="agent_manager")
-        self._selection_engine = AgentSelectionEngine(
-            default_timeout_seconds=selection_timeout_seconds
-        )
+        self._selector = selector or agent_selector.AgentSelector()
+        self._selection_timeout_seconds = selection_timeout_seconds
+        self._last_selection: agent_selector.SelectionResult | None = None
 
     async def register(self, agent: Agent) -> None:
         """Register an agent, making it available for selection and execution.
@@ -507,17 +239,29 @@ class AgentManager(AgentManagerProtocol):
             AgentAlreadyRegisteredError: If an agent with the same name is
                 already registered.
         """
+        agent_name = self._agent_name(agent)
+        agent_id = self._agent_id(agent)
+        capabilities = self._agent_capabilities(agent)
         async with self._registry_lock:
-            if agent.name in self._entries:
-                self._logger.warning("agent_registration_conflict", agent_name=agent.name)
+            if agent_id in self._entries:
+                self._logger.warning("agent_registration_conflict", agent_name=agent_id)
                 raise AgentAlreadyRegisteredError(
-                    f"Agent {agent.name!r} is already registered."
+                    f"Agent {agent_id!r} is already registered."
                 )
-            self._entries[agent.name] = _AgentEntry(agent=agent)
+            try:
+                await self._registry.register(
+                    agent_id,
+                    instance=agent,
+                    name=agent_name,
+                    capabilities=sorted(capabilities),
+                )
+            except RegistryAgentAlreadyRegisteredError as exc:
+                raise AgentAlreadyRegisteredError(str(exc)) from exc
+            self._entries[agent_id] = _AgentEntry(agent=agent)
             self._logger.info(
                 "agent_registered",
-                agent_name=agent.name,
-                capabilities=sorted(agent.capabilities),
+                agent_name=agent_id,
+                capabilities=sorted(capabilities),
             )
 
     async def unregister(self, agent_name: str) -> None:
@@ -533,6 +277,7 @@ class AgentManager(AgentManagerProtocol):
             if agent_name not in self._entries:
                 raise AgentNotFoundError(f"Agent {agent_name!r} is not registered.")
             del self._entries[agent_name]
+            await self._registry.unregister(agent_name)
             self._logger.info("agent_unregistered", agent_name=agent_name)
 
     async def get(self, agent_name: str) -> Agent:
@@ -547,11 +292,10 @@ class AgentManager(AgentManagerProtocol):
         Raises:
             AgentNotFoundError: If no agent with that name is registered.
         """
-        async with self._registry_lock:
-            entry = self._entries.get(agent_name)
-            if entry is None:
-                raise AgentNotFoundError(f"Agent {agent_name!r} is not registered.")
-            return entry.agent
+        try:
+            return await self._registry.get(agent_name)  # type: ignore[return-value]
+        except RegistryAgentNotFoundError as exc:
+            raise AgentNotFoundError(f"Agent {agent_name!r} is not registered.") from exc
 
     async def list_agents(self) -> list[Agent]:
         """List all currently registered agents.
@@ -560,7 +304,8 @@ class AgentManager(AgentManagerProtocol):
             A snapshot list of registered agent instances.
         """
         async with self._registry_lock:
-            return [entry.agent for entry in self._entries.values()]
+            names = sorted(self._entries)
+        return [await self.get(name) for name in names]
 
     async def select_agent(self, task: AgentTask) -> Agent:
         """Select the best registered agent for a given task.
@@ -576,43 +321,42 @@ class AgentManager(AgentManagerProtocol):
         Raises:
             NoSuitableAgentError: If no registered agent can handle the task.
         """
-        required_capabilities = frozenset(getattr(task, "required_capabilities", ()) or ())
-
-        async with self._registry_lock:
-            candidates = list(self._entries.items())
+        context = self._selection_context(task)
+        candidates = await self._selection_candidates()
 
         if not candidates:
             raise NoSuitableAgentError(
                 f"No agents are registered to handle task {task.task_id!r}."
             )
 
-        # Build selection context
-        context = SelectionContext(
-            required_capabilities=required_capabilities,
-            priority=getattr(task, "priority", TaskPriority.MEDIUM),
-            attempt=getattr(task, "attempt", 1),
-            fallback_allowed=getattr(task, "allow_fallback", True),
-            health_check_required=getattr(task, "health_check_required", False),
-            task_id=task.task_id,
-        )
-
         try:
-            result = await self._selection_engine.select(candidates, context)
-            agent_name = result.selected_agent_name
+            result = await asyncio.wait_for(
+                asyncio.to_thread(self._selector.select, context, candidates),
+                timeout=self._selection_timeout_seconds,
+            )
+            agent_name = result.selected_agent_id
+            self._last_selection = result
 
             self._logger.debug(
                 "agent_selected",
                 task_id=task.task_id,
                 agent_name=agent_name,
                 strategy=result.selection_strategy.value,
-                is_fallback=result.is_fallback,
+                score=result.selected_score,
+                reason=result.reason,
             )
+            AGENT_SELECTIONS_TOTAL.labels(
+                strategy=result.selection_strategy.value,
+                fallback="false",
+            ).inc()
 
             return await self.get(agent_name)
-        except SelectionTimeoutError:
+        except TimeoutError:
             raise NoSuitableAgentError(
                 f"Agent selection timed out for task {task.task_id!r}."
             ) from None
+        except agent_selector.NoSuitableAgentError as exc:
+            raise NoSuitableAgentError(str(exc)) from exc
 
     async def execute(
         self,
@@ -642,14 +386,19 @@ class AgentManager(AgentManagerProtocol):
             NoSuitableAgentError: If no agent can be selected for the task.
         """
         agent = await self.get(agent_name) if agent_name else await self.select_agent(task)
+        selected_agent_name = self._agent_id(agent)
 
         async with self._registry_lock:
-            entry = self._entries[agent.name]
+            entry = self._entries[selected_agent_name]
             entry.in_flight += 1
-            ACTIVE_AGENT_TASKS.labels(agent_type=agent.name).inc()
+            ACTIVE_AGENT_TASKS.labels(agent_type=selected_agent_name).inc()
 
         start = self._clock()
-        log = self._logger.bind(task_id=task.task_id, agent_name=agent.name, attempt=attempt)
+        log = self._logger.bind(
+            task_id=task.task_id,
+            agent_name=selected_agent_name,
+            attempt=attempt,
+        )
         log.info("agent_execution_started")
 
         try:
@@ -658,12 +407,20 @@ class AgentManager(AgentManagerProtocol):
                     output = await agent.execute(task)
                 except asyncio.CancelledError:
                     duration = self._clock() - start
-                    await self._record_outcome(agent.name, success=False, duration=duration)
+                    await self._record_outcome(
+                        selected_agent_name,
+                        success=False,
+                        duration=duration,
+                    )
                     log.warning("agent_execution_cancelled", duration_seconds=duration)
                     raise
                 except Exception as exc:  # noqa: BLE001 - outcome is reported, not swallowed
                     duration = self._clock() - start
-                    await self._record_outcome(agent.name, success=False, duration=duration)
+                    await self._record_outcome(
+                        selected_agent_name,
+                        success=False,
+                        duration=duration,
+                    )
                     is_retryable = bool(getattr(exc, "retryable", True))
                     log.error(
                         "agent_execution_failed",
@@ -672,32 +429,23 @@ class AgentManager(AgentManagerProtocol):
                         error_type=type(exc).__name__,
                         is_retryable=is_retryable,
                     )
-                    return AgentManagerResult(
-                        success=False,
-                        agent_name=agent.name,
-                        task_id=task.task_id,
-                        error=exc,
-                        is_retryable=is_retryable,
-                        duration_seconds=duration,
-                        attempt=attempt,
-                    )
+                    if is_retryable:
+                        raise
+                    raise RuntimeError(str(exc)) from exc
                 else:
                     duration = self._clock() - start
-                    await self._record_outcome(agent.name, success=True, duration=duration)
+                    await self._record_outcome(selected_agent_name, success=True, duration=duration)
                     log.info("agent_execution_succeeded", duration_seconds=duration)
+                    payload = output if isinstance(output, dict) else {"output": output}
                     return AgentManagerResult(
-                        success=True,
-                        agent_name=agent.name,
-                        task_id=task.task_id,
-                        output=output,
-                        is_retryable=False,
-                        duration_seconds=duration,
-                        attempt=attempt,
+                        output=payload,
+                        tokens_used=self._tokens_used(output),
+                        cost_usd=getattr(output, "cost_usd", None),
                     )
         finally:
             async with self._registry_lock:
                 entry.in_flight -= 1
-                ACTIVE_AGENT_TASKS.labels(agent_type=agent.name).dec()
+                ACTIVE_AGENT_TASKS.labels(agent_type=selected_agent_name).dec()
 
     async def _record_outcome(self, agent_name: str, *, success: bool, duration: float) -> None:
         """Update stored execution metrics for an agent following an attempt.
@@ -777,7 +525,9 @@ class AgentManager(AgentManagerProtocol):
             entry = self._entries.get(agent_name)
             if entry is None:
                 raise AgentNotFoundError(f"Agent {agent_name!r} is not registered.")
-            entry.health_status = AgentHealthStatus.HEALTHY if healthy else AgentHealthStatus.UNHEALTHY
+            entry.health_status = (
+                AgentHealthStatus.HEALTHY if healthy else AgentHealthStatus.UNHEALTHY
+            )
             entry.last_health_check = self._clock()
             self._logger.info(
                 "agent_health_updated",
@@ -805,7 +555,9 @@ class AgentManager(AgentManagerProtocol):
             try:
                 healthy = bool(await check())
                 async with self._registry_lock:
-                    entry.health_status = AgentHealthStatus.HEALTHY if healthy else AgentHealthStatus.UNHEALTHY
+                    entry.health_status = (
+                        AgentHealthStatus.HEALTHY if healthy else AgentHealthStatus.UNHEALTHY
+                    )
                     entry.last_health_check = self._clock()
                 return name, healthy
             except Exception as exc:  # noqa: BLE001 - health check failures are non-fatal
@@ -848,7 +600,7 @@ class AgentManager(AgentManagerProtocol):
     async def get_selection_scores(
         self,
         task: AgentTask,
-    ) -> list[AgentScore]:
+    ) -> list[agent_selector.AgentScore]:
         """Get ranking scores for all agents for a task (without executing).
 
         Useful for debugging and observability.
@@ -859,25 +611,15 @@ class AgentManager(AgentManagerProtocol):
         Returns:
             List of AgentScore objects for all registered agents.
         """
-        required_capabilities = frozenset(getattr(task, "required_capabilities", ()) or ())
-
-        async with self._registry_lock:
-            candidates = list(self._entries.items())
-
-        context = SelectionContext(
-            required_capabilities=required_capabilities,
-            priority=getattr(task, "priority", TaskPriority.MEDIUM),
-            attempt=getattr(task, "attempt", 1),
-            fallback_allowed=getattr(task, "allow_fallback", True),
-            health_check_required=getattr(task, "health_check_required", False),
-            task_id=task.task_id,
-        )
-
-        scores: list[AgentScore] = []
-        await self._selection_engine._compute_scores(candidates, context, scores)
-        scores.sort(key=lambda s: s.total_score, reverse=True)
-
-        return scores
+        context = self._selection_context(task)
+        candidates = await self._selection_candidates()
+        try:
+            return list(self._selector.select(context, candidates).candidate_ranking)
+        except agent_selector.NoSuitableAgentError:
+            return [
+                self._selector.score(context, candidate)
+                for candidate in sorted(candidates, key=lambda item: item.agent_id)
+            ]
 
     async def run(self, context: ExecutionContext) -> AgentManagerResult:
         """Execute one attempt for `context.task`, implementing the AgentManager protocol.
@@ -896,15 +638,18 @@ class AgentManager(AgentManagerProtocol):
                 RetryPolicy unless the implementation raises
                 `NonRetryableExecutionError`.
         """
-        from kodiak.docker.errors import AgentExecutionError
-
         class AgentTaskImpl:
             def __init__(self, task: Task, attempt: int) -> None:
                 self.task_id = str(task.id)
                 self.task_type = task.title
                 self._task = task
                 self.attempt = attempt
-                self.required_capabilities: frozenset[str] = frozenset()
+                context_caps = {}
+                if isinstance(task.context, dict):
+                    context_caps = task.context
+                self.required_capabilities = frozenset(
+                    context_caps.get("required_capabilities", ())
+                )
 
             @property
             def priority(self) -> TaskPriority:
@@ -919,13 +664,103 @@ class AgentManager(AgentManagerProtocol):
                 return False
 
         task_impl = AgentTaskImpl(context.task, context.attempt)
-        result = await self.execute(task_impl)
+        return await self.execute(task_impl, attempt=context.attempt)
 
-        if not result.success:
-            if result.error is not None:
-                raise result.error
+    async def get_selection_explanation(self) -> agent_selector.SelectionResult | None:
+        """Return the most recent selection decision, if one has been made."""
+        return self._last_selection
 
-        return result
+    async def _selection_candidates(self) -> list[agent_selector.AgentCandidate]:
+        """Build selector candidates from registry metadata and runtime metrics."""
+        metadata_by_id = await self._registry.snapshot()
+        async with self._registry_lock:
+            entries = dict(self._entries)
+
+        candidates: list[agent_selector.AgentCandidate] = []
+        for agent_id, metadata in sorted(metadata_by_id.items()):
+            entry = entries.get(agent_id)
+            if entry is None:
+                continue
+            candidates.append(
+                agent_selector.AgentCandidate(
+                    agent_id=agent_id,
+                    capabilities=frozenset(metadata.capabilities),
+                    priority=self._agent_priority(entry.agent),
+                    enabled=entry.enabled,
+                    health_status=agent_selector.AgentHealthStatus(entry.health_status.value),
+                    in_flight=entry.in_flight,
+                    success_rate=(
+                        entry.metrics.success_rate
+                        if entry.metrics.total_executions
+                        else None
+                    ),
+                    metadata={
+                        "name": metadata.name,
+                        "version": metadata.version,
+                        "tags": metadata.tags,
+                    },
+                )
+            )
+        return candidates
+
+    @staticmethod
+    def _selection_context(task: AgentTask) -> agent_selector.SelectionContext:
+        """Build selector context from the task-like object."""
+        return agent_selector.SelectionContext(
+            required_capabilities=frozenset(getattr(task, "required_capabilities", ()) or ()),
+            priority=getattr(task, "priority", TaskPriority.MEDIUM),
+            task_type=getattr(task, "task_type", None),
+            task_id=getattr(task, "task_id", None),
+            metadata=dict(getattr(task, "metadata", {}) or {}),
+        )
+
+    @staticmethod
+    def _agent_name(agent: Agent) -> str:
+        """Return a display name for an agent."""
+        return str(
+            getattr(
+                agent,
+                "name",
+                getattr(getattr(agent, "role", None), "value", agent.__class__.__name__.lower()),
+            )
+        )
+
+    @classmethod
+    def _agent_id(cls, agent: Agent) -> str:
+        """Return the stable registry id for an agent, adding one if needed."""
+        agent_id = str(getattr(agent, "agent_id", cls._agent_name(agent)))
+        if not hasattr(agent, "agent_id"):
+            agent.agent_id = agent_id
+        return agent_id
+
+    @staticmethod
+    def _agent_capabilities(agent: Agent) -> frozenset[str]:
+        """Return normalized agent capabilities."""
+        capabilities = getattr(agent, "capabilities", None)
+        if capabilities is None:
+            role = getattr(getattr(agent, "role", None), "value", None)
+            capabilities = (role,) if role else ()
+        return frozenset(str(capability) for capability in capabilities)
+
+    @staticmethod
+    def _agent_priority(agent: Agent) -> int:
+        """Return a deterministic priority for ranking."""
+        priority = getattr(agent, "priority", 0)
+        try:
+            return int(priority)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _tokens_used(output: Any) -> int:
+        """Extract token usage from common agent output shapes."""
+        if hasattr(output, "total_tokens"):
+            return int(output.total_tokens)
+        if isinstance(output, dict):
+            token_usage = output.get("token_usage")
+            if isinstance(token_usage, dict):
+                return sum(int(value) for value in token_usage.values())
+        return 0
 
     def get_statistics(self) -> dict[str, Any]:
         """Return aggregate statistics about all registered agents.
