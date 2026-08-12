@@ -149,6 +149,22 @@ class BaseAgent(ABC):
         Implemented by every agent.
         """
 
+    async def initialize(self) -> None:
+        """Optional lifecycle hook invoked before the agent becomes READY."""
+
+    async def start(self) -> None:
+        """Optional lifecycle hook invoked when the agent enters RUNNING."""
+
+    async def stop(self) -> None:
+        """Optional lifecycle hook invoked when the agent leaves RUNNING."""
+
+    async def shutdown(self) -> None:
+        """Optional lifecycle hook invoked during final shutdown."""
+
+    async def health_check(self) -> bool:
+        """Optional lifecycle health probe. Defaults to healthy."""
+        return True
+
     def _make_output(
         self,
         input_: AgentInput,

@@ -49,6 +49,11 @@ from kodiak.db.models.task import Task, TaskPriority
 from kodiak.orchestration.execution.interfaces import AgentManager as AgentManagerProtocol
 from kodiak.orchestration.execution.models import AgentManagerResult, ExecutionContext
 
+from kodiak.tools.capabilities import CapabilityRegistry
+from kodiak.tools.models import PermissionLevel, ToolDefinition, ToolExecutionContext
+from kodiak.tools.permissions import PermissionEngine
+from kodiak.tools.registry import ToolRegistry
+
 logger = structlog.get_logger(__name__)
 
 __all__ = [
@@ -70,11 +75,69 @@ __all__ = [
 ]
 
 
+<<<<<<< Updated upstream
 AgentHealthStatus = agent_selector.AgentHealthStatus
 AgentSelectionStrategy = agent_selector.AgentSelectionStrategy
 AgentScore = agent_selector.AgentScore
 SelectionContext = agent_selector.SelectionContext
 SelectionResult = agent_selector.SelectionResult
+=======
+
+class AgentHealthStatus(StrEnum):
+    """Health status of an agent."""
+
+    HEALTHY = "healthy"
+    UNHEALTHY = "unhealthy"
+    UNKNOWN = "unknown"
+
+
+class AgentSelectionStrategy(StrEnum):
+    """Strategy for selecting an agent."""
+
+    CAPABILITY_BASED = "capability_based"
+    WEIGHTED_RANKING = "weighted_ranking"
+    HEALTH_AWARE = "health_aware"
+    FALLBACK = "fallback"
+    DETERMINISTIC = "deterministic"
+
+
+@dataclass(frozen=True)
+class AgentScore:
+    """Score calculated for an agent during selection."""
+
+    agent_name: str
+    total_score: float
+    capability_score: float
+    health_score: float
+    load_score: float
+    priority_score: float
+    confidence_score: float
+    is_available: bool
+    health_status: AgentHealthStatus
+    raw_metrics: dict[str, float | int | str] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class SelectionContext:
+    """Context passed to the selection engine."""
+
+    required_capabilities: frozenset[str]
+    priority: TaskPriority
+    attempt: int
+    fallback_allowed: bool
+    health_check_required: bool
+    task_id: str | None = None
+
+
+@dataclass(frozen=True)
+class SelectionResult:
+    """Result of agent selection."""
+
+    selected_agent_name: str
+    is_fallback: bool
+    scores: tuple[AgentScore, ...]
+    selection_strategy: AgentSelectionStrategy
+>>>>>>> Stashed changes
 
 
 @runtime_checkable
@@ -193,6 +256,247 @@ class _AgentEntry:
     health_status: AgentHealthStatus = AgentHealthStatus.UNKNOWN
 
 
+<<<<<<< Updated upstream
+=======
+class AgentSelectionEngine:
+    """Intelligent agent selection engine with multiple strategies.
+
+    Provides capability-based routing, priority-based routing, confidence
+    scoring, weighted ranking, fallback routing, and health-aware routing.
+
+    Args:
+        default_timeout_seconds: Maximum time for selection before timeout.
+    """
+
+    def __init__(self, default_timeout_seconds: float = 5.0) -> None:
+        self._default_timeout_seconds = default_timeout_seconds
+        self._logger = logger.bind(component="selection_engine")
+
+    async def select(
+        self,
+        candidates: list[tuple[str, _AgentEntry]],
+        context: SelectionContext,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> SelectionResult:
+        """Select the best agent from candidates using intelligent scoring.
+
+        Implements multi-criteria scoring with weighted ranking.
+
+        Args:
+            candidates: List of (agent_name, entry) tuples from registry.
+            context: Selection context with requirements.
+            timeout_seconds: Optional timeout for selection.
+
+        Returns:
+            SelectionResult with the chosen agent and score details.
+
+        Raises:
+            NoSuitableAgentError: If no agent matches requirements.
+            SelectionTimeoutError: If selection takes too long.
+        """
+        timeout = timeout_seconds or self._default_timeout_seconds
+
+        selected: AgentScore | None = None
+        scores: list[AgentScore] = []
+        strategy = AgentSelectionStrategy.CAPABILITY_BASED
+        is_fallback = False
+
+        try:
+            await asyncio.wait_for(
+                self._compute_scores(candidates, context, scores),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            self._logger.warning(
+                "agent_selection_timeout",
+                timeout_seconds=timeout,
+                candidate_count=len(candidates),
+            )
+            raise SelectionTimeoutError(
+                f"Agent selection timed out after {timeout}s"
+            ) from None
+
+        # Filter out unavailable agents
+        available_scores = [s for s in scores if s.is_available and s.health_status != AgentHealthStatus.UNHEALTHY]
+
+        # If no available agents, try fallback
+        if not available_scores:
+            if context.fallback_allowed:
+                is_fallback = True
+                strategy = AgentSelectionStrategy.FALLBACK
+                # Include unhealthy agents as fallback
+                available_scores = [s for s in scores if s.agent_name]
+                if not available_scores:
+                    raise NoSuitableAgentError(
+                        f"No agents available for task {context.task_id or 'unknown'}"
+                    )
+            else:
+                raise NoSuitableAgentError(
+                    f"No healthy agents available for task {context.task_id or 'unknown'}"
+                )
+
+        if not available_scores:
+            raise NoSuitableAgentError(
+                f"No agents match capabilities {sorted(context.required_capabilities)}"
+            )
+
+        # Find best score
+        available_scores.sort(key=lambda s: s.total_score, reverse=True)
+        selected = available_scores[0]
+
+        self._logger.debug(
+            "agent_selected",
+            agent_name=selected.agent_name,
+            strategy=strategy.value,
+            total_score=selected.total_score,
+            capability_score=selected.capability_score,
+        )
+
+        # Record metrics
+        AGENT_SELECTIONS_TOTAL.labels(
+            strategy=strategy.value,
+            fallback=str(is_fallback).lower(),
+        ).inc()
+
+        return SelectionResult(
+            selected_agent_name=selected.agent_name,
+            is_fallback=is_fallback,
+            scores=tuple(scores),
+            selection_strategy=strategy,
+        )
+
+    async def _compute_scores(
+        self,
+        candidates: list[tuple[str, _AgentEntry]],
+        context: SelectionContext,
+        scores: list[AgentScore],
+    ) -> None:
+        """Compute scores for all candidate agents."""
+        for agent_name, entry in candidates:
+            score = self._score_agent(agent_name, entry, context)
+            scores.append(score)
+
+    def _score_agent(
+        self,
+        agent_name: str,
+        entry: _AgentEntry,
+        context: SelectionContext,
+    ) -> AgentScore:
+        """Calculate a composite score for an agent.
+
+        Scoring components (weights sum to 1.0):
+        - capability_score: 0.4 - Matches required capabilities
+        - health_score: 0.25 - Health status and recent failures
+        - load_score: 0.2 - Current in-flight count vs capacity
+        - priority_score: 0.1 - Priority alignment
+        - confidence_score: 0.05 - Historical success rate
+        """
+        # Capability score: ratio of matched capabilities
+        cap_overlap = len(entry.agent.capabilities & context.required_capabilities)
+        if context.required_capabilities:
+            capability_score = cap_overlap / len(context.required_capabilities)
+        else:
+            capability_score = 1.0 if entry.agent.capabilities else 0.5
+
+        # Health score: 1.0 = healthy, 0.0 = unhealthy, 0.5 = unknown
+        if not entry.enabled:
+            health_status = AgentHealthStatus.UNHEALTHY
+            health_score = 0.0
+        elif entry.health_status == AgentHealthStatus.HEALTHY:
+            health_score = 1.0
+        elif entry.health_status == AgentHealthStatus.UNHEALTHY:
+            health_score = 0.0
+        else:
+            health_score = 0.5
+            health_status = AgentHealthStatus.UNKNOWN
+
+        # Load score: lower is better (inverse of in-flight ratio)
+        capacity = 10  # Default capacity, could be configurable
+        load_ratio = entry.in_flight / max(capacity, 1)
+        load_score = max(0.0, 1.0 - load_ratio)
+
+        # Priority score: match priority level
+        priority_score = self._compute_priority_score(entry.agent, context.priority)
+
+        # Confidence score: success rate
+        confidence_score = entry.metrics.success_rate
+
+        # Check availability
+        is_available = entry.enabled and health_status != AgentHealthStatus.UNHEALTHY
+
+        # Weighted total
+        weights = {
+            "capability": 0.4,
+            "health": 0.25,
+            "load": 0.2,
+            "priority": 0.1,
+            "confidence": 0.05,
+        }
+
+        total_score = (
+            capability_score * weights["capability"]
+            + health_score * weights["health"]
+            + load_score * weights["load"]
+            + priority_score * weights["priority"]
+            + confidence_score * weights["confidence"]
+        )
+
+        # Zero out score if capabilities don't match
+        if context.required_capabilities and capability_score == 0:
+            total_score = 0.0
+            is_available = False
+
+        return AgentScore(
+            agent_name=agent_name,
+            total_score=total_score,
+            capability_score=capability_score,
+            health_score=health_score,
+            load_score=load_score,
+            priority_score=priority_score,
+            confidence_score=confidence_score,
+            is_available=is_available,
+            health_status=health_status,
+            raw_metrics={
+                "in_flight": entry.in_flight,
+                "total_executions": entry.metrics.total_executions,
+                "success_rate": entry.metrics.success_rate,
+            },
+        )
+
+    def _compute_priority_score(self, agent: Agent, task_priority: TaskPriority) -> float:
+        """Compute priority alignment score."""
+        # Map agent name prefixes to priorities (could be extended)
+        priority_mapping = {
+            "planner": TaskPriority.HIGH,
+            "coder": TaskPriority.HIGH,
+            "reviewer": TaskPriority.MEDIUM,
+            "tester": TaskPriority.MEDIUM,
+            "debugger": TaskPriority.HIGH,
+            "memory": TaskPriority.LOW,
+            "learning": TaskPriority.LOW,
+            "evaluation": TaskPriority.MEDIUM,
+        }
+
+        _PRIORITY_LEVEL = {
+            TaskPriority.LOW: 0,
+            TaskPriority.MEDIUM: 1,
+            TaskPriority.HIGH: 2,
+            TaskPriority.CRITICAL: 3,
+        }
+
+        agent_priority = priority_mapping.get(agent.name, TaskPriority.MEDIUM)
+        agent_level = _PRIORITY_LEVEL[agent_priority]
+        task_level = _PRIORITY_LEVEL[task_priority]
+
+        if agent_level == task_level:
+            return 1.0
+        if abs(agent_level - task_level) == 1:
+            return 0.7
+        return 0.3
+
+
+>>>>>>> Stashed changes
 class AgentManager(AgentManagerProtocol):
     """Registers, selects, and dispatches agents on behalf of the ExecutionEngine.
 
@@ -215,8 +519,14 @@ class AgentManager(AgentManagerProtocol):
         max_concurrent_executions: int = 10,
         clock: Callable[[], float] = time.monotonic,
         selection_timeout_seconds: float = 5.0,
+<<<<<<< Updated upstream
         registry: AgentRegistry | None = None,
         selector: agent_selector.AgentSelector | None = None,
+=======
+        tool_registry: ToolRegistry | None = None,
+        capability_registry: CapabilityRegistry | None = None,
+        permission_engine: PermissionEngine | None = None,
+>>>>>>> Stashed changes
     ) -> None:
         self._entries: dict[str, _AgentEntry] = {}
         self._registry_lock = asyncio.Lock()
@@ -224,9 +534,64 @@ class AgentManager(AgentManagerProtocol):
         self._execution_semaphore = asyncio.Semaphore(max_concurrent_executions)
         self._clock = clock
         self._logger = logger.bind(component="agent_manager")
+<<<<<<< Updated upstream
         self._selector = selector or agent_selector.AgentSelector()
         self._selection_timeout_seconds = selection_timeout_seconds
         self._last_selection: agent_selector.SelectionResult | None = None
+=======
+        self._selection_engine = AgentSelectionEngine(
+            default_timeout_seconds=selection_timeout_seconds
+        )
+        self._tool_registry = tool_registry
+        self._capability_registry = capability_registry or CapabilityRegistry()
+        self._permission_engine = permission_engine or PermissionEngine()
+
+    def set_tool_registry(self, tool_registry: ToolRegistry) -> None:
+        """Set or update the ToolRegistry instance."""
+        self._tool_registry = tool_registry
+
+    async def get_agent_tools(
+        self,
+        agent_name: str,
+        tool_registry: ToolRegistry | None = None,
+    ) -> list[ToolDefinition]:
+        """Determine what tools an agent can use based on its declared capabilities and permissions."""
+        agent = await self.get(agent_name)
+        registry = tool_registry or self._tool_registry
+        if not registry:
+            return []
+
+        ctx = ToolExecutionContext(
+            agent_name=agent.name,
+            granted_capabilities=agent.capabilities,
+        )
+        return self._capability_registry.discover_tools_for_agent(
+            agent_capabilities=agent.capabilities,
+            tool_registry=registry,
+            context=ctx,
+            permission_engine=self._permission_engine,
+        )
+
+    async def can_agent_use_tool(
+        self,
+        agent_name: str,
+        tool_name: str,
+        tool_registry: ToolRegistry | None = None,
+    ) -> bool:
+        """Check whether a specific agent is allowed to execute a target tool."""
+        agent = await self.get(agent_name)
+        registry = tool_registry or self._tool_registry
+        if not registry or not registry.has_tool(tool_name):
+            return False
+
+        tool_def = registry.get_metadata(tool_name)
+        ctx = ToolExecutionContext(
+            agent_name=agent.name,
+            granted_capabilities=agent.capabilities,
+        )
+        level = self._permission_engine.check_permission(tool_def, ctx)
+        return level != PermissionLevel.DENIED
+>>>>>>> Stashed changes
 
     async def register(self, agent: Agent) -> None:
         """Register an agent, making it available for selection and execution.
