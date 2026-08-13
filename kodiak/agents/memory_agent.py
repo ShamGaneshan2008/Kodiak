@@ -1,35 +1,43 @@
+from __future__ import annotations
+
+from typing import Any
+
 import structlog
 
-from kodiak.agents.base import AgentInput, AgentOutput, BaseAgent, LLMClient
+from kodiak.agents.base import AgentInput, AgentOutput, AgentRole, BaseAgent
 
 logger = structlog.get_logger(__name__)
 
 
-class MemoryOutput(AgentOutput):
-    result: str = ""
-    memory_type: str = ""
-
-
 class MemoryAgent(BaseAgent):
-    def __init__(self, llm: LLMClient) -> None:
-        super().__init__(llm, name="memory_agent", description="Interfaces with memory systems")
+    """Query semantic and episodic memory stores."""
 
-    async def execute(self, input_data: AgentInput) -> MemoryOutput:
-        self._logger.info("accessing_memory", task=input_data.task)
-        mem_type = input_data.context.get("memory_type", "semantic")
-        query = input_data.context.get("query", input_data.task)
+    role = AgentRole.MEMORY
+    capabilities = frozenset({"memory", "memory_retrieval"})
 
-        prompt = self._build_prompt(
-            query, mem_type, input_data.context.get("existing_memories", "")
-        )
-        result = await self._run_with_timing(prompt)
+    def __init__(self, llm_client: Any) -> None:
+        super().__init__()
+        self._llm = llm_client
 
-        self._logger.info("memory_access_complete", memory_type=mem_type)
-        return MemoryOutput(success=True, result=result, memory_type=mem_type)
-
-    def _build_prompt(self, query: str, mem_type: str, existing: str) -> str:
+    async def _run(self, input_: AgentInput) -> AgentOutput:
+        mem_type = str(input_.context.get("memory_type", "semantic"))
+        query = str(input_.context.get("query", input_.instruction))
+        existing = str(input_.context.get("existing_memories", ""))
         existing_section = f"Existing Memories:\n{existing}\n\n" if existing else ""
-        return (
+        user_message = (
             f"{existing_section}Query {mem_type} memory for: {query}\n\n"
             "Formulate a precise response based on the memories."
+        )
+        response = await self._llm.complete(
+            system="You are a memory agent inside Kodiak.",
+            messages=[{"role": "user", "content": user_message}],
+            model_preference="default",
+        )
+        return self._make_output(
+            input_,
+            {
+                "memory_type": mem_type,
+                "response": response.get("content", ""),
+            },
+            token_usage=response.get("usage", {}),
         )
