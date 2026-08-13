@@ -1,42 +1,47 @@
+from __future__ import annotations
+
 import json
+from typing import Any
 
 import structlog
-from pydantic import BaseModel, Field
 
-from kodiak.agents.base import AgentInput, AgentOutput, BaseAgent, LLMClient
+from kodiak.agents.base import AgentInput, AgentOutput, AgentRole, BaseAgent
 
 logger = structlog.get_logger(__name__)
 
 
-class Pattern(BaseModel):
-    name: str
-    description: str
-    reward: float = 0.0
-
-
-class LearningOutput(AgentOutput):
-    result: list[Pattern] = Field(default_factory=list)
-
-
 class LearningAgent(BaseAgent):
-    def __init__(self, llm: LLMClient) -> None:
-        super().__init__(llm, name="learning", description="Extracts patterns and updates learning")
+    """Extract reusable patterns from completed executions."""
 
-    async def execute(self, input_data: AgentInput) -> LearningOutput:
-        self._logger.info("learning_from_execution", task=input_data.task)
-        reward = input_data.context.get("reward", 0.0)
-        trace = input_data.context.get("execution_trace", "")
+    role = AgentRole.LEARNING
+    capabilities = frozenset({"learning", "pattern_extraction"})
 
-        prompt = (
+    def __init__(self, llm_client: Any) -> None:
+        super().__init__()
+        self._llm = llm_client
+
+    async def _run(self, input_: AgentInput) -> AgentOutput:
+        reward = input_.context.get("reward", 0.0)
+        trace = str(input_.context.get("execution_trace", ""))
+        user_message = (
             f"Extract reusable coding patterns from this execution.\n"
-            f"Task: {input_data.task}\nReward: {reward}\nTrace:\n{trace}\n\n"
+            f"Task: {input_.instruction}\nReward: {reward}\nTrace:\n{trace}\n\n"
             "Output a JSON array of patterns with 'name', 'description', 'reward'."
         )
-        raw = await self._run_with_timing(prompt)
-
+        response = await self._llm.complete(
+            system="You are a learning agent inside Kodiak. Output JSON only.",
+            messages=[{"role": "user", "content": user_message}],
+            model_preference="default",
+        )
+        raw = response.get("content", "")
         try:
-            patterns = [Pattern(**p) for p in json.loads(raw)]
-            return LearningOutput(success=True, result=patterns)
-        except Exception as e:
-            self._logger.error("learning_parse_failed", error=str(e))
-            return LearningOutput(success=False, error=str(e))
+            patterns = json.loads(raw)
+            if not isinstance(patterns, list):
+                raise ValueError("Expected a JSON array.")
+            return self._make_output(
+                input_,
+                {"patterns": patterns},
+                token_usage=response.get("usage", {}),
+            )
+        except Exception as exc:
+            return self._make_error(input_, f"Learning parse failed: {exc}")
