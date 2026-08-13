@@ -28,10 +28,12 @@ from kodiak.tools.models import (
 )
 from kodiak.tools.permissions import PermissionEngine
 from kodiak.tools.registry import ToolRegistry
+from kodiak.tools.router import ToolRouter
 
 __all__ = [
     "ToolAdapter",
     "ToolRegistry",
+    "ToolRouter",
     "ToolDefinition",
     "ToolExecutionContext",
     "ToolResult",
