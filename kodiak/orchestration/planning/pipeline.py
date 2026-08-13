@@ -731,6 +731,14 @@ class PlanReplanner:
             failure_error = str(
                 execution_result.get("error") or execution_result.get("message", "Failure")
             )
+            reflection = execution_result.get("reflection")
+            if isinstance(reflection, dict) and reflection.get("root_cause"):
+                failure_error = str(reflection["root_cause"])
+            elif isinstance(execution_result.get("error"), dict):
+                nested = execution_result["error"]
+                reflection = nested.get("reflection")
+                if isinstance(reflection, dict) and reflection.get("root_cause"):
+                    failure_error = str(reflection["root_cause"])
 
         task_map = {str(t.id): t for t in current_plan.tasks}
 
