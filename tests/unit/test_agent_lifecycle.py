@@ -17,9 +17,9 @@ from kodiak.agents.lifecycle import (
     LifecycleOperationConflictError,
     LifecycleOperationError,
 )
-from kodiak.agents.manager import AgentManager
+from kodiak.agents.manager import AgentManager, NoSuitableAgentError
 from kodiak.agents.registry import AgentRegistry
-from kodiak.agents.selector import AgentSelector
+from kodiak.db.models.task import TaskPriority
 
 
 class _LifecycleAgent(BaseAgent):
@@ -72,7 +72,7 @@ async def _register_agent(registry: AgentRegistry, agent_id: str, agent: BaseAge
     await registry.register(
         agent_id,
         instance=DiscoveredAgentHandle(agent_id=agent_id, _agent=agent),
-        capabilities=tuple(getattr(agent, "capabilities", (agent_id,))),
+        capabilities=tuple(agent.resolved_capabilities()),
     )
 
 
@@ -317,13 +317,25 @@ async def test_agent_selector_compatibility(
     await lifecycle.initialize("coder")
     await lifecycle.shutdown("coder")
 
-    selector = AgentSelector(registry, lifecycle=lifecycle)
-    selection = await selector.select(required_capabilities=frozenset({"planning"}))
-    assert selection is not None
-    assert selection.agent_id == "planner"
+    manager = AgentManager(registry=registry, lifecycle=lifecycle)
+    await manager.register(ManagerAgentAdapter(await registry.get("planner"), capabilities=frozenset({"planning"})))
+    await manager.register(ManagerAgentAdapter(await registry.get("coder"), capabilities=frozenset({"planning"})))
 
-    blocked = await selector.select(agent_id="coder")
-    assert blocked is None
+    class _Task:
+        task_id = "t-1"
+        task_type = "plan"
+        required_capabilities = frozenset({"planning"})
+        priority = TaskPriority.MEDIUM
+
+    agent = await manager.select_agent(_Task())
+    assert agent.name == "planner"
+
+    stopped_only = AgentManager(registry=registry, lifecycle=lifecycle)
+    await stopped_only.register(
+        ManagerAgentAdapter(await registry.get("coder"), capabilities=frozenset({"planning"}))
+    )
+    with pytest.raises(NoSuitableAgentError):
+        await stopped_only.select_agent(_Task())
 
 
 @pytest.mark.asyncio
