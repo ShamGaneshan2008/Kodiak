@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from kodiak.agents.base import AgentInput, BaseAgent
+from kodiak.agents.base import AgentInput, AgentOutput, BaseAgent
 
 
 @dataclass(slots=True)
@@ -20,18 +20,15 @@ class DiscoveredAgentHandle:
         return self._agent
 
 
-class ManagerAgentAdapter:
-    """Adapts a discovered agent for AgentManager's Agent protocol."""
+class BaseAgentAdapter:
+    """Adapts a BaseAgent for AgentManager's Agent protocol."""
 
-    def __init__(
-        self,
-        handle: DiscoveredAgentHandle,
-        *,
-        capabilities: frozenset[str],
-    ) -> None:
-        self.name = handle.agent_id
-        self.capabilities = capabilities
-        self._handle = handle
+    def __init__(self, agent: BaseAgent) -> None:
+        self._agent = agent
+        self.role = agent.role
+        self.agent_id = agent.agent_id
+        self.name = agent.agent_id
+        self.capabilities = agent.resolved_capabilities()
 
     async def execute(self, task: Any) -> Any:
         instruction = getattr(task, "task_type", "") or getattr(task, "instruction", "")
@@ -43,11 +40,33 @@ class ManagerAgentAdapter:
             instruction=str(instruction),
             context=dict(context) if isinstance(context, dict) else {},
         )
-        output = await self._handle.agent.run(agent_input)
-        return output.result if output.success else output
+        output = await self._agent.run(agent_input)
+        if isinstance(output, AgentOutput):
+            return output.result if output.success else output
+        return output
 
     async def health_check(self) -> bool:
-        return True
+        return await self._agent.health_check()
 
 
-__all__ = ["DiscoveredAgentHandle", "ManagerAgentAdapter"]
+class ManagerAgentAdapter(BaseAgentAdapter):
+    """Backward-compatible alias for registry-discovered agent handles."""
+
+    def __init__(
+        self,
+        handle: DiscoveredAgentHandle,
+        *,
+        capabilities: frozenset[str] | None = None,
+    ) -> None:
+        super().__init__(handle.agent)
+        self.agent_id = handle.agent_id
+        self.name = handle.agent_id
+        if capabilities is not None:
+            self.capabilities = capabilities
+
+
+__all__ = [
+    "BaseAgentAdapter",
+    "DiscoveredAgentHandle",
+    "ManagerAgentAdapter",
+]
