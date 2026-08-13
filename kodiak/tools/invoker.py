@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 
 from kodiak.tools.exceptions import (
+    ToolError,
     ToolExecutionError,
     ToolNotFoundError,
     ToolPermissionError,
