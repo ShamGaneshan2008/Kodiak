@@ -1,44 +1,48 @@
+from __future__ import annotations
+
 import json
+from typing import Any
 
 import structlog
-from pydantic import Field
 
-from kodiak.agents.base import AgentInput, AgentOutput, BaseAgent, LLMClient
+from kodiak.agents.base import AgentInput, AgentOutput, AgentRole, BaseAgent
 
 logger = structlog.get_logger(__name__)
 
 
-class EvaluationOutput(AgentOutput):
-    result: str = ""
-    score: float = Field(default=0.0, ge=0.0, le=1.0)
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-
-
 class EvaluationAgent(BaseAgent):
-    def __init__(self, llm: LLMClient) -> None:
-        super().__init__(
-            llm, name="evaluation", description="Evaluates output quality and confidence"
-        )
+    """Evaluate generated output quality and confidence."""
 
-    async def execute(self, input_data: AgentInput) -> EvaluationOutput:
-        self._logger.info("evaluating_output", task=input_data.task)
-        output = input_data.context.get("output", "")
-        goal = input_data.context.get("goal", input_data.task)
+    role = AgentRole.EVALUATION
+    capabilities = frozenset({"evaluation", "quality_assessment"})
 
-        prompt = (
+    def __init__(self, llm_client: Any) -> None:
+        super().__init__()
+        self._llm = llm_client
+
+    async def _run(self, input_: AgentInput) -> AgentOutput:
+        output = str(input_.context.get("output", ""))
+        goal = str(input_.context.get("goal", input_.instruction))
+        user_message = (
             f"Evaluate this output against the goal.\nGoal: {goal}\nOutput: {output}\n\n"
             'Respond in JSON: {"analysis": "...", "score": 0.0-1.0, "confidence": 0.0-1.0}'
         )
-        raw = await self._run_with_timing(prompt)
-
+        response = await self._llm.complete(
+            system="You are an evaluation agent inside Kodiak. Output JSON only.",
+            messages=[{"role": "user", "content": user_message}],
+            model_preference="default",
+        )
+        raw = response.get("content", "")
         try:
             data = json.loads(raw)
-            return EvaluationOutput(
-                success=True,
-                result=data.get("analysis", ""),
-                score=float(data.get("score", 0.0)),
-                confidence=float(data.get("confidence", 0.0)),
+            return self._make_output(
+                input_,
+                {
+                    "analysis": data.get("analysis", ""),
+                    "score": float(data.get("score", 0.0)),
+                    "confidence": float(data.get("confidence", 0.0)),
+                },
+                token_usage=response.get("usage", {}),
             )
-        except Exception as e:
-            self._logger.error("evaluation_parse_failed", error=str(e))
-            return EvaluationOutput(success=False, error=str(e))
+        except Exception as exc:
+            return self._make_error(input_, f"Evaluation parse failed: {exc}")
