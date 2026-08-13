@@ -234,6 +234,8 @@ class ExecutionResult:
     result: dict[str, Any] = field(default_factory=dict)
     error: dict[str, Any] | None = None
     final_status: TaskStatus = TaskStatus.FAILED
+    verification: dict[str, Any] | None = None
+    reflection: dict[str, Any] | None = None
 
     @property
     def is_success(self) -> bool:
