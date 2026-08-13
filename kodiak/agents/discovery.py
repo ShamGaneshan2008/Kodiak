@@ -13,8 +13,9 @@ from typing import Any
 
 import structlog
 
-from kodiak.agents.adapters import DiscoveredAgentHandle, ManagerAgentAdapter
+from kodiak.agents.adapters import BaseAgentAdapter, DiscoveredAgentHandle, ManagerAgentAdapter
 from kodiak.agents.base import AgentRole, BaseAgent
+from kodiak.agents.capabilities import ROLE_CAPABILITIES, default_capabilities_for_role
 from kodiak.agents.registry import (
     AgentAlreadyRegisteredError,
     AgentRegistry,
@@ -35,23 +36,6 @@ DEFAULT_EXCLUDE_MODULES = frozenset(
         "lifecycle",
     }
 )
-
-ROLE_CAPABILITIES: dict[AgentRole, tuple[str, ...]] = {
-    AgentRole.PLANNER: ("planning", "task_decomposition"),
-    AgentRole.REPOSITORY: ("repository_analysis", "repository_context"),
-    AgentRole.RETRIEVAL: ("retrieval", "repository_context"),
-    AgentRole.RESEARCH: ("research", "repository_context"),
-    AgentRole.ARCHITECT: ("architecture", "planning"),
-    AgentRole.CODER: ("write_code", "refactor"),
-    AgentRole.REVIEWER: ("code_review",),
-    AgentRole.TESTER: ("run_tests", "write_tests"),
-    AgentRole.DEBUGGER: ("debugging",),
-    AgentRole.REFLECTION: ("reflection",),
-    AgentRole.GIT: ("git_operations",),
-    AgentRole.MEMORY: ("memory",),
-    AgentRole.LEARNING: ("learning",),
-    AgentRole.EVALUATION: ("evaluation",),
-}
 
 
 class DiscoveryRejectReason(StrEnum):
@@ -333,7 +317,7 @@ class AgentDiscovery:
         declared = getattr(agent_cls, "capabilities", None)
         if isinstance(declared, (frozenset, set, list, tuple)) and declared:
             return tuple(sorted(str(cap) for cap in declared))
-        role_caps = ROLE_CAPABILITIES.get(role, (role.value,))
+        role_caps = default_capabilities_for_role(role)
         return tuple(sorted(role_caps))
 
     def _missing_dependencies(self, agent_cls: type[BaseAgent]) -> str | None:
