@@ -85,8 +85,13 @@ class ExecutionPlan(BaseModel):
 
 
 class TaskPlanner:
-    def __init__(self, pipeline: Any | None = None) -> None:
+    def __init__(
+        self,
+        pipeline: Any | None = None,
+        memory_integration: Any | None = None,
+    ) -> None:
         self._pipeline = pipeline
+        self._memory_integration = memory_integration
 
     async def plan(self, goal: str, context: dict[str, Any] | None = None) -> list[ExecutableTask]:
         return (await self.plan_execution(goal, context)).tasks
@@ -96,12 +101,22 @@ class TaskPlanner:
         goal: str,
         context: dict[str, Any] | None = None,
     ) -> ExecutionPlan:
+        ctx = dict(context or {})
+        if self._memory_integration is not None:
+            ctx = await self._memory_integration.build_planning_context(goal, ctx)
+
         if self._pipeline is not None:
-            return await self._pipeline.plan(goal, context)
+            plan = await self._pipeline.plan(goal, ctx)
+        else:
+            from kodiak.orchestration.planning.pipeline import PlanningPipeline
 
-        from kodiak.orchestration.planning.pipeline import PlanningPipeline
+            plan = await PlanningPipeline().plan(goal, ctx)
 
-        return await PlanningPipeline().plan(goal, context)
+        if self._memory_integration is not None and "relevant_memories" in ctx:
+            plan.metadata.setdefault("relevant_memories", ctx["relevant_memories"])
+            if ctx.get("memory_context"):
+                plan.metadata["memory_context"] = ctx["memory_context"]
+        return plan
 
     def _plan_from_planner_output(
         self,
