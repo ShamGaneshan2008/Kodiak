@@ -46,6 +46,8 @@ from .semantic import (
     SemanticSearchResult,
 )
 from .short_term import ShortTermMemory, ShortTermMemoryItem, ShortTermMemoryRepository
+from .experience import EngineeringExperience, ExperienceExtractor, ExperienceSanitizer
+from .integration import MemoryIntegration
 from .service import MemoryService
 from .working import WorkingMemory, WorkingMemoryItem, WorkingMemoryRepository, WorkingMemoryStatus
 
@@ -78,6 +80,10 @@ __all__ = [
     "MemoryContextBuilder",
     "MemoryConsolidator",
     "MemoryService",
+    "EngineeringExperience",
+    "ExperienceExtractor",
+    "ExperienceSanitizer",
+    "MemoryIntegration",
     # Repositories & Persistence
     "InMemoryWorkingMemoryRepository",
     "InMemoryShortTermMemoryRepository",
