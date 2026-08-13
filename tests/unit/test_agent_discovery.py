@@ -204,13 +204,21 @@ async def test_agent_selector_can_select_discovered_agent(
     registry: AgentRegistry,
 ) -> None:
     await discovery.discover_and_register()
-    selector = AgentSelector(registry)
-    selection = await selector.select(required_capabilities=frozenset({"write_code"}))
-    assert selection is not None
-    assert selection.agent_id == "coder"
+    manager = AgentManager(registry=registry)
+    await discovery.register_with_manager(manager)
 
-    instance = await selector.get_instance(selection)
-    assert isinstance(instance, DiscoveredAgentHandle)
+    class _Task:
+        task_id = "t-1"
+        task_type = "implement"
+        required_capabilities = frozenset({"write_code"})
+        priority = __import__(
+            "kodiak.db.models.task", fromlist=["TaskPriority"]
+        ).TaskPriority.MEDIUM
+
+    agent = await manager.select_agent(_Task())
+    assert agent.name == "coder"
+    handle = await registry.get("coder")
+    assert isinstance(handle, DiscoveredAgentHandle)
 
 
 @pytest.mark.asyncio
