@@ -1,31 +1,33 @@
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
 
-from kodiak.agents.base import AgentContext, AgentResult, BaseAgent
+from kodiak.agents.base import AgentInput, AgentOutput, AgentRole, BaseAgent
 from kodiak.github.pr_manager import draft_pull_request
 from kodiak.utils.diff import human_summary, summarize_changes
 from kodiak.utils.git_utils import GitChangeSet, make_branch_name, read_changes
 
 
 class GitAgent(BaseAgent):
-    name = "git"
+    """Prepare commits and pull-request drafts from local repository changes."""
 
-    async def run(self, context: AgentContext) -> AgentResult:
-        repo = context.repository or "."
+    role = AgentRole.GIT
+    capabilities = frozenset({"git_operations", "pull_request_creation"})
+
+    async def _run(self, input_: AgentInput) -> AgentOutput:
+        repo = str(input_.context.get("repository_path", "."))
         changes = read_changes(repo)
-        task_title = str(context.inputs.get("title") or context.task_id)
-        commit_plan = build_commit_plan(changes, task_title)
+        commit_plan = build_commit_plan(changes, input_.instruction or input_.task_id)
         pr_draft = draft_pull_request(
             changes,
             commit_plan["subject"],
-            testing=list(context.inputs.get("testing", [])) or ["Syntax compile check"],
+            testing=list(input_.context.get("testing", [])) or ["Syntax compile check"],
         )
-        return AgentResult(
-            agent=self.name,
-            status="completed",
-            output={
-                "branch": make_branch_name(task_title),
+        return self._make_output(
+            input_,
+            {
+                "branch": make_branch_name(input_.instruction or input_.task_id),
                 "summary": human_summary(changes),
                 "changes": summarize_changes(changes),
                 "commit": commit_plan,
