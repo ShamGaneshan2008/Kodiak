@@ -19,7 +19,7 @@ import time
 import traceback
 from collections import defaultdict
 from types import TracebackType
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import structlog
 
@@ -41,8 +41,14 @@ from kodiak.orchestration.execution.models import (
     RetryPolicy,
     outcome_to_task_status,
 )
+from kodiak.orchestration.reflection.engine import ReflectionEngine
+from kodiak.orchestration.reflection.models import RepairStrategy
+from kodiak.orchestration.verification import VerificationEngine, VerificationStatus
 
 logger = structlog.get_logger(__name__)
+
+if TYPE_CHECKING:
+    from kodiak.memory.integration import MemoryIntegration
 
 
 class _NullSlot:
@@ -97,6 +103,9 @@ class ExecutionEngine:
         default_retry_policy: RetryPolicy | None = None,
         default_timeout_seconds: float = 600.0,
         concurrency_limit: int | None = None,
+        verification_engine: VerificationEngine | None = None,
+        reflection_engine: ReflectionEngine | None = None,
+        memory_integration: MemoryIntegration | None = None,
     ) -> None:
         self._agent_manager = agent_manager
         self._task_repository = task_repository
@@ -105,6 +114,9 @@ class ExecutionEngine:
         self._semaphore = asyncio.Semaphore(concurrency_limit) if concurrency_limit else None
         self._hooks: dict[ExecutionEventType, list[ExecutionHook]] = defaultdict(list)
         self._active_tokens: dict[str, CancellationToken] = {}
+        self._verification_engine = verification_engine
+        self._reflection_engine = reflection_engine
+        self._memory_integration = memory_integration
 
     def on(self, event_type: ExecutionEventType, hook: ExecutionHook) -> None:
         """Register an async hook invoked whenever `event_type` fires.
@@ -176,9 +188,12 @@ class ExecutionEngine:
                 attempt_log = log.bind(attempt=attempt, max_attempts=policy.max_attempts)
 
                 if token.is_cancelled:
-                    return await self._finalize(
-                        task, context, ExecutionOutcome.CANCELLED, started_at, attempt_log,
-                        error=self._cancelled_payload("cancelled before attempt"),
+                    return await self._complete_execution(
+                        task,
+                        await self._finalize(
+                            task, context, ExecutionOutcome.CANCELLED, started_at, attempt_log,
+                            error=self._cancelled_payload("cancelled before attempt"),
+                        ),
                     )
 
                 await self._emit(ExecutionEventType.ATTEMPT_STARTED, context, attempt_log)
@@ -188,9 +203,12 @@ class ExecutionEngine:
 
                 except ExecutionCancelledError:
                     attempt_log.warning("execution.cancelled")
-                    return await self._finalize(
-                        task, context, ExecutionOutcome.CANCELLED, started_at, attempt_log,
-                        error=self._cancelled_payload("cancelled during attempt"),
+                    return await self._complete_execution(
+                        task,
+                        await self._finalize(
+                            task, context, ExecutionOutcome.CANCELLED, started_at, attempt_log,
+                            error=self._cancelled_payload("cancelled during attempt"),
+                        ),
                     )
 
                 except ExecutionTimeoutError as exc:
@@ -206,7 +224,7 @@ class ExecutionEngine:
                         error_payload=last_error_payload,
                     )
                     if stop_result is not None:
-                        return stop_result
+                        return await self._complete_execution(task, stop_result)
                     continue
 
                 except NonRetryableExecutionError as exc:
@@ -215,9 +233,12 @@ class ExecutionEngine:
                     await self._emit(
                         ExecutionEventType.ATTEMPT_FAILED, context, attempt_log, message=str(exc.cause),
                     )
-                    return await self._finalize(
-                        task, context, ExecutionOutcome.FAILURE, started_at, attempt_log,
-                        error=last_error_payload,
+                    return await self._complete_execution(
+                        task,
+                        await self._finalize(
+                            task, context, ExecutionOutcome.FAILURE, started_at, attempt_log,
+                            error=last_error_payload,
+                        ),
                     )
 
                 except Exception as exc:  # noqa: BLE001 - classified via policy below
@@ -226,10 +247,24 @@ class ExecutionEngine:
                     await self._emit(
                         ExecutionEventType.ATTEMPT_FAILED, context, attempt_log, message=str(exc),
                     )
+                    stop_now = await self._maybe_stop_after_reflection(
+                        task,
+                        context,
+                        policy,
+                        attempt,
+                        started_at,
+                        attempt_log,
+                        error_payload=last_error_payload,
+                    )
+                    if stop_now is not None:
+                        return await self._complete_execution(task, stop_now)
                     if not policy.is_retryable(exc):
-                        return await self._finalize(
-                            task, context, ExecutionOutcome.FAILURE, started_at, attempt_log,
-                            error=last_error_payload,
+                        return await self._complete_execution(
+                            task,
+                            await self._finalize(
+                                task, context, ExecutionOutcome.FAILURE, started_at, attempt_log,
+                                error=last_error_payload,
+                            ),
                         )
                     stop_result = await self._resolve_retry_decision(
                         task, context, policy, attempt, started_at, attempt_log,
@@ -237,22 +272,36 @@ class ExecutionEngine:
                         error_payload=last_error_payload,
                     )
                     if stop_result is not None:
-                        return stop_result
+                        return await self._complete_execution(task, stop_result)
                     continue
 
                 else:
                     await self._emit(ExecutionEventType.ATTEMPT_SUCCEEDED, context, attempt_log)
-                    return await self._finalize(
+                    execution_result = await self._finalize(
                         task, context, ExecutionOutcome.SUCCESS, started_at, attempt_log,
                         result=agent_result.output,
                         tokens_used=agent_result.tokens_used,
                         cost_usd=agent_result.cost_usd,
                     )
+                    verified_result = await self._apply_verification(
+                        task,
+                        context,
+                        execution_result,
+                        attempt_log,
+                        policy=policy,
+                        attempt=attempt,
+                    )
+                    if verified_result is None:
+                        continue
+                    return await self._complete_execution(task, verified_result)
 
             # Loop exhausted without an explicit return: out of attempts.
-            return await self._finalize(
-                task, context, ExecutionOutcome.RETRY_EXHAUSTED, started_at, log,
-                error=last_error_payload,
+            return await self._complete_execution(
+                task,
+                await self._finalize(
+                    task, context, ExecutionOutcome.RETRY_EXHAUSTED, started_at, log,
+                    error=last_error_payload,
+                ),
             )
         finally:
             self._active_tokens.pop(task_id, None)
@@ -373,6 +422,7 @@ class ExecutionEngine:
         error: dict[str, Any] | None = None,
         tokens_used: int = 0,
         cost_usd: float | None = None,
+        reflection: dict[str, Any] | None = None,
     ) -> ExecutionResult:
         """Apply terminal state to `task`, persist it, emit the terminal event, and build the result."""
         duration = time.monotonic() - started_at
@@ -414,6 +464,224 @@ class ExecutionEngine:
             result=result or {},
             error=error,
             final_status=final_status,
+            reflection=reflection,
+        )
+
+    async def _complete_execution(self, task: Task, result: ExecutionResult) -> ExecutionResult:
+        """Record terminal execution in memory when configured."""
+        if self._memory_integration is not None:
+            try:
+                await self._memory_integration.record_execution(task, result)
+            except Exception:
+                logger.warning(
+                    "execution.memory_record_failed",
+                    task_id=str(task.id),
+                    exc_info=True,
+                )
+        return result
+
+    async def _apply_verification(
+        self,
+        task: Task,
+        context: ExecutionContext,
+        execution_result: ExecutionResult,
+        log: Any,
+        *,
+        policy: RetryPolicy,
+        attempt: int,
+    ) -> ExecutionResult | None:
+        """Run verification and reflection; optionally request another attempt."""
+        if self._verification_engine is None or not VerificationEngine.should_verify(task):
+            return execution_result
+
+        verification = await self._verification_engine.verify(
+            task,
+            execution_result,
+            execution_context=context,
+        )
+        verification_payload = verification.to_dict()
+        log.info(
+            "execution.verification_completed",
+            verification_status=verification.status.value,
+            retry_recommended=verification.retry_recommended,
+        )
+
+        if verification.status is not VerificationStatus.FAILED:
+            merged_result = dict(execution_result.result)
+            merged_result["verification"] = verification_payload
+            task.result = merged_result
+            return ExecutionResult(
+                task_id=execution_result.task_id,
+                outcome=execution_result.outcome,
+                attempts=execution_result.attempts,
+                duration_seconds=execution_result.duration_seconds + verification.duration_seconds,
+                result=merged_result,
+                error=execution_result.error,
+                final_status=execution_result.final_status,
+                verification=verification_payload,
+            )
+
+        error_payload = {
+            "type": "VerificationFailed",
+            "message": verification.summary or "Task verification failed.",
+            "verification": verification_payload,
+        }
+        failed_result = ExecutionResult(
+            task_id=execution_result.task_id,
+            outcome=ExecutionOutcome.FAILURE,
+            attempts=execution_result.attempts,
+            duration_seconds=execution_result.duration_seconds + verification.duration_seconds,
+            result=execution_result.result,
+            error=error_payload,
+            final_status=TaskStatus.FAILED,
+            verification=verification_payload,
+        )
+
+        reflection_payload = await self._reflect_and_inject(
+            task,
+            context,
+            failed_result,
+            verification_result=verification,
+            attempt=attempt,
+            max_attempts=policy.max_attempts,
+            log=log,
+        )
+
+        if (
+            reflection_payload
+            and reflection_payload.get("strategy") == RepairStrategy.RETRY.value
+            and attempt < policy.max_attempts
+        ):
+            task.status = TaskStatus.IN_PROGRESS
+            stop_result = await self._resolve_retry_decision(
+                task,
+                context,
+                policy,
+                attempt,
+                time.monotonic(),
+                log,
+                exhausted_outcome=ExecutionOutcome.RETRY_EXHAUSTED,
+                error_payload=error_payload,
+            )
+            if stop_result is None:
+                return None
+            stop_result.reflection = reflection_payload
+            return stop_result
+
+        task.error = error_payload
+        task.result = execution_result.result
+        await self._set_status(task, TaskStatus.FAILED, log)
+        await self._emit(
+            ExecutionEventType.TASK_FAILED,
+            context,
+            log,
+            message="verification failed",
+            data={"verification": verification_payload, "reflection": reflection_payload},
+        )
+        return ExecutionResult(
+            task_id=execution_result.task_id,
+            outcome=ExecutionOutcome.FAILURE,
+            attempts=execution_result.attempts,
+            duration_seconds=failed_result.duration_seconds,
+            result=execution_result.result,
+            error=error_payload,
+            final_status=TaskStatus.FAILED,
+            verification=verification_payload,
+            reflection=reflection_payload,
+        )
+
+    async def _maybe_stop_after_reflection(
+        self,
+        task: Task,
+        context: ExecutionContext,
+        policy: RetryPolicy,
+        attempt: int,
+        started_at: float,
+        log: Any,
+        *,
+        error_payload: dict[str, Any],
+    ) -> ExecutionResult | None:
+        if self._reflection_engine is None:
+            return None
+
+        failed_result = ExecutionResult(
+            task_id=str(task.id),
+            outcome=ExecutionOutcome.FAILURE,
+            attempts=attempt,
+            duration_seconds=time.monotonic() - started_at,
+            error=error_payload,
+            final_status=TaskStatus.FAILED,
+        )
+        reflection_payload = await self._reflect_and_inject(
+            task,
+            context,
+            failed_result,
+            attempt=attempt,
+            max_attempts=policy.max_attempts,
+            log=log,
+        )
+        if reflection_payload is None:
+            return None
+        if reflection_payload.get("strategy") == RepairStrategy.STOP.value:
+            return await self._finalize(
+                task,
+                context,
+                ExecutionOutcome.FAILURE,
+                started_at,
+                log,
+                error=error_payload,
+                reflection=reflection_payload,
+            )
+        return None
+
+    async def _reflect_and_inject(
+        self,
+        task: Task,
+        context: ExecutionContext,
+        execution_result: ExecutionResult,
+        *,
+        verification_result: Any | None = None,
+        attempt: int,
+        max_attempts: int,
+        log: Any,
+    ) -> dict[str, Any] | None:
+        if self._reflection_engine is None:
+            return None
+        if not ReflectionEngine.should_reflect(task, execution_result):
+            return None
+
+        reflection = await self._reflection_engine.reflect(
+            task,
+            execution_result,
+            execution_context=context,
+            verification_result=verification_result,
+            attempt=attempt,
+            max_attempts=max_attempts,
+        )
+        payload = reflection.to_dict()
+        self._inject_reflection(task, payload)
+        log.info(
+            "execution.reflection_completed",
+            reflection_outcome=payload.get("outcome"),
+            strategy=payload.get("strategy"),
+            category=payload.get("category"),
+        )
+        return payload
+
+    @staticmethod
+    def _inject_reflection(task: Task, reflection_payload: dict[str, Any]) -> None:
+        history = list(task.context.get("reflection_history", []))
+        history.append(reflection_payload)
+        task.context["reflection_history"] = history
+        task.context["reflection"] = reflection_payload
+        corrections = task.context.setdefault("correction_context", {})
+        corrections.update(
+            {
+                "root_cause": reflection_payload.get("root_cause"),
+                "suggested_correction": reflection_payload.get("suggested_correction"),
+                "category": reflection_payload.get("category"),
+                "strategy": reflection_payload.get("strategy"),
+            }
         )
 
     async def _set_status(self, task: Task, status: TaskStatus, log: Any) -> None:
