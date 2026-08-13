@@ -76,10 +76,36 @@ class BaseAgent(ABC):
     """
 
     role: AgentRole
+    capabilities: frozenset[str] = frozenset()
 
-    def __init__(self) -> None:
+    def __init__(self, tool_router: Any | None = None) -> None:
         self._settings = get_settings()
         self._log = structlog.get_logger(self.__class__.__name__)
+        self._tool_router = tool_router
+
+    def set_tool_router(self, tool_router: Any | None) -> None:
+        """Attach or replace the ToolRouter used by this agent."""
+        self._tool_router = tool_router
+
+    @property
+    def agent_id(self) -> str:
+        """Stable registry identifier derived from the agent role."""
+        return self.role.value
+
+    @property
+    def name(self) -> str:
+        """Human-readable agent name."""
+        return self.__class__.__name__
+
+    @classmethod
+    def resolved_capabilities(cls) -> frozenset[str]:
+        """Capabilities declared on the class or inferred from role."""
+        declared = getattr(cls, "capabilities", frozenset())
+        if declared:
+            return frozenset(str(cap) for cap in declared)
+        from kodiak.agents.capabilities import default_capabilities_for_role
+
+        return default_capabilities_for_role(getattr(cls, "role", None))
 
     async def run(self, input_: AgentInput) -> AgentOutput:
         log = self._log.bind(
@@ -164,6 +190,39 @@ class BaseAgent(ABC):
     async def health_check(self) -> bool:
         """Optional lifecycle health probe. Defaults to healthy."""
         return True
+
+    async def invoke_tool(
+        self,
+        tool_name: str,
+        inputs: dict[str, Any],
+        *,
+        task_id: str | None = None,
+        timeout_seconds: float | None = None,
+    ) -> Any:
+        """Invoke a tool through the configured ToolRouter.
+
+        Returns:
+            :class:`ToolResult` on success or structured failure, or ``None`` if
+            no ToolRouter is configured.
+        """
+        if self._tool_router is None:
+            from kodiak.tools.models import ToolResult
+
+            return ToolResult(
+                success=False,
+                error="ToolRouter is not configured for this agent.",
+                tool_name=tool_name,
+            )
+
+        from kodiak.tools.models import ToolExecutionContext
+
+        context = ToolExecutionContext(
+            agent_name=self.agent_id,
+            task_id=task_id,
+            granted_capabilities=self.resolved_capabilities(),
+            timeout_seconds=timeout_seconds,
+        )
+        return await self._tool_router.execute(tool_name, inputs, context)
 
     def _make_output(
         self,
