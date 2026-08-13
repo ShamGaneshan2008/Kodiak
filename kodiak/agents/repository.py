@@ -5,6 +5,7 @@ import os
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from kodiak.agents.base import (
     AgentInput,
@@ -82,8 +83,8 @@ class RepositoryAnalyzerAgent(BaseAgent):
 
     role = AgentRole.REPOSITORY
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, tool_router: Any | None = None) -> None:
+        super().__init__(tool_router=tool_router)
 
     async def _run(self, input_: AgentInput) -> AgentOutput:
         repository = input_.context.get("repository_path")
@@ -96,9 +97,19 @@ class RepositoryAnalyzerAgent(BaseAgent):
 
         analysis = await asyncio.to_thread(lambda: self._scan(Path(repository).resolve()))
 
+        result_payload: dict[str, Any] = {"analysis": analysis}
+        if self._tool_router is not None:
+            listing = await self.invoke_tool(
+                "list_dir",
+                {"path": "."},
+                task_id=input_.task_id,
+            )
+            if listing.success:
+                result_payload["tool_listing"] = listing.output
+
         return self._make_output(
             input_,
-            {"analysis": analysis},
+            result_payload,
         )
 
     def _scan(self, root: Path) -> RepositoryAnalysis:
