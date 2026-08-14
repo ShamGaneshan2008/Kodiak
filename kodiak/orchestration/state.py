@@ -26,11 +26,79 @@ class TaskStatus(StrEnum):
     PENDING = "pending"
     PLANNING = "planning"
     RUNNING = "running"
+    VERIFYING = "verifying"
+    REFLECTING = "reflecting"
+    REPAIRING = "repairing"
+    REPLANNING = "replanning"
     AWAITING_APPROVAL = "awaiting_approval"
     PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class AgentStatus(StrEnum):
+    """Runtime status of a registered agent instance."""
+
+    IDLE = "idle"
+    WORKING = "working"
+    ERROR = "error"
+    STOPPED = "stopped"
+
+
+# Valid orchestration state transitions for the autonomous task loop.
+TASK_STATUS_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
+    TaskStatus.PENDING: frozenset({TaskStatus.PLANNING, TaskStatus.CANCELLED}),
+    TaskStatus.PLANNING: frozenset(
+        {TaskStatus.RUNNING, TaskStatus.FAILED, TaskStatus.CANCELLED, TaskStatus.REPLANNING}
+    ),
+    TaskStatus.RUNNING: frozenset(
+        {TaskStatus.VERIFYING, TaskStatus.FAILED, TaskStatus.CANCELLED, TaskStatus.PAUSED}
+    ),
+    TaskStatus.VERIFYING: frozenset(
+        {TaskStatus.COMPLETED, TaskStatus.REFLECTING, TaskStatus.FAILED, TaskStatus.CANCELLED}
+    ),
+    TaskStatus.REFLECTING: frozenset(
+        {
+            TaskStatus.RUNNING,
+            TaskStatus.REPAIRING,
+            TaskStatus.PLANNING,
+            TaskStatus.REPLANNING,
+            TaskStatus.FAILED,
+            TaskStatus.CANCELLED,
+        }
+    ),
+    TaskStatus.REPAIRING: frozenset(
+        {TaskStatus.RUNNING, TaskStatus.VERIFYING, TaskStatus.FAILED, TaskStatus.CANCELLED}
+    ),
+    TaskStatus.REPLANNING: frozenset(
+        {TaskStatus.PLANNING, TaskStatus.FAILED, TaskStatus.CANCELLED}
+    ),
+    TaskStatus.AWAITING_APPROVAL: frozenset(
+        {TaskStatus.RUNNING, TaskStatus.FAILED, TaskStatus.CANCELLED}
+    ),
+    TaskStatus.PAUSED: frozenset({TaskStatus.RUNNING, TaskStatus.CANCELLED}),
+    TaskStatus.COMPLETED: frozenset(),
+    TaskStatus.FAILED: frozenset(),
+    TaskStatus.CANCELLED: frozenset(),
+}
+
+
+class InvalidTaskStatusTransition(ValueError):
+    """Raised when an orchestration component attempts an illegal state change."""
+
+
+def transition_task_status(current: TaskStatus, new: TaskStatus) -> None:
+    """Validate and apply a task status transition.
+
+    Raises:
+        InvalidTaskStatusTransition: If ``new`` is not allowed from ``current``.
+    """
+    allowed = TASK_STATUS_TRANSITIONS.get(current, frozenset())
+    if new not in allowed:
+        raise InvalidTaskStatusTransition(
+            f"Cannot transition task status from {current.value!r} to {new.value!r}"
+        )
 
 
 class StepStatus(StrEnum):
@@ -334,6 +402,15 @@ class TaskState(BaseModel):
         self.status = TaskStatus.CANCELLED
         self.finished_at = datetime.now(UTC)
 
+    def transition_to(self, new_status: TaskStatus) -> None:
+        """Validate and apply a lifecycle status transition."""
+        transition_task_status(self.status, new_status)
+        self.status = new_status
+        if new_status is TaskStatus.RUNNING and self.started_at is None:
+            self.started_at = datetime.now(UTC)
+        if new_status in {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED}:
+            self.finished_at = datetime.now(UTC)
+
     def pause(self) -> None:
         """Pause execution (e.g. waiting for an external signal)."""
         self.status = TaskStatus.PAUSED
@@ -484,3 +561,50 @@ class TaskState(BaseModel):
             },
             "error": self.error,
         }
+
+
+# ---------------------------------------------------------------------------
+# Legacy scheduler / supervisor compatibility models
+# ---------------------------------------------------------------------------
+
+
+class AgentState(BaseModel):
+    """Runtime state for a single agent tracked by the legacy supervisor."""
+
+    name: str
+    status: AgentStatus = AgentStatus.IDLE
+    current_task_id: uuid.UUID | None = None
+    tasks_completed: int = 0
+    tasks_failed: int = 0
+
+
+class ScheduledTaskRecord(BaseModel):
+    """Lightweight task record used by the scheduler and reflection loop."""
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    name: str
+    agent_type: str = ""
+    status: TaskStatus = TaskStatus.PENDING
+    dependencies: list[uuid.UUID] = Field(default_factory=list)
+    retry_count: int = 0
+    error: str | None = None
+    completed_at: datetime | None = None
+
+
+class ExecutionState(BaseModel):
+    """Shared mutable state for scheduler, supervisor, and reflection loop."""
+
+    tasks: list[ScheduledTaskRecord] = Field(default_factory=list)
+    agents: dict[str, AgentState] = Field(default_factory=dict)
+    current_task_id: uuid.UUID | None = None
+
+    def get_task(self, task_id: uuid.UUID) -> ScheduledTaskRecord | None:
+        return next((task for task in self.tasks if task.id == task_id), None)
+
+    def update_task(self, task_id: uuid.UUID, **fields: Any) -> None:
+        task = self.get_task(task_id)
+        if task is None:
+            return
+        for key, value in fields.items():
+            if hasattr(task, key):
+                setattr(task, key, value)
