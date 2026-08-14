@@ -6,7 +6,7 @@ from typing import Any
 import structlog
 from pydantic import BaseModel, Field
 
-from kodiak.orchestration.state import ExecutionState, TaskState, TaskStatus
+from kodiak.orchestration.state import ExecutionState, ScheduledTaskRecord, TaskStatus
 
 logger = structlog.get_logger(__name__)
 
@@ -33,7 +33,7 @@ class TaskScheduler:
             self._queue.append(task)
             self._queue.sort(key=lambda t: t.priority, reverse=True)
             self._state.tasks.append(
-                TaskState(
+                ScheduledTaskRecord(
                     id=task.id,
                     name=task.name,
                     agent_type=task.agent_type,
