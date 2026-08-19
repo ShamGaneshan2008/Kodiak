@@ -658,11 +658,23 @@ class SelfRepairLoop:
 
 
 class ReflectionService:
-    """Determine follow-up action after verification or execution failure."""
+    """Determine follow-up action after verification or execution failure.
 
-    def __init__(self, max_retries: int = 3, max_replans: int = 2) -> None:
+    When a ``StrategyMemory`` is provided, the service consults stored
+    strategies before making a recovery decision.  This enables the
+    system to learn from past successes and failures rather than relying
+    purely on rule-based heuristics.
+    """
+
+    def __init__(
+        self,
+        max_retries: int = 3,
+        max_replans: int = 2,
+        strategy_memory: Any | None = None,
+    ) -> None:
         self._max_retries = max_retries
         self._max_replans = max_replans
+        self._strategy_memory = strategy_memory
 
     async def reflect(
         self,
@@ -772,6 +784,70 @@ class ReflectionService:
             evidence={"verification": verification_result.model_dump()},
         )
 
+    async def _query_strategy_memory(
+        self,
+        failure_category: str,
+        root_cause: str,
+    ) -> dict[str, Any] | None:
+        """Look up relevant strategies from the strategy memory.
+
+        Returns a dict with ``strategy_id``, ``name``, ``approach``,
+        and ``action`` if a relevant strategy is found, or ``None``.
+        """
+        if self._strategy_memory is None:
+            return None
+
+        try:
+            from kodiak.orchestration.strategy import ProblemClass
+
+            # Map failure category string to ProblemClass
+            category_map = {
+                "syntax_error": ProblemClass.SYNTAX_ERROR,
+                "test_failure": ProblemClass.TEST_FAILURE,
+                "type_error": ProblemClass.TYPE_ERROR,
+                "lint_failure": ProblemClass.LINT_FAILURE,
+                "missing_dependency": ProblemClass.MISSING_DEPENDENCY,
+                "permission_failure": ProblemClass.PERMISSION_FAILURE,
+                "timeout": ProblemClass.TIMEOUT,
+                "incorrect_implementation": ProblemClass.INCORRECT_IMPLEMENTATION,
+                "missing_artifact": ProblemClass.MISSING_ARTIFACT,
+                "execution_failure": ProblemClass.EXECUTION_FAILURE,
+            }
+            problem_class = category_map.get(failure_category, ProblemClass.UNKNOWN)
+
+            strategies = self._strategy_memory.retrieve_for_problem(problem_class, limit=3)
+            if not strategies:
+                return None
+
+            best = strategies[0]
+            return {
+                "strategy_id": best.strategy_id,
+                "name": best.name,
+                "approach": best.approach,
+                "effectiveness_score": best.effectiveness_score(),
+                "use_count": best.use_count,
+                "action": ("repair" if best.expected_success_probability >= 0.6 else "replan"),
+            }
+        except Exception:
+            logger.debug("strategy_memory_query_failed", exc_info=True)
+            return None
+
+    async def _record_strategy_outcome(
+        self,
+        strategy_id: str,
+        success: bool,
+    ) -> None:
+        """Record the outcome of a strategy in memory."""
+        if self._strategy_memory is None or not strategy_id:
+            return
+        try:
+            from kodiak.orchestration.strategy import StrategyOutcome
+
+            outcome = StrategyOutcome.SUCCESS if success else StrategyOutcome.FAILURE
+            self._strategy_memory.record_outcome(strategy_id, outcome)
+        except Exception:
+            logger.debug("strategy_outcome_record_failed", exc_info=True)
+
 
 # ---------------------------------------------------------------------------
 # Re-export all public names
@@ -793,4 +869,18 @@ __all__ = [
     "FailureAnalyzer",
     "ReflectionEngine",
     "SelfRepairLoop",
+    # Strategy (Phase 4)
+    "EngineeringStrategy",
+    "StrategyMemory",
+    "StrategyOutcome",
+    "ProblemClass",
 ]
+
+
+# Lazy re-exports from strategy module for convenience
+from kodiak.orchestration.strategy import (  # noqa: E402
+    EngineeringStrategy,
+    ProblemClass,
+    StrategyMemory,
+    StrategyOutcome,
+)
