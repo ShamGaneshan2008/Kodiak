@@ -104,6 +104,9 @@ class EngineeringStrategy:
     success_count: int = 0
     failure_count: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
+    version_number: int = 1
+    parent_strategy_id: str | None = None
+    version_history: tuple[str, ...] = ()  # tuple of strategy_ids representing version chain
 
     @property
     def success_rate(self) -> float:
@@ -177,6 +180,9 @@ class EngineeringStrategy:
             "is_reliable": self.is_reliable,
             "is_deprecated": self.is_deprecated,
             "metadata": dict(self.metadata),
+            "version_number": self.version_number,
+            "parent_strategy_id": self.parent_strategy_id,
+            "version_history": list(self.version_history),
         }
 
 
