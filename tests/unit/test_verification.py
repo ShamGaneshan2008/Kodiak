@@ -9,19 +9,18 @@ import pytest
 
 from kodiak.db.models.task import Task, TaskPriority, TaskSource, TaskStatus
 from kodiak.orchestration.execution.models import ExecutionOutcome, ExecutionResult
-from kodiak.orchestration.verification.engine import VerificationEngine
-from kodiak.orchestration.verification.models import (
-    VerificationContext,
-    VerificationStatus,
-    aggregate_evidence,
-)
-from kodiak.orchestration.verification.verifiers import (
+from kodiak.orchestration.verification import (
     CommandVerifier,
     FileVerifier,
     OutputVerifier,
     TestVerifier,
+    VerificationContext,
+    VerificationEngine,
+    VerificationEvidence,
+    VerificationStatus,
+    aggregate_evidence,
 )
-from kodiak.tools.builtin import CommandExecutionTool, TestRunnerTool, register_builtin_tools
+from kodiak.tools.builtin import CommandExecutionTool, TestRunnerTool
 from kodiak.tools.registry import ToolRegistry
 from kodiak.tools.router import ToolRouter
 
@@ -197,7 +196,7 @@ async def test_command_verifier_failure(tmp_path: Path) -> None:
 
 
 def test_aggregate_verified() -> None:
-    from kodiak.orchestration.verification.models import VerificationEvidence
+    pass  # VerificationEvidence already imported at module level
 
     result = aggregate_evidence(
         [
@@ -209,7 +208,7 @@ def test_aggregate_verified() -> None:
 
 
 def test_aggregate_failed() -> None:
-    from kodiak.orchestration.verification.models import VerificationEvidence
+    pass  # VerificationEvidence already imported at module level
 
     result = aggregate_evidence(
         [
@@ -221,7 +220,7 @@ def test_aggregate_failed() -> None:
 
 
 def test_aggregate_inconclusive() -> None:
-    from kodiak.orchestration.verification.models import VerificationEvidence
+    pass  # VerificationEvidence already imported at module level
 
     result = aggregate_evidence(
         [

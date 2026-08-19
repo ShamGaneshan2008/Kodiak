@@ -3,11 +3,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import structlog
 
-from .models import HierarchicalTaskNode, ResourceEstimate, TaskComplexity
+from .models import ResourceEstimate, TaskComplexity
 
 logger = structlog.get_logger(__name__)
 
@@ -45,7 +46,11 @@ class ResourceEstimator:
             else task.get("type", task.get("task_type", "implementation"))
         ).lower()
 
-        files = getattr(task, "files_to_inspect", []) if not isinstance(task, dict) else task.get("files_to_inspect", [])
+        files = (
+            getattr(task, "files_to_inspect", [])
+            if not isinstance(task, dict)
+            else task.get("files_to_inspect", [])
+        )
         file_count = len(files) if isinstance(files, list) else 0
 
         # Base token estimates
@@ -78,7 +83,9 @@ class ResourceEstimator:
 
         # Collect required tools
         tools_list: list[str] = []
-        raw_tools = getattr(task, "tools", []) if not isinstance(task, dict) else task.get("tools", [])
+        raw_tools = (
+            getattr(task, "tools", []) if not isinstance(task, dict) else task.get("tools", [])
+        )
         if isinstance(raw_tools, list):
             for t in raw_tools:
                 if isinstance(t, str):

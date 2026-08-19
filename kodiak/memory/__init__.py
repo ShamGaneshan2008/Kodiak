@@ -19,6 +19,8 @@ from .errors import (
     ShortTermMemoryError,
     WorkingMemoryNotFoundError,
 )
+from .experience import EngineeringExperience, ExperienceExtractor, ExperienceSanitizer
+from .integration import MemoryIntegration
 from .long_term import LongTermMemory
 from .models import Memory, MemoryType, SearchResult
 from .persistence import (
@@ -39,16 +41,13 @@ from .procedural import (
 from .ranking import MemoryRanker
 from .retrieval import MemoryRetriever
 from .semantic import (
-    FactNotFoundError,
     SemanticEntity,
     SemanticMemory,
     SemanticRepository,
     SemanticSearchResult,
 )
-from .short_term import ShortTermMemory, ShortTermMemoryItem, ShortTermMemoryRepository
-from .experience import EngineeringExperience, ExperienceExtractor, ExperienceSanitizer
-from .integration import MemoryIntegration
 from .service import MemoryService
+from .short_term import ShortTermMemory, ShortTermMemoryItem, ShortTermMemoryRepository
 from .working import WorkingMemory, WorkingMemoryItem, WorkingMemoryRepository, WorkingMemoryStatus
 
 __all__ = [

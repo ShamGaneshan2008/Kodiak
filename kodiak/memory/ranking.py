@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Sequence
 
 import structlog
 

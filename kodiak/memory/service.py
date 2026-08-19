@@ -1,25 +1,27 @@
 # kodiak/memory/service.py
-"""Unified facade over Kodiak's Working, Short-Term, Episodic, Semantic, and Procedural Memory systems."""
+"""Unified facade over Kodiak's Working, Short-Term, Episodic,
+Semantic, and Procedural Memory systems."""
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Final, Sequence
+from typing import Any, Final
 
 import structlog
 
 from .consolidation import ConsolidationResult, MemoryConsolidator
 from .context import MemoryContextBuilder
-from .episodic import Episode, EpisodicMemory
+from .episodic import EpisodicMemory
 from .errors import MemoryNotFoundError, MemoryServiceError
 from .long_term import LongTermMemory
 from .models import Memory, MemoryType, SearchResult
 from .persistence import JSONFileMemoryPersistence
-from .procedural import ProceduralMemory, Procedure, ProcedureStep
+from .procedural import ProceduralMemory
 from .ranking import MemoryRanker
 from .retrieval import MemoryRetriever
-from .semantic import SemanticEntity, SemanticMemory
+from .semantic import SemanticMemory
 from .short_term import ShortTermMemory, ShortTermMemoryItem
 from .working import WorkingMemory, WorkingMemoryItem
 
@@ -87,9 +89,7 @@ class MemoryService:
             long_term=self.long_term,
             ranker=self.ranker,
         )
-        self.context_builder = context_builder or MemoryContextBuilder(
-            retriever=self.retriever
-        )
+        self.context_builder = context_builder or MemoryContextBuilder(retriever=self.retriever)
         self.consolidator = consolidator or MemoryConsolidator(
             working_memory=self.working,
             episodic_memory=self.episodic,
@@ -97,9 +97,7 @@ class MemoryService:
             procedural_memory=self.procedural,
         )
 
-        self.persistence = (
-            JSONFileMemoryPersistence(persistence_path) if persistence_path else None
-        )
+        self.persistence = JSONFileMemoryPersistence(persistence_path) if persistence_path else None
 
     # Core CLI and Facade CRUD Operations
 
@@ -246,7 +244,9 @@ class MemoryService:
         """
         parsed_id = self._coerce_uuid(memory_id)
         if parsed_id is None:
-            raise MemoryNotFoundError(str(memory_id), memory_type=str(memory_type) if memory_type else None)
+            raise MemoryNotFoundError(
+                str(memory_id), memory_type=str(memory_type) if memory_type else None
+            )
 
         if memory_type in (None, MemoryType.WORKING):
             if await self.working.delete_working_memory(parsed_id):
@@ -259,7 +259,9 @@ class MemoryService:
             except MemoryNotFoundError:
                 pass
 
-        raise MemoryNotFoundError(str(memory_id), memory_type=str(memory_type) if memory_type else None)
+        raise MemoryNotFoundError(
+            str(memory_id), memory_type=str(memory_type) if memory_type else None
+        )
 
     async def delete_by_tags(
         self,
@@ -358,9 +360,7 @@ class MemoryService:
         Args:
             file_path: Optional destination path override.
         """
-        persistence = (
-            JSONFileMemoryPersistence(file_path) if file_path else self.persistence
-        )
+        persistence = JSONFileMemoryPersistence(file_path) if file_path else self.persistence
         if persistence is None:
             raise MemoryServiceError("No persistence file path configured")
 
@@ -382,9 +382,7 @@ class MemoryService:
         Args:
             file_path: Optional source path override.
         """
-        persistence = (
-            JSONFileMemoryPersistence(file_path) if file_path else self.persistence
-        )
+        persistence = JSONFileMemoryPersistence(file_path) if file_path else self.persistence
         if persistence is None:
             raise MemoryServiceError("No persistence file path configured")
 

@@ -28,7 +28,7 @@ import asyncio
 import json
 from collections.abc import Awaitable, Mapping
 from dataclasses import fields, is_dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -39,6 +39,7 @@ from structlog.typing import FilteringBoundLogger
 # ExecutionResult, ExecutionOutcome, or RetryPolicy from this module
 # continues to work unchanged, now backed by the canonical execution
 # package instead of a competing definition.
+from kodiak.db.models.task import TaskStatus
 from kodiak.orchestration.execution import (
     ExecutionOutcome,
     ExecutionResult,
@@ -70,7 +71,7 @@ __all__ = [
 
 def _now() -> datetime:
     """Return the current UTC time."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _serialize(value: Any) -> Any:
@@ -102,243 +103,99 @@ def _serialize(value: Any) -> Any:
     return str(value)
 
 
-def _duration_seconds(result: ExecutionResult) -> float:
-    """Resolve the duration of an execution, in seconds.
-
-    Prefers a ``duration_seconds`` attribute already exposed by the
-    canonical model; falls back to deriving it from ``started_at`` and
-    ``finished_at`` otherwise.
-
-    Args:
-        result: The execution result to measure.
-
-    Returns:
-        The elapsed wall-clock time, in seconds.
-    """
-    existing = getattr(result, "duration_seconds", None)
-    if isinstance(existing, (int, float)):
-        return float(existing)
-    return (result.finished_at - result.started_at).total_seconds()
-
-
 def success(
     *,
-    execution_id: str,
     task_id: str,
-    started_at: datetime,
-    finished_at: datetime | None = None,
     output: Any = None,
-    metadata: Mapping[str, Any] | None = None,
     attempts: int = 1,
+    duration_seconds: float = 0.0,
 ) -> ExecutionResult:
-    """Build a successful :class:`ExecutionResult`.
-
-    Args:
-        execution_id: Identifier correlating this result to its
-            execution attempt.
-        task_id: Identifier of the task that was executed.
-        started_at: When the execution attempt began.
-        finished_at: When the execution attempt completed. Defaults to
-            the current UTC time.
-        output: The payload produced by the execution (e.g. a diff
-            summary, PR URL, or generated artifact references).
-        metadata: Free-form structured metadata for observability.
-        attempts: Number of attempts made before succeeding.
-
-    Returns:
-        An ``ExecutionResult`` with ``outcome=ExecutionOutcome.SUCCESS``.
-    """
+    """Build a successful :class:`ExecutionResult`."""
     return ExecutionResult(
-        execution_id=execution_id,
         task_id=task_id,
         outcome=ExecutionOutcome.SUCCESS,
-        started_at=started_at,
-        finished_at=finished_at or _now(),
-        output=output,
-        metadata=dict(metadata or {}),
-        error_type=None,
-        error_message=None,
         attempts=attempts,
-        max_attempts=None,
-        retry_policy=None,
+        duration_seconds=duration_seconds,
+        result=dict(output) if isinstance(output, Mapping) else {},
+        final_status=TaskStatus.COMPLETED,
     )
 
 
 def failure(
     *,
-    execution_id: str,
     task_id: str,
-    started_at: datetime,
     error: BaseException | None = None,
     error_type: str | None = None,
     error_message: str | None = None,
-    finished_at: datetime | None = None,
-    metadata: Mapping[str, Any] | None = None,
+    output: Any = None,
     attempts: int = 1,
+    duration_seconds: float = 0.0,
 ) -> ExecutionResult:
-    """Build a failed :class:`ExecutionResult`.
-
-    Args:
-        execution_id: Identifier correlating this result to its
-            execution attempt.
-        task_id: Identifier of the task that was executed.
-        started_at: When the execution attempt began.
-        error: The exception that caused the failure, if available.
-            Used to derive ``error_type``/``error_message`` when they
-            are not supplied explicitly.
-        error_type: The class name of the causing exception. Derived
-            from ``error`` when omitted.
-        error_message: A human-readable description of the failure.
-            Derived from ``error`` when omitted.
-        finished_at: When the execution attempt failed. Defaults to the
-            current UTC time.
-        metadata: Free-form structured metadata for observability.
-        attempts: Number of attempts made before failing.
-
-    Returns:
-        An ``ExecutionResult`` with ``outcome=ExecutionOutcome.FAILURE``.
-    """
+    """Build a failed :class:`ExecutionResult`."""
     resolved_type = error_type or (type(error).__name__ if error else "UnknownError")
     resolved_message = error_message or (str(error) if error else "Execution failed")
+    error_dict: dict[str, Any] = {"type": resolved_type, "message": resolved_message}
     return ExecutionResult(
-        execution_id=execution_id,
         task_id=task_id,
         outcome=ExecutionOutcome.FAILURE,
-        started_at=started_at,
-        finished_at=finished_at or _now(),
-        output=None,
-        metadata=dict(metadata or {}),
-        error_type=resolved_type,
-        error_message=resolved_message,
         attempts=attempts,
-        max_attempts=None,
-        retry_policy=None,
+        duration_seconds=duration_seconds,
+        result=dict(output) if isinstance(output, Mapping) else {},
+        error=error_dict,
+        final_status=TaskStatus.FAILED,
     )
 
 
 def cancelled(
     *,
-    execution_id: str,
     task_id: str,
-    started_at: datetime,
     reason: str,
-    finished_at: datetime | None = None,
-    metadata: Mapping[str, Any] | None = None,
     attempts: int = 1,
+    duration_seconds: float = 0.0,
 ) -> ExecutionResult:
-    """Build a cancelled :class:`ExecutionResult`.
-
-    Args:
-        execution_id: Identifier correlating this result to its
-            execution attempt.
-        task_id: Identifier of the task that was executed.
-        started_at: When the execution attempt began.
-        reason: A human-readable description of why execution was
-            cancelled.
-        finished_at: When execution stopped. Defaults to the current
-            UTC time.
-        metadata: Free-form structured metadata for observability.
-        attempts: Number of attempts made before cancellation.
-
-    Returns:
-        An ``ExecutionResult`` with ``outcome=ExecutionOutcome.CANCELLED``.
-    """
+    """Build a cancelled :class:`ExecutionResult`."""
     return ExecutionResult(
-        execution_id=execution_id,
         task_id=task_id,
         outcome=ExecutionOutcome.CANCELLED,
-        started_at=started_at,
-        finished_at=finished_at or _now(),
-        output=None,
-        metadata=dict(metadata or {}),
-        error_type=None,
-        error_message=reason,
         attempts=attempts,
-        max_attempts=None,
-        retry_policy=None,
+        duration_seconds=duration_seconds,
+        error={"type": "ExecutionCancelledError", "message": reason},
+        final_status=TaskStatus.CANCELLED,
     )
 
 
 def timeout(
     *,
-    execution_id: str,
     task_id: str,
-    started_at: datetime,
     timeout_seconds: float,
-    finished_at: datetime | None = None,
-    metadata: Mapping[str, Any] | None = None,
     attempts: int = 1,
+    duration_seconds: float = 0.0,
 ) -> ExecutionResult:
-    """Build a timed-out :class:`ExecutionResult`.
-
-    Args:
-        execution_id: Identifier correlating this result to its
-            execution attempt.
-        task_id: Identifier of the task that was executed.
-        started_at: When the execution attempt began.
-        timeout_seconds: The timeout threshold, in seconds, that was
-            exceeded.
-        finished_at: When the timeout was detected. Defaults to the
-            current UTC time.
-        metadata: Free-form structured metadata for observability.
-        attempts: Number of attempts made before timing out.
-
-    Returns:
-        An ``ExecutionResult`` with ``outcome=ExecutionOutcome.TIMEOUT``.
-    """
+    """Build a timed-out :class:`ExecutionResult`."""
     return ExecutionResult(
-        execution_id=execution_id,
         task_id=task_id,
         outcome=ExecutionOutcome.TIMEOUT,
-        started_at=started_at,
-        finished_at=finished_at or _now(),
-        output=None,
-        metadata=dict(metadata or {}),
-        error_type="TimeoutError",
-        error_message=f"Execution exceeded timeout of {timeout_seconds}s",
         attempts=attempts,
-        max_attempts=None,
-        retry_policy=None,
+        duration_seconds=duration_seconds,
+        error={
+            "type": "TimeoutError",
+            "message": f"Execution exceeded timeout of {timeout_seconds}s",
+        },
+        final_status=TaskStatus.FAILED,
     )
 
 
 def retry_exhausted(
     *,
-    execution_id: str,
     task_id: str,
-    started_at: datetime,
     attempts: int,
     retry_policy: RetryPolicy,
     last_error: BaseException | None = None,
     error_type: str | None = None,
     error_message: str | None = None,
-    finished_at: datetime | None = None,
-    metadata: Mapping[str, Any] | None = None,
+    duration_seconds: float = 0.0,
 ) -> ExecutionResult:
-    """Build an :class:`ExecutionResult` for retries that never succeeded.
-
-    Args:
-        execution_id: Identifier correlating this result to its
-            execution attempt.
-        task_id: Identifier of the task that was executed.
-        started_at: When the first attempt began.
-        attempts: Total number of attempts made.
-        retry_policy: The ``RetryPolicy`` that governed the retries.
-        last_error: The exception raised by the final attempt, if
-            available. Used to derive ``error_type``/``error_message``
-            when they are not supplied explicitly.
-        error_type: The class name of the final attempt's exception.
-            Derived from ``last_error`` when omitted.
-        error_message: A human-readable description of the final
-            failure. Derived from ``last_error`` when omitted.
-        finished_at: When the final attempt failed. Defaults to the
-            current UTC time.
-        metadata: Free-form structured metadata for observability.
-
-    Returns:
-        An ``ExecutionResult`` with
-        ``outcome=ExecutionOutcome.RETRY_EXHAUSTED``.
-    """
+    """Build an :class:`ExecutionResult` for retries that never succeeded."""
     resolved_type = error_type or (
         type(last_error).__name__ if last_error else "RetriesExhaustedError"
     )
@@ -346,81 +203,40 @@ def retry_exhausted(
         str(last_error) if last_error else f"Execution failed after {attempts} attempts"
     )
     return ExecutionResult(
-        execution_id=execution_id,
         task_id=task_id,
         outcome=ExecutionOutcome.RETRY_EXHAUSTED,
-        started_at=started_at,
-        finished_at=finished_at or _now(),
-        output=None,
-        metadata=dict(metadata or {}),
-        error_type=resolved_type,
-        error_message=resolved_message,
         attempts=attempts,
-        max_attempts=retry_policy.max_attempts,
-        retry_policy=retry_policy,
+        duration_seconds=duration_seconds,
+        error={"type": resolved_type, "message": resolved_message},
+        final_status=TaskStatus.FAILED,
     )
 
 
 async def from_awaitable(
     awaitable: Awaitable[Any],
     *,
-    execution_id: str,
     task_id: str,
     timeout_seconds: float | None = None,
-    metadata: Mapping[str, Any] | None = None,
 ) -> ExecutionResult:
-    """Await a coroutine and translate its outcome into an ExecutionResult.
-
-    Cancellation is intentionally left to propagate rather than being
-    converted into a ``cancelled()`` result: per ``asyncio`` semantics,
-    ``CancelledError`` must reach the enclosing task so cancellation
-    unwinds correctly. Callers that catch ``asyncio.CancelledError``
-    around the awaited task should build the ``cancelled()`` result
-    themselves once unwinding is complete.
-
-    Args:
-        awaitable: The coroutine or future representing the execution.
-        execution_id: Identifier correlating this result to its
-            execution attempt.
-        task_id: Identifier of the task being executed.
-        timeout_seconds: Optional timeout, in seconds, applied to
-            ``awaitable``.
-        metadata: Free-form structured metadata for observability.
-
-    Returns:
-        A ``success`` result if ``awaitable`` completes normally, a
-        ``timeout`` result if it exceeds ``timeout_seconds``, or a
-        ``failure`` result if it raises any other exception.
-    """
-    started_at = _now()
+    """Await a coroutine and translate its outcome into an ExecutionResult."""
+    started = _now()
     try:
         if timeout_seconds is not None:
             output = await asyncio.wait_for(awaitable, timeout=timeout_seconds)
         else:
             output = await awaitable
-    except asyncio.TimeoutError:
+    except TimeoutError:
+        elapsed = (_now() - started).total_seconds()
         return timeout(
-            execution_id=execution_id,
             task_id=task_id,
-            started_at=started_at,
             timeout_seconds=timeout_seconds or 0.0,
-            metadata=metadata,
+            duration_seconds=elapsed,
         )
-    except Exception as exc:  # noqa: BLE001 - captured as a failure result
-        return failure(
-            execution_id=execution_id,
-            task_id=task_id,
-            started_at=started_at,
-            error=exc,
-            metadata=metadata,
-        )
-    return success(
-        execution_id=execution_id,
-        task_id=task_id,
-        started_at=started_at,
-        output=output,
-        metadata=metadata,
-    )
+    except Exception as exc:  # noqa: BLE001
+        elapsed = (_now() - started).total_seconds()
+        return failure(task_id=task_id, error=exc, duration_seconds=elapsed)
+    elapsed = (_now() - started).total_seconds()
+    return success(task_id=task_id, output=output, duration_seconds=elapsed)
 
 
 def to_dict(result: ExecutionResult) -> dict[str, Any]:
@@ -452,9 +268,7 @@ def to_json(result: ExecutionResult) -> str:
     return json.dumps(to_dict(result), default=str)
 
 
-def to_event(
-    result: ExecutionResult, *, execution_id: str | None = None
-) -> AnyExecutionEvent:
+def to_event(result: ExecutionResult, *, execution_id: str | None = None) -> AnyExecutionEvent:
     """Convert a terminal :class:`ExecutionResult` into its matching event.
 
     Args:
@@ -468,20 +282,24 @@ def to_event(
     Raises:
         ValueError: If ``result.outcome`` is not a recognized value.
     """
-    resolved_execution_id = execution_id or result.execution_id
+    resolved_execution_id = execution_id or f"{result.task_id}:{result.outcome.value}"
+
+    error_payload = result.error or {}
+    error_type = error_payload.get("type", result.outcome.value)
+    error_message = error_payload.get("message", "Execution failed")
 
     if result.outcome is ExecutionOutcome.SUCCESS:
         return ExecutionSucceededEvent(
             task_id=result.task_id,
             execution_id=resolved_execution_id,
             result=result,
-            duration_seconds=_duration_seconds(result),
+            duration_seconds=result.duration_seconds,
         )
     if result.outcome is ExecutionOutcome.CANCELLED:
         return ExecutionCancelledEvent(
             task_id=result.task_id,
             execution_id=resolved_execution_id,
-            reason=result.error_message or "Execution cancelled",
+            reason=error_message or "Execution cancelled",
         )
     if result.outcome in (
         ExecutionOutcome.FAILURE,
@@ -491,9 +309,9 @@ def to_event(
         return ExecutionFailedEvent(
             task_id=result.task_id,
             execution_id=resolved_execution_id,
-            error_type=result.error_type or result.outcome.value,
-            error_message=result.error_message or "Execution failed",
-            duration_seconds=_duration_seconds(result),
+            error_type=str(error_type),
+            error_message=str(error_message),
+            duration_seconds=result.duration_seconds,
             attempt=result.attempts,
             final=True,
         )
@@ -515,8 +333,6 @@ def log_result(
             successful outcome and ``"error"`` otherwise. Must name a
             method on ``logger``.
     """
-    resolved_level = level or (
-        "info" if result.outcome is ExecutionOutcome.SUCCESS else "error"
-    )
+    resolved_level = level or ("info" if result.outcome is ExecutionOutcome.SUCCESS else "error")
     log_method = getattr(logger, resolved_level)
     log_method(f"execution_result.{result.outcome.value}", **to_dict(result))

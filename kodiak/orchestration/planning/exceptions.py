@@ -4,7 +4,8 @@ Exceptions for the Kodiak Planning subsystem.
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 
 class PlanningError(Exception):

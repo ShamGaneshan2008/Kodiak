@@ -191,8 +191,7 @@ class AgentSelector:
         confidence_score = candidate.success_rate if candidate.success_rate is not None else 0.5
         confidence_score = max(0.0, min(confidence_score, 1.0))
         is_available = (
-            candidate.enabled
-            and candidate.health_status is not AgentHealthStatus.UNHEALTHY
+            candidate.enabled and candidate.health_status is not AgentHealthStatus.UNHEALTHY
         )
 
         if not is_available or not is_compatible:

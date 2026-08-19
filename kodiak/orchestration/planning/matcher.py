@@ -36,7 +36,9 @@ class AgentCapabilityMatcher:
         """
         self.agent_manager = agent_manager
 
-    def determine_capabilities(self, task_type: str, tools: list[dict[str, Any]] | None = None) -> list[str]:
+    def determine_capabilities(
+        self, task_type: str, tools: list[dict[str, Any]] | None = None
+    ) -> list[str]:
         """Determine required capability strings for a given task type and tools list.
 
         Args:
@@ -68,9 +70,7 @@ class AgentCapabilityMatcher:
         Returns:
             AgentRole string value.
         """
-        _, role = _TASK_TYPE_TO_CAPABILITIES.get(
-            task_type.lower(), ([], AgentRole.CODER)
-        )
+        _, role = _TASK_TYPE_TO_CAPABILITIES.get(task_type.lower(), ([], AgentRole.CODER))
         return role.value
 
     def match_best_agent(
@@ -93,7 +93,14 @@ class AgentCapabilityMatcher:
         if self.agent_manager is not None and hasattr(self.agent_manager, "get_agent"):
             # Check if agent manager has an agent matching the capability or role
             try:
-                for agent_name in ["coder", "reviewer", "tester", "researcher", "debugger", "planner"]:
+                for agent_name in [
+                    "coder",
+                    "reviewer",
+                    "tester",
+                    "researcher",
+                    "debugger",
+                    "planner",
+                ]:
                     agent = self.agent_manager.get_agent(agent_name)
                     if agent and hasattr(agent, "capabilities"):
                         if set(caps).issubset(getattr(agent, "capabilities", set())):

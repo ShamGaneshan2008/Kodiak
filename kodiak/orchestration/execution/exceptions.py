@@ -31,7 +31,9 @@ class RetryExhaustedError(ExecutionEngineError):
     that prefers try/except control flow can raise this from the result.
     """
 
-    def __init__(self, message: str, attempts: int, last_error: dict[str, object] | None = None) -> None:
+    def __init__(
+        self, message: str, attempts: int, last_error: dict[str, object] | None = None
+    ) -> None:
         super().__init__(message)
         self.attempts = attempts
         self.last_error = last_error

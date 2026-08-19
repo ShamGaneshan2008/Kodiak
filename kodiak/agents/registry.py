@@ -41,7 +41,7 @@ import inspect
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
 import structlog
@@ -249,8 +249,7 @@ class AgentRegistry:
 
         if (instance is None) == (factory is None):
             raise InvalidAgentMetadataError(
-                "exactly one of 'instance' or 'factory' must be provided "
-                f"for agent '{agent_id}'"
+                f"exactly one of 'instance' or 'factory' must be provided for agent '{agent_id}'"
             )
 
         if instance is not None and not isinstance(instance, AgentProtocol):
@@ -267,7 +266,7 @@ class AgentRegistry:
             description=description,
             dependencies=dict(dependencies or {}),
             lazy=instance is None,
-            registered_at=datetime.now(timezone.utc),
+            registered_at=datetime.now(UTC),
         )
 
         async with self._lock:
@@ -448,9 +447,7 @@ class AgentRegistry:
             entries = list(self._entries.values())
 
         instantiated = sum(1 for entry in entries if entry.instance is not None)
-        pending_lazy = sum(
-            1 for entry in entries if entry.metadata.lazy and entry.instance is None
-        )
+        pending_lazy = sum(1 for entry in entries if entry.metadata.lazy and entry.instance is None)
         capabilities = sorted({cap for entry in entries for cap in entry.metadata.capabilities})
         tags = sorted({tag for entry in entries for tag in entry.metadata.tags})
 
@@ -477,6 +474,5 @@ class AgentRegistry:
             raise InvalidAgentMetadataError("agent_id must be a non-empty string")
         if not _AGENT_ID_PATTERN.match(agent_id):
             raise InvalidAgentMetadataError(
-                f"agent_id '{agent_id}' must match pattern "
-                f"'{_AGENT_ID_PATTERN.pattern}'"
+                f"agent_id '{agent_id}' must match pattern '{_AGENT_ID_PATTERN.pattern}'"
             )

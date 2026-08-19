@@ -18,18 +18,18 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, is_dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, TypeAlias
+from typing import Any
 
 from structlog.typing import FilteringBoundLogger
 
+from kodiak.db.models.task import Task
 from kodiak.orchestration.execution import (
     ExecutionContext,
     ExecutionResult,
     RetryPolicy,
-    Task,
 )
 
 
@@ -64,9 +64,7 @@ def _serialize(value: Any) -> Any:
     if isinstance(value, Path):
         return str(value)
     if is_dataclass(value) and not isinstance(value, type):
-        return {
-            f.name: _serialize(getattr(value, f.name)) for f in fields(value)
-        }
+        return {f.name: _serialize(getattr(value, f.name)) for f in fields(value)}
     if isinstance(value, Mapping):
         return {str(key): _serialize(item) for key, item in value.items()}
     if isinstance(value, (list, tuple, set, frozenset)):
@@ -97,7 +95,7 @@ class ExecutionEvent:
     event_type: ExecutionEventType
     task_id: str
     execution_id: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     task: Task | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
@@ -147,9 +145,7 @@ class ExecutionStartedEvent(ExecutionEvent):
             if available at emission time.
     """
 
-    event_type: ExecutionEventType = field(
-        default=ExecutionEventType.STARTED, init=False
-    )
+    event_type: ExecutionEventType = field(default=ExecutionEventType.STARTED, init=False)
     attempt: int = 1
     context: ExecutionContext | None = None
 
@@ -170,9 +166,7 @@ class ExecutionProgressEvent(ExecutionEvent):
         message: A human-readable progress message.
     """
 
-    event_type: ExecutionEventType = field(
-        default=ExecutionEventType.PROGRESS, init=False
-    )
+    event_type: ExecutionEventType = field(default=ExecutionEventType.PROGRESS, init=False)
     progress: float
     current_step: str | None = None
     message: str | None = None
@@ -180,9 +174,7 @@ class ExecutionProgressEvent(ExecutionEvent):
     def __post_init__(self) -> None:
         """Validate that progress is a well-formed fraction."""
         if not 0.0 <= self.progress <= 1.0:
-            raise ValueError(
-                f"progress must be within [0.0, 1.0], got {self.progress!r}"
-            )
+            raise ValueError(f"progress must be within [0.0, 1.0], got {self.progress!r}")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -198,9 +190,7 @@ class ExecutionRetryingEvent(ExecutionEvent):
             available at emission time.
     """
 
-    event_type: ExecutionEventType = field(
-        default=ExecutionEventType.RETRYING, init=False
-    )
+    event_type: ExecutionEventType = field(default=ExecutionEventType.RETRYING, init=False)
     attempt: int
     max_attempts: int
     delay_seconds: float
@@ -230,9 +220,7 @@ class ExecutionCancelledEvent(ExecutionEvent):
             as opposed to being forcibly terminated.
     """
 
-    event_type: ExecutionEventType = field(
-        default=ExecutionEventType.CANCELLED, init=False
-    )
+    event_type: ExecutionEventType = field(default=ExecutionEventType.CANCELLED, init=False)
     reason: str
     cancelled_by: str | None = None
     graceful: bool = True
@@ -247,9 +235,7 @@ class ExecutionSucceededEvent(ExecutionEvent):
         duration_seconds: Total wall-clock time the attempt took.
     """
 
-    event_type: ExecutionEventType = field(
-        default=ExecutionEventType.SUCCEEDED, init=False
-    )
+    event_type: ExecutionEventType = field(default=ExecutionEventType.SUCCEEDED, init=False)
     result: ExecutionResult
     duration_seconds: float
 
@@ -275,9 +261,7 @@ class ExecutionFailedEvent(ExecutionEvent):
             instead.
     """
 
-    event_type: ExecutionEventType = field(
-        default=ExecutionEventType.FAILED, init=False
-    )
+    event_type: ExecutionEventType = field(default=ExecutionEventType.FAILED, init=False)
     error_type: str
     error_message: str
     duration_seconds: float
@@ -292,7 +276,7 @@ class ExecutionFailedEvent(ExecutionEvent):
             raise ValueError(f"attempt must be >= 1, got {self.attempt!r}")
 
 
-AnyExecutionEvent: TypeAlias = (
+type AnyExecutionEvent = (
     ExecutionStartedEvent
     | ExecutionProgressEvent
     | ExecutionRetryingEvent

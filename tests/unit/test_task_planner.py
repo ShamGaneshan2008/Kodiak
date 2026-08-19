@@ -116,6 +116,7 @@ async def test_goal_decomposition_hierarchical() -> None:
 @pytest.mark.asyncio
 async def test_dependency_cycle_detection() -> None:
     import uuid
+
     from kodiak.orchestration.planning import DependencyCycleError, DependencyGraph
     from kodiak.orchestration.task_planner import ExecutableTask
 
@@ -182,16 +183,19 @@ async def test_task_estimation() -> None:
 @pytest.mark.asyncio
 async def test_plan_validation() -> None:
     import uuid
+
     from kodiak.orchestration.planning import PlanValidator
     from kodiak.orchestration.task_planner import ExecutableTask
 
     valid_task = ExecutableTask(name="task1", agent_type="coder")
-    invalid_task = ExecutableTask(
-        name="task2", agent_type="tester", dependencies=[uuid.uuid4()]
-    )
+    invalid_task = ExecutableTask(name="task2", agent_type="tester", dependencies=[uuid.uuid4()])
 
     validator = PlanValidator()
-    result = validator.validate("Test Goal", [valid_task, invalid_task], [valid_task.id, invalid_task.id])
+    result = validator.validate(
+        "Test Goal",
+        [valid_task, invalid_task],
+        [valid_task.id, invalid_task.id],
+    )
 
     assert not result.is_valid
     assert any("non-existent" in err for err in result.errors)

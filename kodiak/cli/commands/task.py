@@ -62,8 +62,12 @@ async def _build_default_loop(max_attempts: int) -> AutonomousTaskLoop:
 @app.command("run")
 def run(
     task: str = typer.Argument(..., help="Engineering task description."),
-    workspace: Path = typer.Option(Path.cwd(), "--workspace", "-w", help="Repository workspace path."),
-    max_attempts: int = typer.Option(3, "--max-attempts", min=1, help="Maximum autonomous loop attempts."),
+    workspace: Path = typer.Option(
+        Path.cwd(), "--workspace", "-w", help="Repository workspace path."
+    ),
+    max_attempts: int = typer.Option(
+        3, "--max-attempts", min=1, help="Maximum autonomous loop attempts."
+    ),
 ) -> None:
     """Run an engineering task through the autonomous orchestration loop."""
 
@@ -75,12 +79,13 @@ def run(
         status_style = "green" if result.success else "red"
         console.print(
             Panel.fit(
-                f"[bold]Status:[/bold] [{status_style}]{result.task_state.status.value}[/{status_style}]\n"
+                f"[bold]Status:[/bold] "
+                f"[{status_style}]{result.task_state.status.value}[/{status_style}]\n"
                 f"[bold]Attempts:[/bold] {result.attempts}\n"
                 f"[bold]Agent:[/bold] {result.selected_agent or 'n/a'}\n"
                 f"[bold]Elapsed:[/bold] {result.elapsed_seconds:.2f}s\n"
                 f"[bold]Memory stored:[/bold] {result.memory_stored}",
-                title="[bold cyan]Autonomous Task Result[/bold cyan]",
+                title="[bold cyan]Task Result[/bold cyan]",
                 border_style="cyan",
             )
         )

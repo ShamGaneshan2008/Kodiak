@@ -69,7 +69,8 @@ class EpisodicMemory:
         """Initialize episodic memory manager.
 
         Args:
-            repository: Underlying episode storage repository. Defaults to InMemoryEpisodeRepository.
+            repository: Underlying episode storage repository.
+            Defaults to InMemoryEpisodeRepository.
         """
         if repository is None:
             from .persistence import InMemoryEpisodeRepository

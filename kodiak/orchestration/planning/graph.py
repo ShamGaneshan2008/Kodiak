@@ -231,7 +231,8 @@ class DependencyGraph:
 
         for edge in self._edges:
             u, v = edge.from_node, edge.to_node
-            # If v is reachable from u through some intermediate node w (w != v), edge (u, v) is redundant
+            # If v is reachable from u via intermediate node w (w != v),
+            # edge (u, v) is redundant
             is_redundant = False
             for w in self._outgoing[u]:
                 if w != v and v in reachable[w]:
@@ -271,9 +272,9 @@ class DependencyGraphBuilder:
 
             deps: list[str] = []
             if hasattr(t, "dependencies"):
-                deps = [str(d) for d in getattr(t, "dependencies")]
+                deps = [str(d) for d in t.dependencies]
             elif hasattr(t, "depends_on"):
-                deps = [str(d) for d in getattr(t, "depends_on")]
+                deps = [str(d) for d in t.depends_on]
             elif isinstance(t, dict):
                 deps = [str(d) for d in t.get("dependencies", t.get("depends_on", []))]
 

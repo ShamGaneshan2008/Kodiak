@@ -140,7 +140,11 @@ class MemoryConsolidator:
             task_id_raw = task.get("id") or task.get("task_id")
             if not task_id_raw:
                 continue
-            task_id = uuid.UUID(str(task_id_raw)) if not isinstance(task_id_raw, uuid.UUID) else task_id_raw
+            task_id = (
+                uuid.UUID(str(task_id_raw))
+                if not isinstance(task_id_raw, uuid.UUID)
+                else task_id_raw
+            )
             result = await self.consolidate_task(task_id, task)
             results.append(result)
 
@@ -198,7 +202,9 @@ class MemoryConsolidator:
         return 1
 
     async def _extract_semantic(self, task_id: uuid.UUID, task_data: dict[str, Any]) -> int:
-        scratchpad = task_data.get("scratchpad") if isinstance(task_data.get("scratchpad"), dict) else {}
+        scratchpad = (
+            task_data.get("scratchpad") if isinstance(task_data.get("scratchpad"), dict) else {}
+        )
         learnings = (
             task_data.get("learnings")
             or task_data.get("facts")
@@ -233,7 +239,9 @@ class MemoryConsolidator:
         if outcome not in ("success", "completed") and task_data.get("status") != "completed":
             return 0
 
-        steps_raw = task_data.get("steps_taken") or task_data.get("actions") or task_data.get("steps")
+        steps_raw = (
+            task_data.get("steps_taken") or task_data.get("actions") or task_data.get("steps")
+        )
         if not steps_raw or not isinstance(steps_raw, list):
             return 0
 

@@ -6,14 +6,14 @@ import importlib
 import inspect
 import pkgutil
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 from types import ModuleType
 from typing import Any
 
 import structlog
 
-from kodiak.agents.adapters import BaseAgentAdapter, DiscoveredAgentHandle, ManagerAgentAdapter
+from kodiak.agents.adapters import DiscoveredAgentHandle, ManagerAgentAdapter
 from kodiak.agents.base import AgentRole, BaseAgent
 from kodiak.agents.capabilities import ROLE_CAPABILITIES, default_capabilities_for_role
 from kodiak.agents.registry import (
@@ -262,7 +262,9 @@ class AgentDiscovery:
         candidates: list[_Candidate],
         rejections: list[DiscoveryRejection],
     ) -> None:
-        for name, obj in sorted(inspect.getmembers(module, inspect.isclass), key=lambda item: item[0]):
+        for name, obj in sorted(
+            inspect.getmembers(module, inspect.isclass), key=lambda item: item[0]
+        ):
             qualname = f"{module_name}.{name}"
             rejection = self._validate_candidate(obj, qualname)
             if rejection is not None:

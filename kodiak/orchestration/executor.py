@@ -15,7 +15,6 @@ functionality, wrappers, or subclasses.
 from __future__ import annotations
 
 from kodiak.orchestration.execution.engine import ExecutionEngine
-
 from kodiak.orchestration.execution.exceptions import (
     ExecutionCancelledError,
     ExecutionEngineError,

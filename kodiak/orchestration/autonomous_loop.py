@@ -11,7 +11,8 @@ from typing import Any
 import structlog
 
 from kodiak.agents.manager import AgentManager
-from kodiak.db.models.task import Task, TaskPriority, TaskStatus as DbTaskStatus
+from kodiak.db.models.task import Task, TaskPriority
+from kodiak.db.models.task import TaskStatus as DbTaskStatus
 from kodiak.memory.episodic import EpisodicMemory
 from kodiak.memory.models import MemoryType
 from kodiak.memory.service import MemoryService
@@ -114,7 +115,8 @@ class AutonomousTaskLoop:
             max_retries=self._max_loop_attempts,
         )
         self._active_task_state = state
-        self._cancellation_token = CancellationToken()
+        if not self._cancellation_token.is_cancelled:
+            self._cancellation_token = CancellationToken()
 
         plan: ExecutionPlan | None = None
         execution_result: ExecutionResult | None = None
@@ -150,9 +152,10 @@ class AutonomousTaskLoop:
                     memory_context=memory_context,
                     loop_attempt=loop_attempt,
                 )
-                selected_agent = str(
-                    (execution_result.result or {}).get("agent", selected_agent or "")
-                ) or selected_agent
+                selected_agent = (
+                    str((execution_result.result or {}).get("agent", selected_agent or ""))
+                    or selected_agent
+                )
 
                 self._set_status(state, TaskStatus.VERIFYING)
                 verification_result = await self._verifier.verify(
@@ -213,7 +216,9 @@ class AutonomousTaskLoop:
                         workspace=workspace,
                         memory_context=memory_context,
                     )
-                    selected_agent = str((execution_result.result or {}).get("agent", selected_agent))
+                    selected_agent = str(
+                        (execution_result.result or {}).get("agent", selected_agent)
+                    )
                     self._set_status(state, TaskStatus.VERIFYING)
                     verification_result = await self._verifier.verify(
                         goal=goal,

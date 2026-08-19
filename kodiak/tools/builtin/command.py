@@ -92,7 +92,10 @@ class CommandExecutionTool(ToolAdapter):
             target_cwd = Path(raw_cwd)
             if not target_cwd.is_absolute():
                 target_cwd = self._workspace_root / target_cwd
-            if self._workspace_root in target_cwd.resolve().parents or target_cwd.resolve() == self._workspace_root:
+            if (
+                self._workspace_root in target_cwd.resolve().parents
+                or target_cwd.resolve() == self._workspace_root
+            ):
                 cwd = target_cwd.resolve()
 
         try:
@@ -105,7 +108,9 @@ class CommandExecutionTool(ToolAdapter):
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            timeout = (context and context.timeout_seconds) or self.definition.timeout_seconds or 30.0
+            timeout = (
+                (context and context.timeout_seconds) or self.definition.timeout_seconds or 30.0
+            )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
 
             success = proc.returncode == 0
@@ -121,7 +126,7 @@ class CommandExecutionTool(ToolAdapter):
                 error=None if success else f"Command exited with code {proc.returncode}",
                 tool_name=self.definition.name,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ToolResult(
                 success=False,
                 error=f"Command execution timed out after {timeout} seconds.",

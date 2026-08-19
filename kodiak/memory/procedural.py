@@ -80,9 +80,7 @@ class ProcedureRepository(Protocol):
 
     async def delete(self, procedure_id: uuid.UUID) -> bool: ...
 
-    async def list_procedures(
-        self, limit: int = 100, offset: int = 0
-    ) -> list[Procedure]: ...
+    async def list_procedures(self, limit: int = 100, offset: int = 0) -> list[Procedure]: ...
 
 
 class ProceduralMemory:
@@ -251,9 +249,7 @@ class ProceduralMemory:
             logger.info("procedure_deleted", procedure_id=str(procedure_id))
         return deleted
 
-    async def list_procedures(
-        self, limit: int = 100, offset: int = 0
-    ) -> list[Procedure]:
+    async def list_procedures(self, limit: int = 100, offset: int = 0) -> list[Procedure]:
         """List stored procedures.
 
         Args:

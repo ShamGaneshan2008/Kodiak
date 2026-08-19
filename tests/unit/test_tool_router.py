@@ -11,13 +11,14 @@ import pytest
 from kodiak.tools.base import ToolAdapter
 from kodiak.tools.builtin import ListDirTool, ReadFileTool, WriteFileTool, register_builtin_tools
 from kodiak.tools.exceptions import (
+    ToolExecutionError,
     ToolNotFoundError,
     ToolPermissionError,
     ToolRegistrationError,
     ToolTimeoutError,
     ToolValidationError,
 )
-from kodiak.tools.models import PermissionLevel, ToolDefinition, ToolExecutionContext, ToolResult
+from kodiak.tools.models import ToolDefinition, ToolExecutionContext, ToolResult
 from kodiak.tools.registry import ToolRegistry
 from kodiak.tools.router import ToolRouter
 
@@ -175,7 +176,7 @@ async def test_tool_execution_failure_propagation() -> None:
     router = ToolRouter()
     router.register_tool(_FailingTool())
 
-    with pytest.raises(Exception):
+    with pytest.raises(ToolExecutionError):
         await router.invoke("failing", {})
 
     result = await router.execute("failing", {})

@@ -49,7 +49,9 @@ class TestRunnerTool(ToolAdapter):
         cmd = [sys.executable, "-m", "pytest", test_target] + options
 
         try:
-            timeout = (context and context.timeout_seconds) or self.definition.timeout_seconds or 60.0
+            timeout = (
+                (context and context.timeout_seconds) or self.definition.timeout_seconds or 60.0
+            )
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=self._workspace_root,
@@ -71,7 +73,7 @@ class TestRunnerTool(ToolAdapter):
                 error=None if success else f"Tests failed with returncode {proc.returncode}",
                 tool_name=self.definition.name,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ToolResult(
                 success=False,
                 error=f"Test execution timed out after {timeout} seconds.",

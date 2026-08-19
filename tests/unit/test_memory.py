@@ -6,8 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kodiak.memory.consolidation import ConsolidationStatus, MemoryConsolidator
-from kodiak.memory.context import MemoryContextBuilder
+from kodiak.memory.consolidation import ConsolidationStatus
 from kodiak.memory.episodic import EpisodicMemory
 from kodiak.memory.errors import (
     EpisodeNotFoundError,
@@ -18,10 +17,8 @@ from kodiak.memory.errors import (
 )
 from kodiak.memory.long_term import LongTermMemory
 from kodiak.memory.models import MemoryType
-from kodiak.memory.persistence import JSONFileMemoryPersistence
 from kodiak.memory.procedural import ProceduralMemory, ProcedureStep
 from kodiak.memory.ranking import MemoryRanker
-from kodiak.memory.retrieval import MemoryRetriever
 from kodiak.memory.semantic import SemanticMemory
 from kodiak.memory.service import MemoryService
 from kodiak.memory.short_term import ShortTermMemory
@@ -72,7 +69,7 @@ async def test_short_term_memory():
     session_id = "sess_123"
 
     item1 = await stm.add_item(session_id, "Hello, assistant!", role="user")
-    item2 = await stm.add_item(session_id, "How can I help you?", role="assistant")
+    await stm.add_item(session_id, "How can I help you?", role="assistant")
 
     history = await stm.get_session_history(session_id)
     assert len(history) == 2
@@ -183,7 +180,11 @@ async def test_procedural_memory():
 async def test_long_term_memory():
     ltm = LongTermMemory()
 
-    mem_sem = await ltm.add_memory("Redis operates in memory", memory_type=MemoryType.SEMANTIC, tags=["redis"])
+    mem_sem = await ltm.add_memory(
+        "Redis operates in memory",
+        memory_type=MemoryType.SEMANTIC,
+        tags=["redis"],
+    )
     assert mem_sem.type == MemoryType.SEMANTIC
 
     mem_ep = await ltm.add_memory(
@@ -211,7 +212,11 @@ async def test_ranking_and_retrieval():
     task_id = uuid.uuid4()
     await service.working.create_working_memory(task_id=task_id, goal="Fix docker networking")
     await service.short_term.add_item("sess_1", "docker network create my_net")
-    await service.add("Docker uses bridge networks by default", memory_type=MemoryType.SEMANTIC, tags=["docker"])
+    await service.add(
+        "Docker uses bridge networks by default",
+        memory_type=MemoryType.SEMANTIC,
+        tags=["docker"],
+    )
 
     results = await service.retrieve(
         query="docker network",

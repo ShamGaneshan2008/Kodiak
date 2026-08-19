@@ -16,8 +16,9 @@ import enum
 import random
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from kodiak.db.models.task import Task, TaskStatus
 
@@ -119,7 +120,7 @@ class RetryPolicy:
     retryable_exceptions: tuple[type[BaseException], ...] = (Exception,)
 
     @classmethod
-    def from_task(cls, task: Task, **overrides: Any) -> "RetryPolicy":
+    def from_task(cls, task: Task, **overrides: Any) -> RetryPolicy:
         """Derive a policy from `Task.max_retries`, the existing retry field.
 
         Args:

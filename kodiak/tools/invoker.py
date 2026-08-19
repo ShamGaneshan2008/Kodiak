@@ -12,11 +12,10 @@ from kodiak.tools.exceptions import (
     ToolError,
     ToolExecutionError,
     ToolNotFoundError,
-    ToolPermissionError,
     ToolTimeoutError,
     ToolValidationError,
 )
-from kodiak.tools.models import ToolDefinition, ToolExecutionContext, ToolResult
+from kodiak.tools.models import ToolExecutionContext, ToolResult
 from kodiak.tools.permissions import PermissionEngine
 from kodiak.tools.registry import ToolRegistry
 
@@ -125,7 +124,7 @@ class ToolInvoker:
 
             return final_result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             duration = time.monotonic() - start_time
             log.error("tool_execution_timeout", duration_seconds=duration, timeout_seconds=timeout)
             raise ToolTimeoutError(

@@ -8,15 +8,15 @@ import pytest
 
 from kodiak.db.models.task import Task, TaskPriority, TaskSource, TaskStatus
 from kodiak.orchestration.execution.models import ExecutionOutcome, ExecutionResult
-from kodiak.orchestration.reflection.analyzer import FailureAnalyzer
-from kodiak.orchestration.reflection.engine import ReflectionEngine
-from kodiak.orchestration.reflection.models import (
+from kodiak.orchestration.reflection import (
+    FailureAnalyzer,
     FailureCategory,
     ReflectionContext,
+    ReflectionEngine,
     ReflectionOutcome,
     RepairStrategy,
 )
-from kodiak.orchestration.verification.models import VerificationResult, VerificationStatus
+from kodiak.orchestration.verification import VerificationStatus
 
 
 def _task(**context: object) -> Task:

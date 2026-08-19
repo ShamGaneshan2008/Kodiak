@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any
 
 import structlog
 
@@ -109,9 +108,7 @@ class CapabilityRegistry:
         if context is not None:
             granted.update(context.granted_capabilities)
 
-        eval_context = context or ToolExecutionContext(
-            granted_capabilities=frozenset(granted)
-        )
+        eval_context = context or ToolExecutionContext(granted_capabilities=frozenset(granted))
 
         pe = permission_engine or PermissionEngine()
         available: list[ToolDefinition] = []
