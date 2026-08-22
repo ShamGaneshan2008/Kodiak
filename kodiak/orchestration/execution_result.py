@@ -28,7 +28,7 @@ import asyncio
 import json
 from collections.abc import Awaitable, Mapping
 from dataclasses import fields, is_dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -70,7 +70,7 @@ __all__ = [
 
 def _now() -> datetime:
     """Return the current UTC time."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _serialize(value: Any) -> Any:
@@ -398,7 +398,7 @@ async def from_awaitable(
             output = await asyncio.wait_for(awaitable, timeout=timeout_seconds)
         else:
             output = await awaitable
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return timeout(
             execution_id=execution_id,
             task_id=task_id,
@@ -452,9 +452,7 @@ def to_json(result: ExecutionResult) -> str:
     return json.dumps(to_dict(result), default=str)
 
 
-def to_event(
-    result: ExecutionResult, *, execution_id: str | None = None
-) -> AnyExecutionEvent:
+def to_event(result: ExecutionResult, *, execution_id: str | None = None) -> AnyExecutionEvent:
     """Convert a terminal :class:`ExecutionResult` into its matching event.
 
     Args:
@@ -515,8 +513,6 @@ def log_result(
             successful outcome and ``"error"`` otherwise. Must name a
             method on ``logger``.
     """
-    resolved_level = level or (
-        "info" if result.outcome is ExecutionOutcome.SUCCESS else "error"
-    )
+    resolved_level = level or ("info" if result.outcome is ExecutionOutcome.SUCCESS else "error")
     log_method = getattr(logger, resolved_level)
     log_method(f"execution_result.{result.outcome.value}", **to_dict(result))
