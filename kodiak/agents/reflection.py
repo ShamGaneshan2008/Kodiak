@@ -34,9 +34,7 @@ class ReflectionAgent(BaseAgent):
         )
         raw = response.get("content", "")
         lessons = [
-            line.strip().lstrip("- ")
-            for line in raw.splitlines()
-            if line.strip().startswith("- ")
+            line.strip().lstrip("- ") for line in raw.splitlines() if line.strip().startswith("- ")
         ]
         return self._make_output(
             input_,
