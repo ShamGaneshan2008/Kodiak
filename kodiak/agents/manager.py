@@ -32,6 +32,7 @@ from typing import Any, Protocol, runtime_checkable
 import structlog
 
 from kodiak.agents import selector as agent_selector
+from kodiak.agents.base import BaseAgent
 from kodiak.agents.registry import (
     AgentAlreadyRegisteredError as RegistryAgentAlreadyRegisteredError,
 )
@@ -39,7 +40,6 @@ from kodiak.agents.registry import (
     AgentNotFoundError as RegistryAgentNotFoundError,
 )
 from kodiak.agents.registry import AgentRegistry
-from kodiak.agents.base import BaseAgent
 from kodiak.config.metrics import (
     ACTIVE_AGENT_TASKS,
     AGENT_SELECTIONS_TOTAL,
@@ -49,7 +49,6 @@ from kodiak.config.metrics import (
 from kodiak.db.models.task import Task, TaskPriority
 from kodiak.orchestration.execution.interfaces import AgentManager as AgentManagerProtocol
 from kodiak.orchestration.execution.models import AgentManagerResult, ExecutionContext
-
 from kodiak.tools.capabilities import CapabilityRegistry
 from kodiak.tools.models import PermissionLevel, ToolDefinition, ToolExecutionContext
 from kodiak.tools.permissions import PermissionEngine
@@ -240,9 +239,7 @@ class AgentManager(AgentManagerProtocol):
         self._selection_timeout_seconds = selection_timeout_seconds
         self._last_selection: agent_selector.SelectionResult | None = None
         self._tool_router = tool_router
-        self._tool_registry = (
-            tool_router.registry if tool_router is not None else tool_registry
-        )
+        self._tool_registry = tool_router.registry if tool_router is not None else tool_registry
         self._capability_registry = capability_registry or CapabilityRegistry()
         self._permission_engine = permission_engine or (
             tool_router.permission_engine if tool_router is not None else PermissionEngine()
@@ -326,9 +323,7 @@ class AgentManager(AgentManagerProtocol):
         async with self._registry_lock:
             if agent_id in self._entries:
                 self._logger.warning("agent_registration_conflict", agent_name=agent_id)
-                raise AgentAlreadyRegisteredError(
-                    f"Agent {agent_id!r} is already registered."
-                )
+                raise AgentAlreadyRegisteredError(f"Agent {agent_id!r} is already registered.")
             if not await self._registry.exists(agent_id):
                 try:
                     await self._registry.register(
@@ -411,9 +406,7 @@ class AgentManager(AgentManagerProtocol):
         candidates = await self._selection_candidates()
 
         if not candidates:
-            raise NoSuitableAgentError(
-                f"No agents are registered to handle task {task.task_id!r}."
-            )
+            raise NoSuitableAgentError(f"No agents are registered to handle task {task.task_id!r}.")
 
         try:
             result = await asyncio.wait_for(
@@ -655,9 +648,7 @@ class AgentManager(AgentManagerProtocol):
                 self._logger.warning("agent_health_check_failed", agent_name=name, error=str(exc))
                 return name, False
 
-        results = await asyncio.gather(
-            *(_check(name, entry) for name, entry in entries.items())
-        )
+        results = await asyncio.gather(*(_check(name, entry) for name, entry in entries.items()))
         return dict(results)
 
     async def metrics(self) -> dict[str, dict[str, float | int]]:
@@ -726,6 +717,7 @@ class AgentManager(AgentManagerProtocol):
                 RetryPolicy unless the implementation raises
                 `NonRetryableExecutionError`.
         """
+
         class AgentTaskImpl:
             def __init__(self, task: Task, attempt: int) -> None:
                 self.task_id = str(task.id)
@@ -782,9 +774,7 @@ class AgentManager(AgentManagerProtocol):
                     health_status=agent_selector.AgentHealthStatus(entry.health_status.value),
                     in_flight=entry.in_flight,
                     success_rate=(
-                        entry.metrics.success_rate
-                        if entry.metrics.total_executions
-                        else None
+                        entry.metrics.success_rate if entry.metrics.total_executions else None
                     ),
                     metadata={
                         "name": metadata.name,
