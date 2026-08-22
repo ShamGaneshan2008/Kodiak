@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Sequence
+from collections.abc import Sequence
 
 import structlog
 
@@ -77,7 +77,9 @@ class MemoryRetriever:
             fetch_tasks.append(asyncio.create_task(self._fetch_short_term(session_id)))
 
         long_term_types = [
-            t for t in target_types if t in (MemoryType.EPISODIC, MemoryType.SEMANTIC, MemoryType.PROCEDURAL)
+            t
+            for t in target_types
+            if t in (MemoryType.EPISODIC, MemoryType.SEMANTIC, MemoryType.PROCEDURAL)
         ]
         if long_term_types:
             for lt_type in long_term_types:
@@ -115,7 +117,9 @@ class MemoryRetriever:
         self, query: str, memory_type: MemoryType, tags: list[str]
     ) -> list[Memory]:
         try:
-            results = await self.long_term.search(query, memory_type=memory_type, tags=tags, limit=50)
+            results = await self.long_term.search(
+                query, memory_type=memory_type, tags=tags, limit=50
+            )
             return [r.memory for r in results]
         except Exception:
             return []
