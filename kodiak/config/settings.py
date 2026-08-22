@@ -5,7 +5,7 @@ from enum import StrEnum
 from functools import lru_cache
 from typing import Any
 
-from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, field_validator
+from pydantic import AnyHttpUrl, Field, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,9 +33,7 @@ class Settings(BaseSettings):
     )
 
     # ================= DB =================
-    DATABASE_URL: PostgresDsn = Field(
-        default="postgresql+asyncpg://kodiak:kodiak@localhost:5432/kodiak"
-    )
+    DATABASE_URL: str = Field(default="postgresql+asyncpg://kodiak:kodiak@localhost:5432/kodiak")
 
     db_echo: bool = False
     db_pool_size: int = 10

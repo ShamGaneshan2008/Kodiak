@@ -8,9 +8,10 @@ One Task fans out into many AgentRuns.
 from __future__ import annotations
 
 import enum
+import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,18 +58,29 @@ class Task(KodiakBase, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "tasks"
 
     # Ownership
-    repository_id: Mapped[str] = mapped_column(
+    repository_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("repositories.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
-    created_by: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
 
     # Description
     title: Mapped[str] = mapped_column(String(1024), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    task_type: Mapped[str] = mapped_column(String(255), default="implementation", nullable=False)
+    github_issue_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     source: Mapped[TaskSource] = mapped_column(
         Enum(TaskSource),
@@ -101,10 +113,18 @@ class Task(KodiakBase, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     branch_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     # State
-    plan: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
-    context: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
-    result: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
-    error: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    plan: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False
+    )
+    context: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False
+    )
+    result: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False
+    )
+    error: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False
+    )
 
     # Cost tracking
     total_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

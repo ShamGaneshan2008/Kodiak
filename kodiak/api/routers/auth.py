@@ -129,9 +129,10 @@ async def github_callback(
             is_verified=True,
         )
         session.add(user)
-        await session.flush()
     else:
         user.avatar_url = gh_user.get("avatar_url")
+
+    await session.commit()
 
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
