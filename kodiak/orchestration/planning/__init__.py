@@ -8,17 +8,17 @@ and plan serialization.
 
 from kodiak.orchestration.planning.exceptions import (
     DependencyCycleError,
-    PlanValidationError,
     PlanningError,
+    PlanValidationError,
     ReplanningError,
 )
 from kodiak.orchestration.planning.pipeline import (
     DependencyGraph,
+    PlanningPipeline,
     PlanOptimizer,
     PlanReplanner,
     PlanSerializer,
     PlanValidator,
-    PlanningPipeline,
     TaskDecomposer,
     TaskEstimator,
     TaskPrioritizer,
