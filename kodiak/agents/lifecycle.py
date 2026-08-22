@@ -7,7 +7,6 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
 
 import structlog
 
@@ -73,7 +72,11 @@ _VALID_TRANSITIONS: dict[AgentLifecycleState, frozenset[AgentLifecycleState]] = 
         {AgentLifecycleState.READY, AgentLifecycleState.STOPPING}
     ),
     AgentLifecycleState.INITIALIZATION_FAILED: frozenset(
-        {AgentLifecycleState.INITIALIZING, AgentLifecycleState.STOPPED, AgentLifecycleState.STOPPING}
+        {
+            AgentLifecycleState.INITIALIZING,
+            AgentLifecycleState.STOPPED,
+            AgentLifecycleState.STOPPING,
+        }
     ),
     AgentLifecycleState.STOPPING: frozenset(
         {AgentLifecycleState.STOPPED, AgentLifecycleState.FAILED}
@@ -281,7 +284,9 @@ class AgentLifecycleManager:
                 if record.state is AgentLifecycleState.RUNNING:
                     self._transition(record, AgentLifecycleState.FAILED, agent_id, "start")
                 record.health = AgentLifecycleHealth.UNHEALTHY
-                raise LifecycleOperationError(f"Start failed for agent {agent_id!r}: {exc}") from exc
+                raise LifecycleOperationError(
+                    f"Start failed for agent {agent_id!r}: {exc}"
+                ) from exc
             finally:
                 record.operation_in_progress = False
 
@@ -416,12 +421,16 @@ class AgentLifecycleManager:
                     record.last_error = str(exc)
                     record.health = AgentLifecycleHealth.UNHEALTHY
                     if record.state is AgentLifecycleState.RUNNING:
-                        self._transition(record, AgentLifecycleState.DEGRADED, agent_id, "health_check")
+                        self._transition(
+                            record, AgentLifecycleState.DEGRADED, agent_id, "health_check"
+                        )
                     return record.health
                 if not healthy:
                     record.health = AgentLifecycleHealth.DEGRADED
                     if record.state is AgentLifecycleState.RUNNING:
-                        self._transition(record, AgentLifecycleState.DEGRADED, agent_id, "health_check")
+                        self._transition(
+                            record, AgentLifecycleState.DEGRADED, agent_id, "health_check"
+                        )
                     return record.health
 
             record.health = AgentLifecycleHealth.HEALTHY
