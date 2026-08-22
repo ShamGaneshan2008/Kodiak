@@ -8,11 +8,11 @@ from typing import Any
 
 import structlog
 
-from .episodic import Episode, EpisodicMemory
+from .episodic import EpisodicMemory
 from .errors import MemoryNotFoundError, MemoryServiceError
 from .models import Memory, MemoryType, SearchResult
-from .procedural import Procedure, ProceduralMemory, ProcedureStep
-from .semantic import SemanticEntity, SemanticMemory
+from .procedural import ProceduralMemory, ProcedureStep
+from .semantic import SemanticMemory
 
 logger = structlog.get_logger(__name__)
 
@@ -88,9 +88,7 @@ class LongTermMemory:
                     if isinstance(raw, dict):
                         steps_list.append(ProcedureStep.model_validate(raw))
                     else:
-                        steps_list.append(
-                            ProcedureStep(step_number=i + 1, action=str(raw))
-                        )
+                        steps_list.append(ProcedureStep(step_number=i + 1, action=str(raw)))
 
                 name = str(metadata.get("name", content[:80]))
                 description = content
@@ -229,7 +227,9 @@ class LongTermMemory:
         """
         parsed_id = self._coerce_uuid(memory_id)
         if parsed_id is None:
-            raise MemoryNotFoundError(str(memory_id), memory_type=str(memory_type) if memory_type else None)
+            raise MemoryNotFoundError(
+                str(memory_id), memory_type=str(memory_type) if memory_type else None
+            )
 
         if memory_type in (None, MemoryType.EPISODIC):
             if await self.episodic.delete_episode(parsed_id):
@@ -243,7 +243,9 @@ class LongTermMemory:
             if await self.procedural.delete_procedure(parsed_id):
                 return True
 
-        raise MemoryNotFoundError(str(memory_id), memory_type=str(memory_type) if memory_type else None)
+        raise MemoryNotFoundError(
+            str(memory_id), memory_type=str(memory_type) if memory_type else None
+        )
 
     async def delete_by_tags(
         self,
