@@ -19,7 +19,7 @@ import time
 import traceback
 from collections import defaultdict
 from types import TracebackType
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -191,7 +191,11 @@ class ExecutionEngine:
                     return await self._complete_execution(
                         task,
                         await self._finalize(
-                            task, context, ExecutionOutcome.CANCELLED, started_at, attempt_log,
+                            task,
+                            context,
+                            ExecutionOutcome.CANCELLED,
+                            started_at,
+                            attempt_log,
                             error=self._cancelled_payload("cancelled before attempt"),
                         ),
                     )
@@ -199,14 +203,20 @@ class ExecutionEngine:
                 await self._emit(ExecutionEventType.ATTEMPT_STARTED, context, attempt_log)
 
                 try:
-                    agent_result = await self._run_attempt(context, timeout, token)
+                    agent_result = await self._run_attempt(
+                        context, timeout_seconds=timeout, token=token
+                    )
 
                 except ExecutionCancelledError:
                     attempt_log.warning("execution.cancelled")
                     return await self._complete_execution(
                         task,
                         await self._finalize(
-                            task, context, ExecutionOutcome.CANCELLED, started_at, attempt_log,
+                            task,
+                            context,
+                            ExecutionOutcome.CANCELLED,
+                            started_at,
+                            attempt_log,
                             error=self._cancelled_payload("cancelled during attempt"),
                         ),
                     )
@@ -215,11 +225,18 @@ class ExecutionEngine:
                     last_error_payload = self._error_payload(exc)
                     attempt_log.warning("execution.attempt_timed_out", timeout_seconds=timeout)
                     await self._emit(
-                        ExecutionEventType.TIMEOUT, context, attempt_log,
+                        ExecutionEventType.TIMEOUT,
+                        context,
+                        attempt_log,
                         message=f"attempt {attempt} timed out after {timeout}s",
                     )
                     stop_result = await self._resolve_retry_decision(
-                        task, context, policy, attempt, started_at, attempt_log,
+                        task,
+                        context,
+                        policy,
+                        attempt,
+                        started_at,
+                        attempt_log,
                         exhausted_outcome=ExecutionOutcome.TIMEOUT,
                         error_payload=last_error_payload,
                     )
@@ -229,14 +246,22 @@ class ExecutionEngine:
 
                 except NonRetryableExecutionError as exc:
                     last_error_payload = self._error_payload(exc.cause)
+                    last_error_payload["non_retryable"] = True
                     attempt_log.error("execution.non_retryable_failure", error=str(exc.cause))
                     await self._emit(
-                        ExecutionEventType.ATTEMPT_FAILED, context, attempt_log, message=str(exc.cause),
+                        ExecutionEventType.ATTEMPT_FAILED,
+                        context,
+                        attempt_log,
+                        message=str(exc.cause),
                     )
                     return await self._complete_execution(
                         task,
                         await self._finalize(
-                            task, context, ExecutionOutcome.FAILURE, started_at, attempt_log,
+                            task,
+                            context,
+                            ExecutionOutcome.FAILURE,
+                            started_at,
+                            attempt_log,
                             error=last_error_payload,
                         ),
                     )
@@ -245,7 +270,10 @@ class ExecutionEngine:
                     last_error_payload = self._error_payload(exc)
                     attempt_log.error("execution.attempt_failed", error=str(exc), exc_info=True)
                     await self._emit(
-                        ExecutionEventType.ATTEMPT_FAILED, context, attempt_log, message=str(exc),
+                        ExecutionEventType.ATTEMPT_FAILED,
+                        context,
+                        attempt_log,
+                        message=str(exc),
                     )
                     stop_now = await self._maybe_stop_after_reflection(
                         task,
@@ -262,12 +290,21 @@ class ExecutionEngine:
                         return await self._complete_execution(
                             task,
                             await self._finalize(
-                                task, context, ExecutionOutcome.FAILURE, started_at, attempt_log,
+                                task,
+                                context,
+                                ExecutionOutcome.FAILURE,
+                                started_at,
+                                attempt_log,
                                 error=last_error_payload,
                             ),
                         )
                     stop_result = await self._resolve_retry_decision(
-                        task, context, policy, attempt, started_at, attempt_log,
+                        task,
+                        context,
+                        policy,
+                        attempt,
+                        started_at,
+                        attempt_log,
                         exhausted_outcome=ExecutionOutcome.RETRY_EXHAUSTED,
                         error_payload=last_error_payload,
                     )
@@ -278,7 +315,11 @@ class ExecutionEngine:
                 else:
                     await self._emit(ExecutionEventType.ATTEMPT_SUCCEEDED, context, attempt_log)
                     execution_result = await self._finalize(
-                        task, context, ExecutionOutcome.SUCCESS, started_at, attempt_log,
+                        task,
+                        context,
+                        ExecutionOutcome.SUCCESS,
+                        started_at,
+                        attempt_log,
                         result=agent_result.output,
                         tokens_used=agent_result.tokens_used,
                         cost_usd=agent_result.cost_usd,
@@ -299,7 +340,11 @@ class ExecutionEngine:
             return await self._complete_execution(
                 task,
                 await self._finalize(
-                    task, context, ExecutionOutcome.RETRY_EXHAUSTED, started_at, log,
+                    task,
+                    context,
+                    ExecutionOutcome.RETRY_EXHAUSTED,
+                    started_at,
+                    log,
                     error=last_error_payload,
                 ),
             )
@@ -309,13 +354,13 @@ class ExecutionEngine:
     async def _run_attempt(
         self,
         context: ExecutionContext,
-        timeout: float,
+        timeout_seconds: float,
         token: CancellationToken,
     ) -> Any:
         """Run one Agent Manager attempt, racing it against timeout and cancellation.
 
         Raises:
-            ExecutionTimeoutError: If the attempt doesn't finish within `timeout`.
+            ExecutionTimeoutError: If the attempt doesn't finish within `timeout_seconds`.
             ExecutionCancelledError: If `token` is cancelled before the attempt finishes.
             Exception: Whatever the Agent Manager itself raises.
         """
@@ -326,14 +371,14 @@ class ExecutionEngine:
             try:
                 done, pending = await asyncio.wait(
                     {agent_task, cancel_wait},
-                    timeout=timeout,
+                    timeout=timeout_seconds,
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
                 if not done:
                     agent_task.cancel()
                     await asyncio.gather(agent_task, return_exceptions=True)
-                    raise ExecutionTimeoutError(f"attempt exceeded {timeout}s timeout")
+                    raise ExecutionTimeoutError(f"attempt exceeded {timeout_seconds}s timeout")
 
                 if cancel_wait in done and agent_task not in done:
                     agent_task.cancel()
@@ -374,11 +419,20 @@ class ExecutionEngine:
             return None
         if context.cancellation_token.is_cancelled:
             return await self._finalize(
-                task, context, ExecutionOutcome.CANCELLED, started_at, log,
+                task,
+                context,
+                ExecutionOutcome.CANCELLED,
+                started_at,
+                log,
                 error=self._cancelled_payload("cancelled during retry backoff"),
             )
         return await self._finalize(
-            task, context, exhausted_outcome, started_at, log, error=error_payload,
+            task,
+            context,
+            exhausted_outcome,
+            started_at,
+            log,
+            error=error_payload,
         )
 
     async def _await_retry_backoff(
@@ -399,14 +453,17 @@ class ExecutionEngine:
 
         delay = policy.delay_for_attempt(attempt)
         await self._emit(
-            ExecutionEventType.RETRY_SCHEDULED, context, log,
-            message=f"retrying in {delay:.1f}s", data={"delay_seconds": delay},
+            ExecutionEventType.RETRY_SCHEDULED,
+            context,
+            log,
+            message=f"retrying in {delay:.1f}s",
+            data={"delay_seconds": delay},
         )
         log.info("execution.retry_scheduled", delay_seconds=round(delay, 2))
 
         try:
             await asyncio.wait_for(context.cancellation_token.wait(), timeout=delay)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return True
         return False  # cancellation arrived during backoff
 
@@ -424,7 +481,7 @@ class ExecutionEngine:
         cost_usd: float | None = None,
         reflection: dict[str, Any] | None = None,
     ) -> ExecutionResult:
-        """Apply terminal state to `task`, persist it, emit the terminal event, and build the result."""
+        """Persist terminal state, emit its event, and build the execution result."""
         duration = time.monotonic() - started_at
         final_status = outcome_to_task_status(outcome)
 
@@ -446,7 +503,11 @@ class ExecutionEngine:
             else ExecutionEventType.TASK_FAILED
         )
         await self._emit(
-            event_type, context, log, message=outcome.value, data={"duration_seconds": duration},
+            event_type,
+            context,
+            log,
+            message=outcome.value,
+            data={"duration_seconds": duration},
         )
 
         log.info(
