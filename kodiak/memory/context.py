@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Sequence
+from collections.abc import Sequence
 
 import structlog
 
@@ -90,7 +90,9 @@ class MemoryContextBuilder:
         st_history: list[ShortTermMemoryItem] = list(short_term_items or [])
         if not st_history and session_id:
             try:
-                st_history = await self.retriever.short_term.get_session_history(session_id, limit=20)
+                st_history = await self.retriever.short_term.get_session_history(
+                    session_id, limit=20
+                )
             except Exception:
                 pass
 
@@ -118,7 +120,10 @@ class MemoryContextBuilder:
             lt_lines = ["### Relevant Memories & Knowledge"]
             for res in retrieved_results:
                 mem = res.memory
-                entry_text = f"- [{mem.type.value.upper()}] **{mem.title}** (relevance: {res.relevance_score:.2f}): {mem.content}"
+                entry_text = (
+                    f"- [{mem.type.value.upper()}] **{mem.title}** "
+                    f"(relevance: {res.relevance_score:.2f}): {mem.content}"
+                )
                 if current_chars + len(entry_text) + 2 > max_chars:
                     break
                 lt_lines.append(entry_text)
