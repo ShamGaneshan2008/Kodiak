@@ -113,7 +113,9 @@ class ShortTermMemory:
             return item
         except Exception as exc:
             logger.exception("short_term_add_failed", session_id=session_id)
-            raise ShortTermMemoryError(f"Failed to add short-term memory item for session {session_id}") from exc
+            raise ShortTermMemoryError(
+                f"Failed to add short-term memory item for session {session_id}"
+            ) from exc
 
     async def get_session_history(
         self,
