@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import uuid
 
+import bcrypt
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +16,17 @@ from kodiak.db.models.user import User
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    try:
+        return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -28,14 +38,19 @@ async def register(
     if existing.scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, detail="Email already registered")
 
+    if not body.username:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Username is required")
+
     user = User(
         email=body.email,
+        username=body.username,
         display_name=body.display_name,
-        hashed_password=_pwd.hash(body.password),
+        hashed_password=hash_password(body.password),
         is_active=True,
     )
     session.add(user)
-    await session.flush()
+    await session.commit()
+    await session.refresh(user)
     return user
 
 
@@ -50,7 +65,7 @@ async def login(
     if (
         user is None
         or not user.hashed_password
-        or not _pwd.verify(body.password, user.hashed_password)
+        or not verify_password(body.password, user.hashed_password)
     ):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not user.is_active:
@@ -100,24 +115,22 @@ async def github_callback(
         logger.warning("github_oauth.failed", error=str(exc))
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="GitHub OAuth failed") from exc
 
-    result = await session.execute(select(User).where(User.github_user_id == gh_user["id"]))  # type: ignore[attr-defined]
+    result = await session.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
     if user is None:
         user = User(
             email=email,
+            username=gh_user.get("login"),
             display_name=gh_user.get("name") or gh_user.get("login"),
             avatar_url=gh_user.get("avatar_url"),
-            github_user_id=gh_user["id"],
-            github_username=gh_user.get("login"),
-            github_access_token=access_token,
+            hashed_password=None,
             is_active=True,
             is_verified=True,
         )
         session.add(user)
         await session.flush()
     else:
-        user.github_access_token = access_token  # type: ignore[attr-defined]
         user.avatar_url = gh_user.get("avatar_url")
 
     return TokenResponse(
