@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
@@ -79,7 +78,9 @@ class ExperienceSanitizer:
 class ExperienceExtractor:
     """Builds structured experiences from execution artifacts."""
 
-    def extract(self, task: Task, execution_result: ExecutionResult) -> EngineeringExperience | None:
+    def extract(
+        self, task: Task, execution_result: ExecutionResult
+    ) -> EngineeringExperience | None:
         reflection = execution_result.reflection or task.context.get("reflection") or {}
         verification = execution_result.verification or {}
         correction = task.context.get("correction_context") or {}
