@@ -45,8 +45,8 @@ jobs:
       - name: Run Ruff formatter
         run: python -m ruff format . --check
 
-      - name: Skip mypy (temporary)
-        run: echo "Repository-wide mypy cleanup is in progress. Skipping strict mypy."
+      - name: Run mypy
+        run: python -m mypy kodiak
 
   # ─── Unit Tests ─────────────────────────────────────────────────────────────
   unit-tests:
