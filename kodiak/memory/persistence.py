@@ -53,11 +53,7 @@ class InMemoryWorkingMemoryRepository:
 
     async def get_active(self) -> list[WorkingMemoryItem]:
         """Get all currently active working memory items."""
-        return [
-            item
-            for item in self._items.values()
-            if item.status == WorkingMemoryStatus.ACTIVE
-        ]
+        return [item for item in self._items.values() if item.status == WorkingMemoryStatus.ACTIVE]
 
     async def update(self, item: WorkingMemoryItem) -> WorkingMemoryItem:
         """Update an existing working memory item."""
@@ -123,7 +119,7 @@ class InMemoryShortTermMemoryRepository:
             return True
         return False
 
-    async def list_sessions() -> list[str]:
+    async def list_sessions(self) -> list[str]:
         """List all active session identifiers."""
         return list(self._sessions.keys())
 
@@ -267,7 +263,10 @@ class InMemoryProcedureRepository:
         terms = [t.lower() for t in query.split() if t]
 
         for procedure in self._procedures.values():
-            text = f"{procedure.name} {procedure.description} {' '.join(procedure.tags)} {' '.join(s.action for s in procedure.steps)}".lower()
+            text = (
+                f"{procedure.name} {procedure.description} {' '.join(procedure.tags)} "
+                f"{' '.join(step.action for step in procedure.steps)}"
+            ).lower()
             if not terms:
                 score = 1.0
             else:
@@ -314,9 +313,7 @@ class InMemoryProcedureRepository:
         """Delete a procedure by ID."""
         return self._procedures.pop(procedure_id, None) is not None
 
-    async def list_procedures(
-        self, limit: int = 100, offset: int = 0
-    ) -> list[Procedure]:
+    async def list_procedures(self, limit: int = 100, offset: int = 0) -> list[Procedure]:
         """List stored procedures."""
         procedures = sorted(self._procedures.values(), key=lambda p: p.created_at, reverse=True)
         return procedures[offset : offset + limit]
@@ -367,9 +364,13 @@ class JSONFileMemoryPersistence:
             data = json.loads(self.file_path.read_text(encoding="utf-8"))
             logger.info("memory_persistence_loaded", file_path=str(self.file_path))
             return {
-                "working_items": [WorkingMemoryItem.model_validate(item) for item in data.get("working_items", [])],
+                "working_items": [
+                    WorkingMemoryItem.model_validate(item) for item in data.get("working_items", [])
+                ],
                 "episodes": [Episode.model_validate(ep) for ep in data.get("episodes", [])],
-                "semantic_entities": [SemanticEntity.model_validate(se) for se in data.get("semantic_entities", [])],
+                "semantic_entities": [
+                    SemanticEntity.model_validate(se) for se in data.get("semantic_entities", [])
+                ],
                 "procedures": [Procedure.model_validate(p) for p in data.get("procedures", [])],
                 "short_term_data": data.get("short_term_data", {}),
             }
