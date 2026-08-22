@@ -63,8 +63,6 @@ class _LifecycleAgent(BaseAgent):
         return self._make_output(input_, {"ok": True})
 
 
-
-
 TEST_MODULE = __name__
 
 
@@ -295,7 +293,9 @@ async def test_agent_manager_compatibility(
 
 
 @pytest.mark.asyncio
-async def test_registry_compatibility(registry: AgentRegistry, lifecycle: AgentLifecycleManager) -> None:
+async def test_registry_compatibility(
+    registry: AgentRegistry, lifecycle: AgentLifecycleManager
+) -> None:
     agent = _LifecycleAgent()
     await _register_agent(registry, "planner", agent)
     discovered = await lifecycle.sync_from_registry()
@@ -318,8 +318,12 @@ async def test_agent_selector_compatibility(
     await lifecycle.shutdown("coder")
 
     manager = AgentManager(registry=registry, lifecycle=lifecycle)
-    await manager.register(ManagerAgentAdapter(await registry.get("planner"), capabilities=frozenset({"planning"})))
-    await manager.register(ManagerAgentAdapter(await registry.get("coder"), capabilities=frozenset({"planning"})))
+    await manager.register(
+        ManagerAgentAdapter(await registry.get("planner"), capabilities=frozenset({"planning"}))
+    )
+    await manager.register(
+        ManagerAgentAdapter(await registry.get("coder"), capabilities=frozenset({"planning"}))
+    )
 
     class _Task:
         task_id = "t-1"

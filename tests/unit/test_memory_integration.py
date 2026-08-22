@@ -14,7 +14,6 @@ from kodiak.agents.repository import RepositoryAnalyzerAgent
 from kodiak.db.models.task import Task, TaskPriority, TaskSource, TaskStatus
 from kodiak.memory.experience import ExperienceExtractor, ExperienceSanitizer
 from kodiak.memory.integration import MemoryIntegration
-from kodiak.memory.models import MemoryType
 from kodiak.memory.service import MemoryService
 from kodiak.orchestration.execution.engine import ExecutionEngine
 from kodiak.orchestration.execution.models import ExecutionOutcome, ExecutionResult

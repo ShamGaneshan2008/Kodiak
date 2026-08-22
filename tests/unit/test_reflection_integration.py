@@ -12,11 +12,11 @@ from kodiak.agents.manager import AgentManager
 from kodiak.agents.repository import RepositoryAnalyzerAgent
 from kodiak.db.models.task import Task, TaskPriority, TaskSource, TaskStatus
 from kodiak.orchestration.execution.engine import ExecutionEngine
-from kodiak.orchestration.execution.models import ExecutionOutcome, RetryPolicy
+from kodiak.orchestration.execution.models import ExecutionOutcome
 from kodiak.orchestration.planning import PlanReplanner
 from kodiak.orchestration.reflection import ReflectionEngine
 from kodiak.orchestration.reflection.loop import SelfRepairLoop
-from kodiak.orchestration.reflection.models import ReflectionOutcome, RepairStrategy
+from kodiak.orchestration.reflection.models import RepairStrategy
 from kodiak.orchestration.task_planner import ExecutableTask, ExecutionPlan
 from kodiak.orchestration.verification import VerificationEngine
 

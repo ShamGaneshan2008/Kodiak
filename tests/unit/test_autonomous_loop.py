@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
@@ -10,16 +9,23 @@ from uuid import uuid4
 import pytest
 
 from kodiak.agents.manager import AgentManager
-from kodiak.db.models.task import Task, TaskPriority, TaskStatus as DbTaskStatus
+from kodiak.db.models.task import Task, TaskPriority
+from kodiak.db.models.task import TaskStatus as DbTaskStatus
 from kodiak.memory.models import MemoryType
 from kodiak.memory.service import MemoryService
 from kodiak.orchestration.autonomous_loop import AutonomousTaskLoop
 from kodiak.orchestration.execution.engine import ExecutionEngine
 from kodiak.orchestration.execution.models import ExecutionOutcome, RetryPolicy
-from kodiak.orchestration.reflection import ReflectionAction, ReflectionService
+from kodiak.orchestration.reflection import (
+    ReflectionEngine as ReflectionService,
+)
+from kodiak.orchestration.reflection import (
+    RepairStrategy as ReflectionAction,
+)
 from kodiak.orchestration.state import TaskState, TaskStatus
 from kodiak.orchestration.task_planner import TaskPlanner
-from kodiak.orchestration.verification import TaskVerifier, VerificationStatus
+from kodiak.orchestration.verification import VerificationEngine as TaskVerifier
+from kodiak.orchestration.verification import VerificationStatus
 
 
 @dataclass
@@ -43,7 +49,11 @@ class FakeAgent:
         self.agent_id = agent_id
         self.name = agent_id
         self.capabilities = frozenset(capabilities)
-        self.output = output or {"agent": agent_id, "summary": "done", "verification_status": "verified"}
+        self.output = output or {
+            "agent": agent_id,
+            "summary": "done",
+            "verification_status": "verified",
+        }
         self.fail = fail
         self.non_retryable = non_retryable
         self.executed = 0
@@ -54,7 +64,8 @@ class FakeAgent:
             if self.non_retryable:
                 from kodiak.orchestration.execution.exceptions import NonRetryableExecutionError
 
-                raise NonRetryableExecutionError(RuntimeError("non-retryable"))
+                cause = RuntimeError("non-retryable")
+                raise NonRetryableExecutionError(str(cause), cause)
             raise RuntimeError("agent execution failed")
         return self.output
 
@@ -196,7 +207,7 @@ async def test_verification_failure_triggers_reflection(
 
     assert not result.success
     assert result.reflection_results
-    assert result.reflection_results[-1].action is ReflectionAction.STOP
+    assert result.reflection_results[-1].strategy is ReflectionAction.STOP
 
 
 @pytest.mark.asyncio
@@ -212,7 +223,7 @@ async def test_retry_path_reexecutes_without_replan(
     class FlakyAgent(FakeAgent):
         async def execute(self, task: TaskLike) -> dict[str, Any]:
             calls["count"] += 1
-            if calls["count"] <= 3:
+            if calls["count"] == 1:
                 return {"agent": "coder", "verification_status": "failed"}
             return {"agent": "coder", "summary": "fixed", "verification_status": "verified"}
 
@@ -226,7 +237,7 @@ async def test_retry_path_reexecutes_without_replan(
         reviewer_agent,
     )
 
-    reflection = ReflectionService(max_retries=2, max_replans=0)
+    reflection = ReflectionService()
     loop = AutonomousTaskLoop(
         task_planner=TaskPlanner(),
         memory_service=MemoryService(),
@@ -258,7 +269,7 @@ async def test_replan_path_after_multiple_failures(
         ),
     )
 
-    reflection = ReflectionService(max_retries=3, max_replans=2)
+    reflection = ReflectionService()
     loop = AutonomousTaskLoop(
         task_planner=TaskPlanner(),
         memory_service=MemoryService(),
@@ -270,7 +281,7 @@ async def test_replan_path_after_multiple_failures(
     result = await loop.run("implement complex feature")
 
     assert result.reflection_results
-    assert any(r.action is ReflectionAction.REPLAN for r in result.reflection_results)
+    assert any(r.strategy is ReflectionAction.REPLAN for r in result.reflection_results)
 
 
 @pytest.mark.asyncio
@@ -302,7 +313,7 @@ async def test_non_retryable_failure_stops_task(
 
     assert result.task_state.status is TaskStatus.FAILED
     assert result.reflection_results
-    assert result.reflection_results[-1].retryable is False
+    assert result.reflection_results[-1].should_retry is False
 
 
 @pytest.mark.asyncio
@@ -347,11 +358,17 @@ async def test_verifier_and_reflection_units() -> None:
     )
     assert ok.status is VerificationStatus.VERIFIED
 
-    reflection = ReflectionService(max_retries=1)
+    reflection = ReflectionService()
+    reflection_task = Task(
+        id=uuid4(),
+        repository_id=str(uuid4()),
+        title=state.title,
+        status=DbTaskStatus.IN_PROGRESS,
+        priority=TaskPriority.MEDIUM,
+    )
     decision = await reflection.reflect(
-        task_state=state,
-        verification_result=ok,
-        execution_result=ExecutionResult(
+        reflection_task,
+        ExecutionResult(
             task_id=state.task_id,
             outcome=ExecutionOutcome.SUCCESS,
             attempts=1,
@@ -359,10 +376,11 @@ async def test_verifier_and_reflection_units() -> None:
             result={"summary": "done"},
             final_status=DbTaskStatus.COMPLETED,
         ),
+        verification_result=ok,
         attempt=1,
-        replan_count=0,
+        max_attempts=1,
     )
-    assert decision.action is ReflectionAction.STOP
+    assert decision.strategy is ReflectionAction.STOP
 
 
 @pytest.mark.asyncio

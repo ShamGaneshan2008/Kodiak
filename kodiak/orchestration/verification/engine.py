@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import time
-from typing import Any
 
 import structlog
 
 from kodiak.db.models.task import Task
 from kodiak.orchestration.execution.models import ExecutionContext, ExecutionResult
+from kodiak.orchestration.state import TaskState
+from kodiak.orchestration.task_planner import ExecutionPlan
 from kodiak.orchestration.verification.base import Verifier
 from kodiak.orchestration.verification.models import (
     VerificationContext,
@@ -58,12 +59,35 @@ class VerificationEngine:
 
     async def verify(
         self,
-        task: Task,
-        execution_result: ExecutionResult,
+        task: Task | None = None,
+        execution_result: ExecutionResult | None = None,
         *,
         execution_context: ExecutionContext | None = None,
+        goal: str | None = None,
+        plan: ExecutionPlan | None = None,
+        task_state: TaskState | None = None,
     ) -> VerificationResult:
-        """Run applicable verifiers and aggregate evidence."""
+        """Run applicable verifiers and aggregate evidence.
+
+        The autonomous loop verifies a workflow-level result rather than a
+        single persisted ``Task``. Retain that call shape alongside the
+        task-level verification API.
+        """
+        if task is None:
+            if execution_result is None or goal is None or task_state is None:
+                raise TypeError(
+                    "workflow verification requires goal, execution_result, and task_state"
+                )
+            return self._verify_workflow_result(
+                goal=goal,
+                plan=plan,
+                execution_result=execution_result,
+                task_state=task_state,
+            )
+
+        if execution_result is None:
+            raise TypeError("task verification requires an execution_result")
+
         context = VerificationContext.from_execution(
             task,
             execution_result,
@@ -119,6 +143,63 @@ class VerificationEngine:
             duration_seconds=result.duration_seconds,
         )
         return result
+
+    @staticmethod
+    def _verify_workflow_result(
+        *,
+        goal: str,
+        plan: ExecutionPlan | None,
+        execution_result: ExecutionResult,
+        task_state: TaskState,
+    ) -> VerificationResult:
+        """Verify the aggregate result produced by ``AutonomousTaskLoop``."""
+        output = execution_result.result or {}
+        status = VerificationStatus.VERIFIED
+        summary = "Task execution verified."
+        retry_recommended = False
+
+        if not execution_result.is_success:
+            status = VerificationStatus.FAILED
+            summary = "Execution did not complete successfully."
+            retry_recommended = True
+        else:
+            explicit_status = str(output.get("verification_status", "")).lower()
+            if explicit_status == VerificationStatus.FAILED.value:
+                status = VerificationStatus.FAILED
+                summary = str(output.get("verification_message", "Explicit verification failure."))
+                retry_recommended = True
+            elif explicit_status == VerificationStatus.INCONCLUSIVE.value:
+                status = VerificationStatus.INCONCLUSIVE
+                summary = str(output.get("verification_message", "Verification inconclusive."))
+                retry_recommended = True
+            elif not output and not getattr(task_state, "result", None):
+                status = VerificationStatus.INCONCLUSIVE
+                summary = "Execution completed without output evidence."
+                retry_recommended = True
+            elif plan and getattr(plan, "acceptance_criteria", None):
+                missing = [
+                    criterion
+                    for criterion in plan.acceptance_criteria
+                    if criterion.lower() not in str(output).lower()
+                    and criterion.lower() not in goal.lower()
+                ]
+                if missing and output.get("strict_acceptance", False):
+                    status = VerificationStatus.FAILED
+                    summary = "Acceptance criteria not satisfied."
+                    retry_recommended = True
+
+        evidence = VerificationEvidence(
+            verifier="autonomous_output",
+            status=status,
+            message=summary,
+            metadata={"goal": goal, "output": output},
+        )
+        return VerificationResult(
+            status=status,
+            evidence=(evidence,),
+            summary=summary,
+            retry_recommended=retry_recommended,
+        )
 
 
 __all__ = ["VerificationEngine", "default_verifiers"]

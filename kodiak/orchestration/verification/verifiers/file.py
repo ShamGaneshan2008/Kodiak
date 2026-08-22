@@ -56,9 +56,7 @@ class FileVerifier(Verifier):
                 artifacts_checked=tuple(artifacts),
             )
 
-        changed_unexpected = [
-            rel for rel in unexpected if (root / rel).exists()
-        ]
+        changed_unexpected = [rel for rel in unexpected if (root / rel).exists()]
         if changed_unexpected:
             return VerificationEvidence(
                 verifier=self.name,

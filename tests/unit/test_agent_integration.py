@@ -9,7 +9,7 @@ from uuid import uuid4
 import pytest
 
 from kodiak.agents.adapters import BaseAgentAdapter
-from kodiak.agents.base import AgentInput, AgentRole, BaseAgent
+from kodiak.agents.base import AgentRole, BaseAgent
 from kodiak.agents.discovery import AgentDiscovery
 from kodiak.agents.lifecycle import AgentLifecycleManager
 from kodiak.agents.manager import AgentManager
@@ -18,7 +18,6 @@ from kodiak.agents.repository import RepositoryAnalyzerAgent
 from kodiak.db.models.task import Task, TaskPriority, TaskSource, TaskStatus
 from kodiak.orchestration.execution.engine import ExecutionEngine
 from kodiak.orchestration.execution.models import ExecutionOutcome
-
 
 CONCRETE_AGENT_MODULES = {
     "debugger": "DebuggerAgent",
@@ -61,7 +60,8 @@ def test_heavy_agent_modules_define_base_agent_subclass(module_name: str, class_
     classes = {
         node.name
         for node in tree.body
-        if isinstance(node, ast.ClassDef) and any(base.id == "BaseAgent" for base in node.bases if isinstance(base, ast.Name))
+        if isinstance(node, ast.ClassDef)
+        and any(base.id == "BaseAgent" for base in node.bases if isinstance(base, ast.Name))
     }
     assert class_name in classes
 

@@ -174,17 +174,31 @@ class FailureAnalyzer:
         evidence: dict[str, Any],
     ) -> str:
         mapping = {
-            FailureCategory.TEST_FAILURE: "Inspect failing tests, fix implementation, and rerun focused tests.",
-            FailureCategory.MISSING_ARTIFACT: "Create or restore the missing artifact before retrying.",
-            FailureCategory.INCORRECT_IMPLEMENTATION: "Adjust the implementation to satisfy required outputs.",
+            FailureCategory.TEST_FAILURE: (
+                "Inspect failing tests, fix implementation, and rerun focused tests."
+            ),
+            FailureCategory.MISSING_ARTIFACT: (
+                "Create or restore the missing artifact before retrying."
+            ),
+            FailureCategory.INCORRECT_IMPLEMENTATION: (
+                "Adjust the implementation to satisfy required outputs."
+            ),
             FailureCategory.SYNTAX_ERROR: "Fix syntax errors in affected files before retrying.",
             FailureCategory.TYPE_ERROR: "Resolve type errors and rerun type checks.",
             FailureCategory.LINT_FAILURE: "Fix lint violations and rerun lint validation.",
-            FailureCategory.PERMISSION_FAILURE: "Adjust permissions or use an authorized agent/tool configuration.",
-            FailureCategory.TIMEOUT: "Reduce scope or increase timeout, then retry with a narrower target.",
-            FailureCategory.MISSING_DEPENDENCY: "Install or declare the missing dependency, then retry.",
+            FailureCategory.PERMISSION_FAILURE: (
+                "Adjust permissions or use an authorized agent/tool configuration."
+            ),
+            FailureCategory.TIMEOUT: (
+                "Reduce scope or increase timeout, then retry with a narrower target."
+            ),
+            FailureCategory.MISSING_DEPENDENCY: (
+                "Install or declare the missing dependency, then retry."
+            ),
             FailureCategory.INVALID_TOOL_ARGUMENTS: "Correct tool inputs and retry the operation.",
-            FailureCategory.EXECUTION_FAILURE: "Review execution error details and apply a targeted fix.",
+            FailureCategory.EXECUTION_FAILURE: (
+                "Review execution error details and apply a targeted fix."
+            ),
         }
         base = mapping.get(category, "Review failure evidence and apply a targeted correction.")
         affected = evidence.get("affected_files")
@@ -198,6 +212,9 @@ class FailureAnalyzer:
         context: ReflectionContext,
         evidence: dict[str, Any],
     ) -> tuple[RepairStrategy, ReflectionOutcome]:
+        if (evidence.get("execution_error") or {}).get("non_retryable"):
+            return RepairStrategy.STOP, ReflectionOutcome.NON_RETRYABLE_FAILURE
+
         if context.attempt >= context.max_attempts:
             return RepairStrategy.STOP, ReflectionOutcome.MAX_RETRIES_REACHED
 
@@ -213,9 +230,7 @@ class FailureAnalyzer:
         if category in replan_categories and context.attempt >= max(2, context.max_attempts - 1):
             return RepairStrategy.REPLAN, ReflectionOutcome.REPLAN_REQUIRED
 
-        repeated_test_failure = (
-            category is FailureCategory.TEST_FAILURE and context.attempt >= 2
-        )
+        repeated_test_failure = category is FailureCategory.TEST_FAILURE and context.attempt >= 2
         if repeated_test_failure:
             return RepairStrategy.REPLAN, ReflectionOutcome.REPLAN_REQUIRED
 

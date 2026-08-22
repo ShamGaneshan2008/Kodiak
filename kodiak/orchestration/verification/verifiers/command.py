@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from typing import Any
 
 from kodiak.orchestration.verification.base import Verifier
 from kodiak.orchestration.verification.models import (
@@ -72,9 +71,7 @@ class CommandVerifier(Verifier):
                 agent_name="verification",
                 task_id=str(context.task.id),
                 granted_capabilities=frozenset({"command_execution", "terminal"}),
-                timeout_seconds=(
-                    entry.get("timeout_seconds") if isinstance(entry, dict) else None
-                ),
+                timeout_seconds=(entry.get("timeout_seconds") if isinstance(entry, dict) else None),
             )
             result = await self._tool_router.execute(
                 "command_runner",

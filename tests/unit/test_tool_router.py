@@ -17,7 +17,7 @@ from kodiak.tools.exceptions import (
     ToolTimeoutError,
     ToolValidationError,
 )
-from kodiak.tools.models import PermissionLevel, ToolDefinition, ToolExecutionContext, ToolResult
+from kodiak.tools.models import ToolDefinition, ToolExecutionContext, ToolResult
 from kodiak.tools.registry import ToolRegistry
 from kodiak.tools.router import ToolRouter
 
@@ -175,7 +175,7 @@ async def test_tool_execution_failure_propagation() -> None:
     router = ToolRouter()
     router.register_tool(_FailingTool())
 
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="boom"):
         await router.invoke("failing", {})
 
     result = await router.execute("failing", {})

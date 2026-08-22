@@ -22,7 +22,8 @@ dependencies = [
     "opentelemetry-api>=1.25",
     "opentelemetry-sdk>=1.25",
     "python-jose[cryptography]>=3.3",
-    "passlib[bcrypt]>=1.7",
+
+    "bcrypt>=4.3.0,<5.0.0",
     "tenacity>=8.5",
     "psycopg2-binary>=2.9.9",
 ]

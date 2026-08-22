@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from typing import Any
 
 import structlog
 
@@ -12,7 +11,6 @@ from kodiak.orchestration.execution.models import ExecutionContext, ExecutionRes
 from kodiak.orchestration.reflection.analyzer import FailureAnalyzer
 from kodiak.orchestration.reflection.models import (
     ReflectionContext,
-    ReflectionOutcome,
     ReflectionResult,
 )
 from kodiak.orchestration.verification.models import VerificationResult

@@ -16,7 +16,7 @@ from kodiak.orchestration.reflection.models import (
     ReflectionOutcome,
     RepairStrategy,
 )
-from kodiak.orchestration.verification.models import VerificationResult, VerificationStatus
+from kodiak.orchestration.verification.models import VerificationStatus
 
 
 def _task(**context: object) -> Task:

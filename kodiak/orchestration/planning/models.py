@@ -115,7 +115,8 @@ class HierarchicalTaskNode(BaseModel):
     id: str = Field(default_factory=lambda: f"st-{uuid.uuid4().hex[:8]}")
     title: str
     description: str
-    task_type: str = "implementation"  # inspection, research, implementation, test, documentation, review, debugging
+    # inspection, research, implementation, test, documentation, review, debugging
+    task_type: str = "implementation"
     complexity: TaskComplexity = TaskComplexity.MEDIUM
     priority: TaskPriority = TaskPriority.MEDIUM
     parent_id: str | None = None

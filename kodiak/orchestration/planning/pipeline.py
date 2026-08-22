@@ -17,7 +17,8 @@ from __future__ import annotations
 import json
 import uuid
 from collections import defaultdict, deque
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import structlog
 from pydantic import BaseModel, Field
@@ -25,7 +26,6 @@ from pydantic import BaseModel, Field
 from kodiak.orchestration.planning.exceptions import (
     DependencyCycleError,
     PlanValidationError,
-    PlanningError,
     ReplanningError,
 )
 from kodiak.orchestration.task_planner import ExecutableTask, ExecutionPlan
@@ -124,9 +124,7 @@ class DependencyGraph:
             DependencyCycleError: If a cycle prevents complete ordering.
         """
         in_degree = dict(self.in_degree)
-        queue: deque[uuid.UUID] = deque(
-            [task_id for task_id, deg in in_degree.items() if deg == 0]
-        )
+        queue: deque[uuid.UUID] = deque([task_id for task_id, deg in in_degree.items() if deg == 0])
         order: list[uuid.UUID] = []
 
         while queue:
@@ -628,7 +626,8 @@ class PlanValidator:
         # Validate ordering completeness
         if len(execution_order) != len(tasks):
             warnings.append(
-                f"Execution order length ({len(execution_order)}) differs from total task count ({len(tasks)})."
+                "Execution order length "
+                f"({len(execution_order)}) differs from total task count ({len(tasks)})."
             )
 
         is_valid = len(errors) == 0
@@ -664,7 +663,7 @@ class PlanOptimizer:
                 reach_a = graph.get_downstream_reach(dep_a)
                 for dep_b in direct_deps:
                     if dep_a != dep_b and dep_b in reach_a:
-                        # dep_b is downstream of dep_a; direct dep on dep_a is redundant for this task
+                        # A direct dependency on dep_a is redundant for this task.
                         redundant.add(dep_a)
 
             if redundant:
@@ -754,7 +753,7 @@ class PlanReplanner:
                     break
 
         if target_task is None:
-            msg = "Replanning requested but no failed task was identified in execution result or plan."
+            msg = "No failed task was identified in the execution result or plan."
             logger.warning("replanning_no_failed_task", goal=current_plan.goal)
             raise ReplanningError(msg)
 
@@ -899,9 +898,7 @@ class PlanSerializer:
             parent_uuid = uuid.UUID(str(parent_id_raw)) if parent_id_raw else None
 
             subtask_ids_raw = raw.get("subtask_ids", [])
-            subtask_uuids = [
-                uuid.UUID(str(sid)) for sid in subtask_ids_raw if sid is not None
-            ]
+            subtask_uuids = [uuid.UUID(str(sid)) for sid in subtask_ids_raw if sid is not None]
 
             dep_uuids = [
                 uuid.UUID(str(dep)) for dep in raw.get("dependencies", []) if dep is not None
@@ -931,9 +928,7 @@ class PlanSerializer:
             tasks.append(task)
 
         raw_order = data.get("execution_order", [])
-        execution_order = [
-            uuid.UUID(str(tid)) for tid in raw_order if tid is not None
-        ]
+        execution_order = [uuid.UUID(str(tid)) for tid in raw_order if tid is not None]
 
         raw_pgroups = data.get("parallel_groups", [])
         parallel_groups: list[list[uuid.UUID]] = []

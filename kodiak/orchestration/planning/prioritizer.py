@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 
 from kodiak.db.models.task import TaskPriority
+
 from .graph import DependencyGraph, DependencyGraphBuilder
 
 logger = structlog.get_logger(__name__)
@@ -28,7 +29,7 @@ class TaskPrioritizer:
         graph: DependencyGraph | None = None,
         durations: dict[str, float] | None = None,
     ) -> dict[str, TaskPriority]:
-        """Assign TaskPriority ratings to tasks based on critical path position and dependency fan-out.
+        """Assign priorities based on critical-path position and dependency fan-out.
 
         Args:
             tasks: Sequence of task objects or dicts.
@@ -46,7 +47,13 @@ class TaskPrioritizer:
         priorities: dict[str, TaskPriority] = {}
 
         for task in tasks:
-            tid = str(task.id if hasattr(task, "id") else task.get("id") if isinstance(task, dict) else str(task))
+            tid = str(
+                task.id
+                if hasattr(task, "id")
+                else task.get("id")
+                if isinstance(task, dict)
+                else str(task)
+            )
             fanout = len(dag.get_dependents(tid))
             depth = depths.get(tid, 0)
 
@@ -148,7 +155,7 @@ class ParallelGroupCalculator:
     @staticmethod
     def _get_files(task: Any) -> list[str]:
         if hasattr(task, "likely_files"):
-            return list(getattr(task, "likely_files"))
+            return list(task.likely_files)
         if isinstance(task, dict):
             return list(task.get("likely_files", []))
         return []

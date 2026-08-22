@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from kodiak.db.models.task import Task
-from kodiak.orchestration.execution.models import ExecutionContext, ExecutionOutcome, ExecutionResult
+from kodiak.orchestration.execution.models import (
+    ExecutionContext,
+    ExecutionOutcome,
+    ExecutionResult,
+)
 
 
 class VerificationStatus(enum.StrEnum):

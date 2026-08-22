@@ -15,8 +15,6 @@ from kodiak.agents.discovery import (
 )
 from kodiak.agents.manager import AgentManager
 from kodiak.agents.registry import AgentAlreadyRegisteredError, AgentRegistry
-from kodiak.agents.selector import AgentSelector
-
 
 # ---------------------------------------------------------------------------
 # Test-only agent implementations (loaded via AgentDiscovery.modules=)

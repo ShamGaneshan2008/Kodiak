@@ -21,7 +21,7 @@ from kodiak.orchestration.verification.verifiers import (
     OutputVerifier,
     TestVerifier,
 )
-from kodiak.tools.builtin import CommandExecutionTool, TestRunnerTool, register_builtin_tools
+from kodiak.tools.builtin import CommandExecutionTool, TestRunnerTool
 from kodiak.tools.registry import ToolRegistry
 from kodiak.tools.router import ToolRouter
 
