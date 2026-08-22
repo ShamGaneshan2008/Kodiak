@@ -52,7 +52,7 @@ security = [
 ]
 
 [project.scripts]
-kodiak = "kodiak.main:run"
+kodiak = "kodiak.cli.app:app"
 
 [build-system]
 requires = ["hatchling"]
