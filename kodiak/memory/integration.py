@@ -143,7 +143,9 @@ class MemoryIntegration:
         results = await self._memory.consolidate(limit=limit)
         return len(results)
 
-    async def _sanitize_experience(self, experience: EngineeringExperience) -> EngineeringExperience:
+    async def _sanitize_experience(
+        self, experience: EngineeringExperience
+    ) -> EngineeringExperience:
         return EngineeringExperience(
             task_id=experience.task_id,
             goal=await self._sanitizer.sanitize_text(experience.goal),
