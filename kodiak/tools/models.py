@@ -5,9 +5,10 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from kodiak.orchestration.execution.models import ExecutionOutcome, ExecutionResult
+if TYPE_CHECKING:
+    from kodiak.orchestration.execution.models import ExecutionResult
 
 
 class PermissionLevel(StrEnum):
@@ -105,6 +106,8 @@ class ToolResult:
 
     def to_execution_result(self, task_id: str | None = None) -> ExecutionResult:
         """Convert this ToolResult into Kodiak's canonical ExecutionResult."""
+        from kodiak.orchestration.execution.models import ExecutionOutcome, ExecutionResult
+
         tid = task_id or (self.correlation_id or "tool_task")
         outcome = ExecutionOutcome.SUCCESS if self.success else ExecutionOutcome.FAILURE
         error_dict = {"message": self.error} if self.error else None
