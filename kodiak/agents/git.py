@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import Counter
-from pathlib import Path
 
 from kodiak.agents.base import AgentInput, AgentOutput, AgentRole, BaseAgent
 from kodiak.github.pr_manager import draft_pull_request
