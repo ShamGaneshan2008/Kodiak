@@ -15,12 +15,18 @@ logger = structlog.get_logger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("starting_kodiak_api")
 
-    # Initialize tracing if available
+    # Initialize tracing if available. OpenTelemetry's instrumentation
+    # packages are optional extras -- ModuleNotFoundError here just means
+    # they aren't installed, which is a normal, expected configuration,
+    # not something worth a warning. Anything else (a real misconfiguration
+    # inside configure_tracing) still warrants one.
     try:
         tracing = importlib.import_module("kodiak.config.tracing")
-        if hasattr(tracing, "init_tracing"):
-            tracing.init_tracing()
+        if hasattr(tracing, "configure_tracing"):
+            tracing.configure_tracing()
             logger.info("tracing_initialized")
+    except ModuleNotFoundError as exc:
+        logger.info("tracing_unavailable", reason=str(exc))
     except Exception as exc:
         logger.warning("tracing_initialization_failed", error=str(exc))
 
