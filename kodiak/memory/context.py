@@ -122,9 +122,8 @@ class MemoryContextBuilder:
                 mem = res.memory
                 type_label = mem.type.value.upper()
                 entry_text = (
-                    f"- [{type_label}] **{mem.title}**"
-                    f" (relevance: {res.relevance_score:.2f})"
-                    f": {mem.content}"
+                    f"- [{type_label}] **{mem.title}** "
+                    f"(relevance: {res.relevance_score:.2f}): {mem.content}"
                 )
                 if current_chars + len(entry_text) + 2 > max_chars:
                     break

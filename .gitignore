@@ -10,6 +10,7 @@ dist/
 build/
 .env
 .venv/
+.ci-venv/
 .idea/workspace.xml
 .aider*
 .venv312/

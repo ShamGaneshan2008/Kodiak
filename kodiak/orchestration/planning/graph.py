@@ -231,8 +231,7 @@ class DependencyGraph:
 
         for edge in self._edges:
             u, v = edge.from_node, edge.to_node
-            # If v is reachable from u via intermediate node w (w != v),
-            # edge (u, v) is redundant
+            # An edge is redundant when v is reachable from u through an intermediate node.
             is_redundant = False
             for w in self._outgoing[u]:
                 if w != v and v in reachable[w]:

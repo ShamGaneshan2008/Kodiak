@@ -29,7 +29,7 @@ class TaskPrioritizer:
         graph: DependencyGraph | None = None,
         durations: dict[str, float] | None = None,
     ) -> dict[str, TaskPriority]:
-        """Assign TaskPriority ratings based on critical path and fan-out.
+        """Assign priorities based on critical-path position and dependency fan-out.
 
         Args:
             tasks: Sequence of task objects or dicts.

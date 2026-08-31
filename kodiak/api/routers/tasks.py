@@ -40,7 +40,8 @@ async def create_task(
         status=TaskStatus.PENDING,
     )
     session.add(task)
-    await session.flush()
+    await session.commit()
+    await session.refresh(task)
 
     # Dispatch to Celery — import here to avoid circular at module load
     try:
@@ -48,6 +49,8 @@ async def create_task(
 
         celery_result = run_task_async.delay(str(task.id), str(project_id))
         task.celery_task_id = celery_result.id
+        await session.commit()
+        await session.refresh(task)
     except Exception:
         pass  # worker unavailable in test/dev; task remains PENDING
 
@@ -110,6 +113,8 @@ async def update_task(
     task = await _get_task(session, task_id, project_id, current_user.id)
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(task, field, value)
+    await session.commit()
+    await session.refresh(task)
     return task
 
 
@@ -135,7 +140,9 @@ async def approve_task(
 
     task.status = target
     if body.comment:
-        task.metadata_["approval_comment"] = body.comment  # type: ignore[attr-defined]
+        task.context["approval_comment"] = body.comment
+    await session.commit()
+    await session.refresh(task)
     return task
 
 
@@ -153,6 +160,7 @@ async def cancel_task(
             detail=f"Cannot cancel task in status {task.status}",
         )
     task.status = TaskStatus.CANCELLED
+    await session.commit()
 
 
 async def _get_task(

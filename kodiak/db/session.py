@@ -18,7 +18,15 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 async def get_db():
     async with AsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+        except Exception:
+            # A request may fail after a transaction has begun (including a
+            # read-only request, since SQLAlchemy starts transactions lazily).
+            # Never return that connection to the pool with an open or failed
+            # transaction.
+            await session.rollback()
+            raise
 
 
 # ================= REDIS (FIXED LAZY LOADING) =================

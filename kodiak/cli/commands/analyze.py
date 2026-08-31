@@ -47,6 +47,9 @@ def analyze(
             "total_size_bytes": result.total_size_bytes,
             "extension_counts": result.extension_counts,
             "language_stats": result.language_stats,
+            "structure": result.structure,
+            "findings": result.findings,
+            "llm": result.llm,
         }
         console.print_json(json.dumps(payload))
         return
@@ -88,3 +91,16 @@ def _render(result: RepositoryAnalysis) -> None:
         for name, count in sorted(result.extension_counts.items()):
             ext.add_row(name, str(count))
         console.print(ext)
+
+    if result.findings:
+        findings = Table(title="Findings")
+        findings.add_column("Category")
+        findings.add_column("Severity")
+        findings.add_column("Finding")
+        for finding in result.findings:
+            findings.add_row(
+                finding.get("category", "general"),
+                finding.get("severity", "info"),
+                finding.get("message", ""),
+            )
+        console.print(findings)

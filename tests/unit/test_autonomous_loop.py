@@ -16,10 +16,16 @@ from kodiak.memory.service import MemoryService
 from kodiak.orchestration.autonomous_loop import AutonomousTaskLoop
 from kodiak.orchestration.execution.engine import ExecutionEngine
 from kodiak.orchestration.execution.models import ExecutionOutcome, RetryPolicy
-from kodiak.orchestration.reflection import ReflectionAction, ReflectionService
+from kodiak.orchestration.reflection import (
+    ReflectionEngine as ReflectionService,
+)
+from kodiak.orchestration.reflection import (
+    RepairStrategy as ReflectionAction,
+)
 from kodiak.orchestration.state import TaskState, TaskStatus
 from kodiak.orchestration.task_planner import TaskPlanner
-from kodiak.orchestration.verification import TaskVerifier, VerificationStatus
+from kodiak.orchestration.verification import VerificationEngine as TaskVerifier
+from kodiak.orchestration.verification import VerificationStatus
 
 
 @dataclass
@@ -233,7 +239,7 @@ async def test_retry_path_reexecutes_without_replan(
         reviewer_agent,
     )
 
-    reflection = ReflectionService(max_retries=2, max_replans=0)
+    reflection = ReflectionService()
     loop = AutonomousTaskLoop(
         task_planner=TaskPlanner(),
         memory_service=MemoryService(),
@@ -265,7 +271,7 @@ async def test_replan_path_after_multiple_failures(
         ),
     )
 
-    reflection = ReflectionService(max_retries=3, max_replans=2)
+    reflection = ReflectionService()
     loop = AutonomousTaskLoop(
         task_planner=TaskPlanner(),
         memory_service=MemoryService(),
@@ -277,7 +283,7 @@ async def test_replan_path_after_multiple_failures(
     result = await loop.run("implement complex feature")
 
     assert result.reflection_results
-    assert any(r.action is ReflectionAction.REPLAN for r in result.reflection_results)
+    assert any(r.strategy is ReflectionAction.REPLAN for r in result.reflection_results)
 
 
 @pytest.mark.asyncio
@@ -313,7 +319,7 @@ async def test_non_retryable_failure_stops_task(
 
     assert result.task_state.status is TaskStatus.FAILED
     assert result.reflection_results
-    assert result.reflection_results[-1].retryable is False
+    assert result.reflection_results[-1].should_retry is False
 
 
 @pytest.mark.asyncio
@@ -358,11 +364,17 @@ async def test_verifier_and_reflection_units() -> None:
     )
     assert ok.status is VerificationStatus.VERIFIED
 
-    reflection = ReflectionService(max_retries=1)
+    reflection = ReflectionService()
+    reflection_task = Task(
+        id=uuid4(),
+        repository_id=str(uuid4()),
+        title=state.title,
+        status=DbTaskStatus.IN_PROGRESS,
+        priority=TaskPriority.MEDIUM,
+    )
     decision = await reflection.reflect(
-        task_state=state,
-        verification_result=ok,
-        execution_result=ExecutionResult(
+        reflection_task,
+        ExecutionResult(
             task_id=state.task_id,
             outcome=ExecutionOutcome.SUCCESS,
             attempts=1,
@@ -370,10 +382,11 @@ async def test_verifier_and_reflection_units() -> None:
             result={"summary": "done"},
             final_status=DbTaskStatus.COMPLETED,
         ),
+        verification_result=ok,
         attempt=1,
-        replan_count=0,
+        max_attempts=1,
     )
-    assert decision.action is ReflectionAction.STOP
+    assert decision.strategy is ReflectionAction.STOP
 
 
 @pytest.mark.asyncio

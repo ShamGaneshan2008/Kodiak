@@ -33,7 +33,8 @@ async def create_project(
         repo_url=body.repo_url,
     )
     session.add(project)
-    await session.flush()
+    await session.commit()
+    await session.refresh(project)
     return project
 
 
@@ -78,6 +79,8 @@ async def update_project(
     project = await _get_project(session, project_id, current_user.id)
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(project, field, value)
+    await session.commit()
+    await session.refresh(project)
     return project
 
 
@@ -91,6 +94,7 @@ async def delete_project(
     from datetime import datetime
 
     project.deleted_at = datetime.now(UTC)
+    await session.commit()
 
 
 async def _get_project(session: AsyncSession, project_id: uuid.UUID, user_id: uuid.UUID) -> Project:

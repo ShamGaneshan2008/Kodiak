@@ -626,8 +626,8 @@ class PlanValidator:
         # Validate ordering completeness
         if len(execution_order) != len(tasks):
             warnings.append(
-                f"Execution order length ({len(execution_order)})"
-                f" differs from total task count ({len(tasks)})."
+                "Execution order length "
+                f"({len(execution_order)}) differs from total task count ({len(tasks)})."
             )
 
         is_valid = len(errors) == 0
@@ -663,8 +663,7 @@ class PlanOptimizer:
                 reach_a = graph.get_downstream_reach(dep_a)
                 for dep_b in direct_deps:
                     if dep_a != dep_b and dep_b in reach_a:
-                        # dep_b is downstream of dep_a;
-                        # direct dep on dep_a is redundant
+                        # A direct dependency on dep_a is redundant for this task.
                         redundant.add(dep_a)
 
             if redundant:

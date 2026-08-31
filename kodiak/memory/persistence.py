@@ -264,9 +264,8 @@ class InMemoryProcedureRepository:
 
         for procedure in self._procedures.values():
             text = (
-                f"{procedure.name} {procedure.description}"
-                f" {' '.join(procedure.tags)}"
-                f" {' '.join(s.action for s in procedure.steps)}"
+                f"{procedure.name} {procedure.description} {' '.join(procedure.tags)} "
+                f"{' '.join(step.action for step in procedure.steps)}"
             ).lower()
             if not terms:
                 score = 1.0

@@ -23,11 +23,15 @@ from kodiak.orchestration.execution.models import (
     ExecutionResult,
     RetryPolicy,
 )
-from kodiak.orchestration.reflection import ReflectionAction, ReflectionResult, ReflectionService
+from kodiak.orchestration.reflection import ReflectionEngine, ReflectionResult, RepairStrategy
 from kodiak.orchestration.state import TaskState, TaskStatus, transition_task_status
 from kodiak.orchestration.task_planner import ExecutableTask, ExecutionPlan, TaskPlanner
 from kodiak.orchestration.tool_router import ToolRouter
-from kodiak.orchestration.verification import TaskVerifier, VerificationResult, VerificationStatus
+from kodiak.orchestration.verification import (
+    VerificationEngine,
+    VerificationResult,
+    VerificationStatus,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -70,8 +74,8 @@ class AutonomousTaskLoop:
         memory_service: MemoryService,
         agent_manager: AgentManager,
         execution_engine: ExecutionEngine,
-        verifier: TaskVerifier | None = None,
-        reflection: ReflectionService | None = None,
+        verifier: VerificationEngine | None = None,
+        reflection: ReflectionEngine | None = None,
         tool_router: ToolRouter | None = None,
         max_loop_attempts: int = 3,
         max_replans: int = 2,
@@ -81,11 +85,8 @@ class AutonomousTaskLoop:
         self._memory = memory_service
         self._agent_manager = agent_manager
         self._engine = execution_engine
-        self._verifier = verifier or TaskVerifier()
-        self._reflection = reflection or ReflectionService(
-            max_retries=max_loop_attempts,
-            max_replans=max_replans,
-        )
+        self._verifier = verifier or VerificationEngine()
+        self._reflection = reflection or ReflectionEngine()
         self._tool_router = tool_router
         self._max_loop_attempts = max_loop_attempts
         self._max_replans = max_replans
@@ -177,25 +178,25 @@ class AutonomousTaskLoop:
 
                 self._set_status(state, TaskStatus.REFLECTING)
                 reflection = await self._reflection.reflect(
-                    task_state=state,
+                    self._build_reflection_task(goal=goal, state=state, workspace=workspace),
+                    execution_result,
                     verification_result=verification_result,
-                    execution_result=execution_result,
                     attempt=loop_attempt,
-                    replan_count=replans,
+                    max_attempts=self._max_loop_attempts,
                 )
                 reflection_results.append(reflection)
                 log.info(
                     "autonomous_loop_reflection",
-                    action=reflection.action.value,
+                    action=reflection.strategy.value,
                     root_cause=reflection.root_cause,
                 )
 
-                if reflection.action is ReflectionAction.STOP:
+                if reflection.strategy is RepairStrategy.STOP:
                     state.error = reflection.root_cause
                     self._set_status(state, TaskStatus.FAILED)
                     break
 
-                if reflection.action is ReflectionAction.REPLAN:
+                if reflection.strategy is RepairStrategy.REPLAN:
                     replans += 1
                     state.retry_count += 1
                     self._set_status(state, TaskStatus.REPLANNING)
@@ -207,7 +208,7 @@ class AutonomousTaskLoop:
                     plan = None
                     continue
 
-                if reflection.action is ReflectionAction.REPAIR:
+                if reflection.strategy is RepairStrategy.REPAIR:
                     self._set_status(state, TaskStatus.REPAIRING)
                     execution_result = await self._execute_repair(
                         goal=goal,
@@ -314,7 +315,7 @@ class AutonomousTaskLoop:
         }
         if reflection_results:
             context["reflection_evidence"] = [
-                reflection.model_dump(mode="json") for reflection in reflection_results
+                reflection.to_dict() for reflection in reflection_results
             ]
 
         plan = await self._planner.plan_execution(goal, context)
@@ -362,6 +363,12 @@ class AutonomousTaskLoop:
             )
             state.metadata["last_execution"] = _serialize_execution_result(last_result)
             if not last_result.is_success:
+                return last_result
+            explicit_status = str((last_result.result or {}).get("verification_status", "")).lower()
+            if explicit_status in {
+                VerificationStatus.FAILED.value,
+                VerificationStatus.INCONCLUSIVE.value,
+            }:
                 return last_result
 
         if last_result is None:
@@ -425,9 +432,7 @@ class AutonomousTaskLoop:
         steps = [task.name for task in plan.tasks] if plan else []
         context = {
             "task_id": state.task_id,
-            "verification": (
-                verification_result.model_dump(mode="json") if verification_result else None
-            ),
+            "verification": (verification_result.to_dict() if verification_result else None),
             "execution": (
                 _serialize_execution_result(execution_result) if execution_result else None
             ),
@@ -447,6 +452,29 @@ class AutonomousTaskLoop:
             logger.info("autonomous_loop_memory_stored", task_id=state.task_id, outcome=outcome)
             return True
         return False
+
+    @staticmethod
+    def _build_reflection_task(
+        *,
+        goal: str,
+        state: TaskState,
+        workspace: str | Path | None,
+    ) -> Task:
+        """Build the workflow-level task context required by reflection."""
+        return Task(
+            id=str(uuid.uuid4()),
+            repository_id=str(uuid.uuid4()),
+            title=state.title,
+            description=goal,
+            status=DbTaskStatus.IN_PROGRESS,
+            priority=TaskPriority.MEDIUM,
+            max_retries=state.max_retries,
+            context={
+                "goal": goal,
+                "workspace": str(workspace) if workspace is not None else None,
+                "orchestration_task_id": state.task_id,
+            },
+        )
 
     def _build_db_task(
         self,

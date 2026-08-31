@@ -202,7 +202,9 @@ class ExecutionEngine:
                 await self._emit(ExecutionEventType.ATTEMPT_STARTED, context, attempt_log)
 
                 try:
-                    agent_result = await self._run_attempt(context, timeout, token)
+                    agent_result = await self._run_attempt(
+                        context, timeout_seconds=timeout, token=token
+                    )
 
                 except ExecutionCancelledError:
                     attempt_log.warning("execution.cancelled")
@@ -243,6 +245,7 @@ class ExecutionEngine:
 
                 except NonRetryableExecutionError as exc:
                     last_error_payload = self._error_payload(exc.cause)
+                    last_error_payload["non_retryable"] = True
                     attempt_log.error("execution.non_retryable_failure", error=str(exc.cause))
                     await self._emit(
                         ExecutionEventType.ATTEMPT_FAILED,
@@ -350,13 +353,13 @@ class ExecutionEngine:
     async def _run_attempt(
         self,
         context: ExecutionContext,
-        timeout: float,  # noqa: ASYNC109
+        timeout_seconds: float,
         token: CancellationToken,
     ) -> Any:
         """Run one Agent Manager attempt, racing it against timeout and cancellation.
 
         Raises:
-            ExecutionTimeoutError: If the attempt doesn't finish within `timeout`.
+            ExecutionTimeoutError: If the attempt doesn't finish within `timeout_seconds`.
             ExecutionCancelledError: If `token` is cancelled before the attempt finishes.
             Exception: Whatever the Agent Manager itself raises.
         """
@@ -367,14 +370,14 @@ class ExecutionEngine:
             try:
                 done, pending = await asyncio.wait(
                     {agent_task, cancel_wait},
-                    timeout=timeout,
+                    timeout=timeout_seconds,
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
                 if not done:
                     agent_task.cancel()
                     await asyncio.gather(agent_task, return_exceptions=True)
-                    raise ExecutionTimeoutError(f"attempt exceeded {timeout}s timeout")
+                    raise ExecutionTimeoutError(f"attempt exceeded {timeout_seconds}s timeout")
 
                 if cancel_wait in done and agent_task not in done:
                     agent_task.cancel()
@@ -477,7 +480,7 @@ class ExecutionEngine:
         cost_usd: float | None = None,
         reflection: dict[str, Any] | None = None,
     ) -> ExecutionResult:
-        """Apply terminal state, persist it, emit event, and build the result."""
+        """Persist terminal state, emit its event, and build the execution result."""
         duration = time.monotonic() - started_at
         final_status = outcome_to_task_status(outcome)
 
