@@ -6,6 +6,14 @@ import aiohttp
 logger = logging.getLogger(__name__)
 
 
+class GitHubAPIError(RuntimeError):
+    """Normalized remote API failure that never includes credentials."""
+
+    def __init__(self, status: int | None, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+
+
 class GitHubClient:
     def __init__(self, token: str, base_url: str = "https://api.github.com"):
         self.token = token
@@ -77,9 +85,15 @@ class GitHubClient:
         repo: str,
         state: str = "open",
         per_page: int = 30,
+        head: str | None = None,
+        base: str | None = None,
     ) -> list[dict[str, Any]]:
         url = f"{self.base_url}/repos/{owner}/{repo}/pulls"
         params = {"state": state, "per_page": per_page}
+        if head:
+            params["head"] = head
+        if base:
+            params["base"] = base
         return await self._request("GET", url, params=params)
 
     async def create_pull_request(
@@ -186,19 +200,35 @@ class GitHubClient:
         params = {"ref": ref}
         return await self._request("GET", url, params=params)
 
+    async def get_branch(self, owner: str, repo: str, branch: str) -> dict[str, Any]:
+        url = f"{self.base_url}/repos/{owner}/{repo}/branches/{branch}"
+        return await self._request("GET", url)
+
+    async def list_check_runs(self, owner: str, repo: str, ref: str) -> list[dict[str, Any]]:
+        url = f"{self.base_url}/repos/{owner}/{repo}/commits/{ref}/check-runs"
+        payload = await self._request(
+            "GET",
+            url,
+            params={"per_page": 100},
+            headers={"Accept": "application/vnd.github+json"},
+        )
+        return list(payload.get("check_runs", []))
+
     async def _request(
         self,
         method: str,
         url: str,
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Any:
         try:
+            request_headers = {**self.headers, **(headers or {})}
             async with aiohttp.ClientSession() as session:
                 async with session.request(
                     method,
                     url,
-                    headers=self.headers,
+                    headers=request_headers,
                     json=json,
                     params=params,
                     timeout=aiohttp.ClientTimeout(total=30),
@@ -207,10 +237,12 @@ class GitHubClient:
                         if resp.status == 204:
                             return {}
                         return await resp.json()
-                    else:
-                        error_data = await resp.json()
-                        logger.error(f"GitHub API error: {resp.status} - {error_data}")
-                        raise Exception(f"GitHub API error: {resp.status}")
-        except Exception as e:
-            logger.error(f"Request failed: {e}")
+                    error_data = await resp.json(content_type=None)
+                    message = str(error_data.get("message", "GitHub API request failed"))
+                    logger.error("GitHub API error status=%s message=%s", resp.status, message)
+                    raise GitHubAPIError(resp.status, f"GitHub API error {resp.status}: {message}")
+        except GitHubAPIError:
             raise
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            logger.error("GitHub request failed: %s", type(exc).__name__)
+            raise GitHubAPIError(None, f"GitHub network error: {type(exc).__name__}") from exc
