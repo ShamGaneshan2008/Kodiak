@@ -4,8 +4,13 @@ from collections import Counter
 
 from kodiak.agents.base import AgentInput, AgentOutput, AgentRole, BaseAgent
 from kodiak.github.pr_manager import draft_pull_request
-from kodiak.utils.diff import human_summary, summarize_changes
-from kodiak.utils.git_utils import GitChangeSet, make_branch_name, read_changes
+from kodiak.utils.git_utils import (
+    GitChangeSet,
+    human_summary,
+    make_branch_name,
+    read_changes,
+    summarize_changes,
+)
 
 
 class GitAgent(BaseAgent):
