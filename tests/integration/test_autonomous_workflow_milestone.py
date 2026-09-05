@@ -13,6 +13,11 @@ from kodiak.memory.models import MemoryType
 from kodiak.memory.service import MemoryService
 from kodiak.orchestration.autonomous_loop import AutonomousTaskLoop
 from kodiak.orchestration.execution.engine import ExecutionEngine
+from kodiak.orchestration.git_workflow import (
+    AutonomousGitWorkflow,
+    GitWorkflowRequest,
+    GitWorkflowStatus,
+)
 from kodiak.orchestration.reflection import ReflectionEngine, RepairStrategy
 from kodiak.orchestration.state import TaskState, TaskStatus
 from kodiak.orchestration.task_planner import ExecutableTask, ExecutionPlan, TaskPlanner
@@ -20,6 +25,7 @@ from kodiak.orchestration.verification import VerificationEngine, VerificationSt
 from kodiak.tools.builtin import register_builtin_tools
 from kodiak.tools.registry import ToolRegistry
 from kodiak.tools.router import ToolRouter
+from kodiak.utils.git_utils import run_git
 
 
 class StaticPipeline:
@@ -335,3 +341,41 @@ async def test_unexpected_planner_exception_leaves_terminal_state(tmp_path: Path
     assert task_state.finished_at is not None
     assert task_state.metadata["failed_stage"] == TaskStatus.PLANNING.value
     assert loop._active_task_state is None
+
+
+@pytest.mark.asyncio
+async def test_real_autonomous_loop_reaches_verified_selective_git_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
+    repo = tmp_path / "repo"
+    _make_repo(repo)
+    run_git(["init", "-b", "main"], repo)
+    run_git(["config", "user.email", "kodiak@example.test"], repo)
+    run_git(["config", "user.name", "Kodiak Test"], repo)
+    run_git(["add", "--", "math_utils.py", "tests/test_math_utils.py"], repo)
+    run_git(["commit", "-m", "initial"], repo)
+    goal = "Modify add so the existing test passes"
+    content = "def add(a, b):\n    return a + b\n"
+    loop, agent = await _loop(repo, _plan(goal, repo, content))
+    workflow = AutonomousGitWorkflow(loop)
+
+    result = await workflow.run(
+        GitWorkflowRequest(
+            task_id="real-e2e",
+            title="fix add implementation",
+            goal=goal,
+            repository=repo,
+            intended_paths=("math_utils.py",),
+        )
+    )
+
+    assert result.status is GitWorkflowStatus.COMMITTED
+    assert result.commit_sha == run_git(["rev-parse", "HEAD"], repo)
+    assert result.changed_files == ("math_utils.py",)
+    assert run_git(["show", "--pretty=", "--name-only", "HEAD"], repo) == "math_utils.py"
+    assert result.verification is not None
+    assert result.verification["status"] == VerificationStatus.VERIFIED.value
+    assert agent is not None
+    assert agent.tool_calls == ["read_file", "write_file"]
