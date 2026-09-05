@@ -235,7 +235,9 @@ class MetaStrategySelector:
             method = best.selection_method
             profile_name = best.name
             confidence = self._compute_confidence(best, strategy_confidence, has_known_strategies)
-            reasoning = self._build_reasoning(best, complexity, risk_level, has_known_strategies, strategy_confidence)
+            reasoning = self._build_reasoning(
+                best, complexity, risk_level, has_known_strategies, strategy_confidence
+            )
 
             # Override method based on runtime signals
             method = self._maybe_override_method(
@@ -333,16 +335,12 @@ class MetaStrategySelector:
 
             # Complexity match (closer = better)
             complexity_diff = abs(
-                complexity_order.index(profile.task_complexity)
-                - complexity_order.index(complexity)
+                complexity_order.index(profile.task_complexity) - complexity_order.index(complexity)
             )
             score += max(0.0, 1.0 - complexity_diff * 0.3)
 
             # Risk match
-            risk_diff = abs(
-                risk_order.index(profile.risk_level)
-                - risk_order.index(risk_level)
-            )
+            risk_diff = abs(risk_order.index(profile.risk_level) - risk_order.index(risk_level))
             score += max(0.0, 1.0 - risk_diff * 0.3)
 
             # Tag overlap
@@ -378,7 +376,10 @@ class MetaStrategySelector:
         strategy_confidence: float,
     ) -> str:
         parts = [
-            f"Profile '{profile.name}' matched for {complexity.value} complexity, {risk_level.value} risk.",
+            (
+                f"Profile '{profile.name}' matched for "
+                f"{complexity.value} complexity, {risk_level.value} risk."
+            ),
             f"Selected method: {profile.selection_method.value}.",
         ]
         if has_known_strategies:

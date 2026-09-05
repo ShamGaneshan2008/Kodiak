@@ -148,6 +148,11 @@ class ReflectionResultDetailed:
     max_attempts: int = 1
     summary: str | None = None
 
+    @property
+    def action(self) -> RepairStrategy:
+        """Compatibility alias for autonomous-loop callers."""
+        return self.strategy
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe representation."""
         return {

@@ -12,6 +12,8 @@ rather than just:
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 
 from kodiak.orchestration.research.models import (
@@ -20,12 +22,10 @@ from kodiak.orchestration.research.models import (
     EvidenceStrength,
     Hypothesis,
     HypothesisStatus,
-    KnowledgeClassification,
     KnowledgeGap,
     Lesson,
     NegativeKnowledge,
     Observation,
-    ProblemDecomposition,
     ResearchProblem,
     ResearchProblemPriority,
     StrategyVersion,
@@ -134,9 +134,7 @@ class ResearchMemory:
     ) -> list[KnowledgeGap]:
         candidates = list(self._knowledge_gaps.values())
         if related_problem_id:
-            candidates = [
-                g for g in candidates if related_problem_id in g.related_problem_ids
-            ]
+            candidates = [g for g in candidates if related_problem_id in g.related_problem_ids]
         return candidates[:limit]
 
     # ------------------------------------------------------------------
@@ -174,11 +172,7 @@ class ResearchMemory:
 
         if strategy_ids:
             strategy_set = set(strategy_ids)
-            candidates = [
-                h
-                for h in candidates
-                if strategy_set & set(h.related_strategy_ids)
-            ]
+            candidates = [h for h in candidates if strategy_set & set(h.related_strategy_ids)]
 
         # Sort by confidence (highest first)
         candidates.sort(key=lambda h: h.confidence, reverse=True)
@@ -237,25 +231,15 @@ class ResearchMemory:
             EvidenceStrength.STRONG: 4,
             EvidenceStrength.CONCLUSIVE: 5,
         }
-        candidates = [
-            e
-            for e in self._evidence.values()
-            if e.hypothesis_id == hypothesis_id
-        ]
+        candidates = [e for e in self._evidence.values() if e.hypothesis_id == hypothesis_id]
         candidates.sort(
             key=lambda e: (strength_order.get(e.strength, 0), e.confidence),
             reverse=True,
         )
         return candidates[:limit]
 
-    def retrieve_evidence_for_experiment(
-        self, experiment_id: str
-    ) -> list[Evidence]:
-        return [
-            e
-            for e in self._evidence.values()
-            if e.experiment_id == experiment_id
-        ]
+    def retrieve_evidence_for_experiment(self, experiment_id: str) -> list[Evidence]:
+        return [e for e in self._evidence.values() if e.experiment_id == experiment_id]
 
     # ------------------------------------------------------------------
     # Observation operations
@@ -305,14 +289,8 @@ class ResearchMemory:
     def get_conclusion(self, conclusion_id: str) -> Conclusion | None:
         return self._conclusions.get(conclusion_id)
 
-    def retrieve_conclusions_for_hypothesis(
-        self, hypothesis_id: str
-    ) -> list[Conclusion]:
-        return [
-            c
-            for c in self._conclusions.values()
-            if c.hypothesis_id == hypothesis_id
-        ]
+    def retrieve_conclusions_for_hypothesis(self, hypothesis_id: str) -> list[Conclusion]:
+        return [c for c in self._conclusions.values() if c.hypothesis_id == hypothesis_id]
 
     # ------------------------------------------------------------------
     # Lesson operations
@@ -337,8 +315,8 @@ class ResearchMemory:
     ) -> list[Lesson]:
         candidates = list(self._lessons.values())
         if domain:
-            candidates = [l for l in candidates if l.domain == domain]
-        candidates.sort(key=lambda l: l.confidence, reverse=True)
+            candidates = [lesson for lesson in candidates if lesson.domain == domain]
+        candidates.sort(key=lambda lesson: lesson.confidence, reverse=True)
         return candidates[:limit]
 
     # ------------------------------------------------------------------
@@ -357,21 +335,13 @@ class ResearchMemory:
     def get_strategy_version(self, version_id: str) -> StrategyVersion | None:
         return self._strategy_versions.get(version_id)
 
-    def retrieve_strategy_versions(
-        self, strategy_id: str
-    ) -> list[StrategyVersion]:
+    def retrieve_strategy_versions(self, strategy_id: str) -> list[StrategyVersion]:
         """Retrieve all versions for a strategy, sorted by version number."""
-        versions = [
-            v
-            for v in self._strategy_versions.values()
-            if v.strategy_id == strategy_id
-        ]
+        versions = [v for v in self._strategy_versions.values() if v.strategy_id == strategy_id]
         versions.sort(key=lambda v: v.version_number)
         return versions
 
-    def get_latest_strategy_version(
-        self, strategy_id: str
-    ) -> StrategyVersion | None:
+    def get_latest_strategy_version(self, strategy_id: str) -> StrategyVersion | None:
         versions = self.retrieve_strategy_versions(strategy_id)
         return versions[-1] if versions else None
 
@@ -398,18 +368,14 @@ class ResearchMemory:
     ) -> list[NegativeKnowledge]:
         candidates = list(self._negative_knowledge.values())
         if problem_class:
-            candidates = [
-                n for n in candidates if n.problem_class == problem_class
-            ]
+            candidates = [n for n in candidates if n.problem_class == problem_class]
         return candidates[:limit]
 
     # ------------------------------------------------------------------
     # Aggregate queries
     # ------------------------------------------------------------------
 
-    def research_summary_for_problem(
-        self, problem_id: str
-    ) -> dict[str, Any]:
+    def research_summary_for_problem(self, problem_id: str) -> dict[str, Any]:
         """Return a complete research summary for a problem.
 
         This answers: "What have we actually tested about this problem?"
@@ -431,9 +397,7 @@ class ResearchMemory:
         for h in hypotheses:
             strategy_ids.update(h.related_strategy_ids)
 
-        negative = self.retrieve_negative_knowledge(
-            problem_class=problem.problem_id
-        )
+        negative = self.retrieve_negative_knowledge(problem_class=problem.problem_id)
 
         return {
             "problem": problem.to_dict(),
@@ -441,10 +405,7 @@ class ResearchMemory:
             "evidence": [e.to_dict() for e in all_evidence],
             "conclusions": [c.to_dict() for c in conclusions],
             "strategy_versions": {
-                sid: [
-                    v.to_dict()
-                    for v in self.retrieve_strategy_versions(sid)
-                ]
+                sid: [v.to_dict() for v in self.retrieve_strategy_versions(sid)]
                 for sid in strategy_ids
             },
             "negative_knowledge": [n.to_dict() for n in negative],
@@ -473,8 +434,7 @@ class ResearchMemory:
         evictable = [
             h
             for h in self._hypotheses.values()
-            if h.status
-            in {HypothesisStatus.REJECTED, HypothesisStatus.INCONCLUSIVE}
+            if h.status in {HypothesisStatus.REJECTED, HypothesisStatus.INCONCLUSIVE}
         ]
         if evictable:
             worst = min(evictable, key=lambda h: h.confidence)
@@ -483,11 +443,7 @@ class ResearchMemory:
             return
 
         # If nothing evictable, remove lowest-confidence proposed
-        proposed = [
-            h
-            for h in self._hypotheses.values()
-            if h.status == HypothesisStatus.PROPOSED
-        ]
+        proposed = [h for h in self._hypotheses.values() if h.status == HypothesisStatus.PROPOSED]
         if proposed:
             lowest = min(proposed, key=lambda h: h.confidence)
             del self._hypotheses[lowest.hypothesis_id]

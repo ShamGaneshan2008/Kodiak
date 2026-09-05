@@ -21,7 +21,6 @@ import structlog
 
 from kodiak.orchestration.evolution.capability import (
     Capability,
-    CapabilityCategory,
     CapabilityPerformance,
     CapabilityTracker,
 )
@@ -116,7 +115,10 @@ class CapabilityComposer:
         total_attempts = sum(c.performance.total_attempts for c in components)
         total_success = sum(c.performance.successful_attempts for c in components)
         avg_duration = (
-            sum(c.performance.avg_duration_seconds * c.performance.total_attempts for c in components)
+            sum(
+                c.performance.avg_duration_seconds * c.performance.total_attempts
+                for c in components
+            )
             / total_attempts
             if total_attempts > 0
             else 0.0
@@ -128,7 +130,9 @@ class CapabilityComposer:
             if c.evidence:
                 evidence_parts.extend(c.evidence[:2])
         # Add composition evidence
-        evidence_parts.append(f"Composed from {len(components)} capabilities: {', '.join(all_names)}")
+        evidence_parts.append(
+            f"Composed from {len(components)} capabilities: {', '.join(all_names)}"
+        )
 
         # Known limitations from all components
         all_limitations: list[str] = []
@@ -203,8 +207,7 @@ class CapabilityComposer:
             total = len(test_results)
             composite_score = successes / total if total > 0 else 0.0
             evidence = (
-                f"Tested on {total} tasks: {successes} succeeded, "
-                f"{total - successes} failed."
+                f"Tested on {total} tasks: {successes} succeeded, {total - successes} failed."
             )
         else:
             # Theoretical projection
@@ -249,7 +252,8 @@ class CapabilityComposer:
         Returns tuples of capability IDs that might compose well.
         """
         strong = [
-            c for c in self._tracker.all_capabilities()
+            c
+            for c in self._tracker.all_capabilities()
             if c.health_score >= min_health and c.is_active
         ]
 
@@ -265,9 +269,7 @@ class CapabilityComposer:
             if len(caps) >= 2:
                 for i in range(len(caps)):
                     for j in range(i + 1, min(len(caps), i + max_components)):
-                        pair = tuple(
-                            sorted(c.capability_id for c in caps[i : j + 1])
-                        )
+                        pair = tuple(sorted(c.capability_id for c in caps[i : j + 1]))
                         if pair not in [tuple(s) for s in suggestions]:
                             suggestions.append(pair)
 

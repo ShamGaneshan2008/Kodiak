@@ -129,9 +129,7 @@ class FailurePatternMiner:
                     category="component_failure",
                     severity=self._severity_for_count(count),
                     occurrence_count=count,
-                    affected_task_ids=tuple(
-                        dict.fromkeys(task_ids_by_failure.get(component, []))
-                    ),
+                    affected_task_ids=tuple(dict.fromkeys(task_ids_by_failure.get(component, []))),
                     affected_components=(component,),
                     suggested_improvement=f"Investigate and improve '{component}' component",
                     confidence=min(count / 10.0, 0.95),
@@ -146,9 +144,7 @@ class FailurePatternMiner:
                     category="recurring_failure",
                     severity=self._severity_for_count(count),
                     occurrence_count=count,
-                    affected_task_ids=tuple(
-                        dict.fromkeys(task_ids_by_failure.get(msg, []))
-                    ),
+                    affected_task_ids=tuple(dict.fromkeys(task_ids_by_failure.get(msg, []))),
                     suggested_improvement=f"Address root cause of: {msg[:80]}",
                     confidence=min(count / 10.0, 0.9),
                 )
@@ -162,9 +158,7 @@ class FailurePatternMiner:
                     category="wasted_effort",
                     severity=FailurePatternSeverity.LOW,
                     occurrence_count=count,
-                    affected_task_ids=tuple(
-                        dict.fromkeys(task_ids_by_waste.get(waste, []))
-                    ),
+                    affected_task_ids=tuple(dict.fromkeys(task_ids_by_waste.get(waste, []))),
                     suggested_improvement=f"Eliminate: {waste}",
                     confidence=min(count / 10.0, 0.8),
                 )
@@ -214,9 +208,7 @@ class FailurePatternMiner:
         ]
 
     def patterns_for_component(self, component: str) -> list[FailurePattern]:
-        return [
-            p for p in self.all_patterns() if component in p.affected_components
-        ]
+        return [p for p in self.all_patterns() if component in p.affected_components]
 
     def to_dict(self) -> dict[str, Any]:
         return {

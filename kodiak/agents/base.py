@@ -177,15 +177,19 @@ class BaseAgent(ABC):
 
     async def initialize(self) -> None:
         """Optional lifecycle hook invoked before the agent becomes READY."""
+        return None
 
     async def start(self) -> None:
         """Optional lifecycle hook invoked when the agent enters RUNNING."""
+        return None
 
     async def stop(self) -> None:
         """Optional lifecycle hook invoked when the agent leaves RUNNING."""
+        return None
 
     async def shutdown(self) -> None:
         """Optional lifecycle hook invoked during final shutdown."""
+        return None
 
     async def health_check(self) -> bool:
         """Optional lifecycle health probe. Defaults to healthy."""

@@ -274,9 +274,7 @@ class ResourceAwareEngine:
         """Get the resource profile for a reasoning depth."""
         return self._profiles.get(depth, _DEFAULT_PROFILES[ReasoningDepth.STANDARD])
 
-    def profile_for_assessment(
-        self, assessment: TaskComplexityAssessment
-    ) -> ResourceProfile:
+    def profile_for_assessment(self, assessment: TaskComplexityAssessment) -> ResourceProfile:
         """Get the resource profile for an assessment."""
         return self.get_profile(assessment.reasoning_depth)
 
@@ -387,9 +385,7 @@ class ResourceAwareEngine:
         return ReasoningDepth.EXHAUSTIVE
 
     @staticmethod
-    def _verification_for_depth(
-        depth: ReasoningDepth, risk: float
-    ) -> VerificationLevel:
+    def _verification_for_depth(depth: ReasoningDepth, risk: float) -> VerificationLevel:
         """Determine verification level from depth and risk."""
         base = {
             ReasoningDepth.MINIMAL: VerificationLevel.NONE,

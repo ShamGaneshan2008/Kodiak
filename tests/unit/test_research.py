@@ -11,9 +11,8 @@ from kodiak.orchestration.research.benchmark import (
     BenchmarkTask,
     BenchmarkTaskCategory,
 )
-from kodiak.orchestration.research.composer import CompositionPlan, StrategyComposer
+from kodiak.orchestration.research.composer import StrategyComposer
 from kodiak.orchestration.research.experiment import (
-    Experiment,
     ExperimentDesignEngine,
     ExperimentPhase,
 )
@@ -42,7 +41,6 @@ from kodiak.orchestration.strategy import (
     ProblemClass,
     StrategyOutcome,
 )
-
 
 # ---------------------------------------------------------------------------
 # Research Object Model tests
@@ -322,9 +320,7 @@ class TestResearchMemory:
         h = Hypothesis(statement="test")
         memory.store_hypothesis(h)
 
-        updated = memory.update_hypothesis_status(
-            h.hypothesis_id, HypothesisStatus.SUPPORTED
-        )
+        updated = memory.update_hypothesis_status(h.hypothesis_id, HypothesisStatus.SUPPORTED)
         assert updated is not None
         assert updated.status == HypothesisStatus.SUPPORTED
 
@@ -400,12 +396,8 @@ class TestResearchMemory:
 
     def test_store_and_retrieve_strategy_version(self) -> None:
         memory = ResearchMemory()
-        v1 = StrategyVersion(
-            strategy_id="s1", version_number=1, name="v1", approach="A"
-        )
-        v2 = StrategyVersion(
-            strategy_id="s1", version_number=2, name="v2", approach="B"
-        )
+        v1 = StrategyVersion(strategy_id="s1", version_number=1, name="v1", approach="A")
+        v2 = StrategyVersion(strategy_id="s1", version_number=2, name="v2", approach="B")
         memory.store_strategy_version(v1)
         memory.store_strategy_version(v2)
 
@@ -625,15 +617,9 @@ class TestBenchmarkRunner:
     def test_aggregate_results(self) -> None:
         runner = BenchmarkRunner()
         results = [
-            BenchmarkResult(
-                task_id="t1", strategy_id="s1", strategy_name="S", success=True
-            ),
-            BenchmarkResult(
-                task_id="t2", strategy_id="s1", strategy_name="S", success=True
-            ),
-            BenchmarkResult(
-                task_id="t3", strategy_id="s1", strategy_name="S", success=False
-            ),
+            BenchmarkResult(task_id="t1", strategy_id="s1", strategy_name="S", success=True),
+            BenchmarkResult(task_id="t2", strategy_id="s1", strategy_name="S", success=True),
+            BenchmarkResult(task_id="t3", strategy_id="s1", strategy_name="S", success=False),
         ]
         agg = runner.aggregate_results(results)
         assert agg.total_tasks == 3
@@ -687,15 +673,9 @@ class TestResearchPrioritizer:
     def test_rank_problems(self) -> None:
         prioritizer = ResearchPrioritizer()
         problems = [
-            ResearchProblem(
-                title="Low", priority=ResearchProblemPriority.LOW
-            ),
-            ResearchProblem(
-                title="High", priority=ResearchProblemPriority.HIGH
-            ),
-            ResearchProblem(
-                title="Critical", priority=ResearchProblemPriority.CRITICAL
-            ),
+            ResearchProblem(title="Low", priority=ResearchProblemPriority.LOW),
+            ResearchProblem(title="High", priority=ResearchProblemPriority.HIGH),
+            ResearchProblem(title="Critical", priority=ResearchProblemPriority.CRITICAL),
         ]
         ranked = prioritizer.rank_problems(problems)
         assert len(ranked) == 3
@@ -844,17 +824,26 @@ class TestNegativeKnowledgeStore:
     def test_eviction(self) -> None:
         store = NegativeKnowledgeStore(max_entries=2)
         store.record_failure(
-            strategy_description="A", problem_class="x", result="F", conclusion="C",
+            strategy_description="A",
+            problem_class="x",
+            result="F",
+            conclusion="C",
             confidence=0.3,
         )
         store.record_failure(
-            strategy_description="B", problem_class="x", result="F", conclusion="C",
+            strategy_description="B",
+            problem_class="x",
+            result="F",
+            conclusion="C",
             confidence=0.9,
         )
         assert len(store) == 2
 
         store.record_failure(
-            strategy_description="C", problem_class="x", result="F", conclusion="C",
+            strategy_description="C",
+            problem_class="x",
+            result="F",
+            conclusion="C",
             confidence=0.5,
         )
         assert len(store) == 2

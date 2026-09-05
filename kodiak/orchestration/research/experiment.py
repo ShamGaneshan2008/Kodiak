@@ -20,7 +20,6 @@ from kodiak.orchestration.research.models import (
     EvidenceStrength,
     ExperimentResult,
     Hypothesis,
-    HypothesisStatus,
     Observation,
 )
 
@@ -133,20 +132,14 @@ class Experiment:
             "failure_criteria": list(self.failure_criteria),
             "resource_budget": dict(self.resource_budget),
             "phase": self.phase.value,
-            "baseline_result": self.baseline_result.to_dict()
-            if self.baseline_result
-            else None,
-            "candidate_result": self.candidate_result.to_dict()
-            if self.candidate_result
-            else None,
+            "baseline_result": self.baseline_result.to_dict() if self.baseline_result else None,
+            "candidate_result": self.candidate_result.to_dict() if self.candidate_result else None,
             "evidence_ids": list(self.evidence_ids),
             "observation_ids": list(self.observation_ids),
             "conclusion": self.conclusion,
             "improvement": self.improvement,
             "created_at": self.created_at.isoformat(),
-            "completed_at": self.completed_at.isoformat()
-            if self.completed_at
-            else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "metadata": dict(self.metadata),
         }
 
@@ -195,9 +188,7 @@ class ExperimentDesignEngine:
         """
         objective = f"Test hypothesis: {hypothesis.statement}"
 
-        variables = self._identify_variables(
-            baseline_approach, candidate_approach
-        )
+        variables = self._identify_variables(baseline_approach, candidate_approach)
         controls = self._default_controls(task_categories)
         procedure = self._default_procedure()
         measurements = self._default_measurements()
@@ -307,9 +298,7 @@ class ExperimentDesignEngine:
 
         return experiment
 
-    def generate_evidence(
-        self, experiment: Experiment, hypothesis_id: str
-    ) -> Evidence:
+    def generate_evidence(self, experiment: Experiment, hypothesis_id: str) -> Evidence:
         """Generate evidence from a completed experiment.
 
         Evidence must have provenance (experiment_id).
@@ -322,14 +311,8 @@ class ExperimentDesignEngine:
             measurements: dict[str, Any] = {}
         elif improvement > 0:
             supports = True
-            strength = (
-                EvidenceStrength.STRONG
-                if improvement > 0.1
-                else EvidenceStrength.MODERATE
-            )
-            summary = (
-                f"Candidate strategy improved by {improvement:.1%} over baseline."
-            )
+            strength = EvidenceStrength.STRONG if improvement > 0.1 else EvidenceStrength.MODERATE
+            summary = f"Candidate strategy improved by {improvement:.1%} over baseline."
             measurements = {
                 "improvement": improvement,
                 "baseline_metric": experiment.baseline_result.primary_metric
@@ -342,9 +325,7 @@ class ExperimentDesignEngine:
         else:
             supports = False
             strength = EvidenceStrength.MODERATE
-            summary = (
-                f"Candidate strategy degraded by {abs(improvement):.1%} vs baseline."
-            )
+            summary = f"Candidate strategy degraded by {abs(improvement):.1%} vs baseline."
             measurements = {
                 "degradation": abs(improvement),
                 "baseline_metric": experiment.baseline_result.primary_metric
@@ -362,7 +343,9 @@ class ExperimentDesignEngine:
             summary=summary,
             measurements=measurements,
             supports_hypothesis=supports,
-            confidence=0.8 if strength in {EvidenceStrength.STRONG, EvidenceStrength.MODERATE} else 0.4,
+            confidence=0.8
+            if strength in {EvidenceStrength.STRONG, EvidenceStrength.MODERATE}
+            else 0.4,
             source=f"experiment:{experiment.experiment_id}",
         )
 
@@ -375,9 +358,7 @@ class ExperimentDesignEngine:
 
         return evidence
 
-    def generate_observation(
-        self, experiment: Experiment
-    ) -> Observation:
+    def generate_observation(self, experiment: Experiment) -> Observation:
         """Generate an observation from experiment behavior."""
         improvement = experiment.improvement
         if improvement is not None and improvement > 0.2:
@@ -419,9 +400,7 @@ class ExperimentDesignEngine:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _identify_variables(
-        baseline_approach: str, candidate_approach: str
-    ) -> tuple[str, ...]:
+    def _identify_variables(baseline_approach: str, candidate_approach: str) -> tuple[str, ...]:
         """Identify the key variables that differ between strategies."""
         variables: list[str] = []
         if baseline_approach != candidate_approach:

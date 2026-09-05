@@ -277,9 +277,7 @@ class CapabilityTracker:
     def weak_capabilities(self, max_health: float = 0.5) -> list[Capability]:
         return [c for c in self.all_capabilities() if c.health_score <= max_health]
 
-    def missing_capabilities(
-        self, required: frozenset[str]
-    ) -> frozenset[str]:
+    def missing_capabilities(self, required: frozenset[str]) -> frozenset[str]:
         """Identify required capabilities that are not registered."""
         registered = {c.name for c in self._capabilities.values() if c.is_active}
         return required - registered
@@ -289,9 +287,7 @@ class CapabilityTracker:
             "capabilities": [c.to_dict() for c in self.all_capabilities()],
             "total": len(self._capabilities),
             "healthy": sum(1 for c in self._capabilities.values() if c.is_healthy),
-            "unhealthy": sum(
-                1 for c in self._capabilities.values() if not c.is_healthy
-            ),
+            "unhealthy": sum(1 for c in self._capabilities.values() if not c.is_healthy),
         }
 
 

@@ -119,21 +119,13 @@ class StrategyComposer:
             problem_class=problem_class,
             approach=composite_approach,
             required_capabilities=tuple(
-                sorted(
-                    {
-                        cap
-                        for s in strategies
-                        for cap in s.required_capabilities
-                    }
-                )
+                sorted({cap for s in strategies for cap in s.required_capabilities})
             ),
             expected_cost=plan.expected_cost,
             expected_risk=plan.expected_risk,
             expected_success_probability=0.5,  # Unknown until tested
             verification_method=self._best_verification_method(strategies),
-            tags=tuple(
-                sorted({tag for s in strategies for tag in s.tags})
-            ),
+            tags=tuple(sorted({tag for s in strategies for tag in s.tags})),
             provenance=f"composed_from:{','.join(s.name for s in strategies)}",
             metadata={
                 "composition_plan_id": plan.plan_id,
@@ -165,9 +157,7 @@ class StrategyComposer:
         success rate threshold.
         """
         candidates = [
-            s
-            for s in strategies
-            if s.success_rate >= min_success_rate and not s.is_deprecated
+            s for s in strategies if s.success_rate >= min_success_rate and not s.is_deprecated
         ]
 
         if len(candidates) < 2:

@@ -16,3 +16,4 @@ build/
 .venv312/
 coverage.xml
 reports/
+.tmp/

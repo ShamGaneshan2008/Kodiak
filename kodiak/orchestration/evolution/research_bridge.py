@@ -161,8 +161,11 @@ class ResearchEvolutionBridge:
         # Create improvement proposal
         proposal = ImprovementProposal(
             title=f"Integrate research discovery: {discovery.title}",
-            problem=f"Research discovered a potentially better approach for {discovery.problem_class}",
-            evidence=discovery.evidence + (
+            problem=(
+                f"Research discovered a potentially better approach for {discovery.problem_class}"
+            ),
+            evidence=discovery.evidence
+            + (
                 f"Benchmark results: {discovery.benchmark_results}",
                 f"Confidence: {discovery.confidence:.2f}",
             ),
@@ -205,9 +208,7 @@ class ResearchEvolutionBridge:
 
         return result
 
-    def bridge_multiple(
-        self, discoveries: list[ResearchDiscovery]
-    ) -> list[BridgeResult]:
+    def bridge_multiple(self, discoveries: list[ResearchDiscovery]) -> list[BridgeResult]:
         """Bridge multiple discoveries."""
         return [self.bridge_discovery(d) for d in discoveries]
 

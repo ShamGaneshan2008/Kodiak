@@ -575,12 +575,31 @@ class VerificationEngine:
 
     async def verify(
         self,
-        task: Task,
-        execution_result: ExecutionResult,
+        task: Task | None = None,
+        execution_result: ExecutionResult | None = None,
         *,
         execution_context: ExecutionContext | None = None,
+        goal: str | None = None,
+        plan: Any = None,
+        task_state: Any = None,
     ) -> VerificationResult:
         """Run applicable verifiers and aggregate evidence."""
+        if task is None:
+            if execution_result is None or task_state is None:
+                raise TypeError(
+                    "verify() requires either a Task plus ExecutionResult, or "
+                    "execution_result and task_state for autonomous-loop verification."
+                )
+            return await TaskVerifier().verify(
+                goal=goal or getattr(task_state, "objective", ""),
+                plan=plan,
+                execution_result=execution_result,
+                task_state=task_state,
+            )
+
+        if execution_result is None:
+            raise TypeError("verify() missing required argument: 'execution_result'")
+
         context = VerificationContext.from_execution(
             task,
             execution_result,

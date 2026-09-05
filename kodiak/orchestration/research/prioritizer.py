@@ -7,6 +7,8 @@ resources on low-impact research when high-impact work is available.
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 
 from kodiak.orchestration.research.models import (
@@ -81,8 +83,7 @@ class ResearchPrioritizer:
         }
 
         total = sum(
-            scores.get(criterion, 0.0) * weight
-            for criterion, weight in self._weights.items()
+            scores.get(criterion, 0.0) * weight for criterion, weight in self._weights.items()
         )
 
         return max(0.0, min(1.0, total))
@@ -97,10 +98,7 @@ class ResearchPrioritizer:
         Returns:
             List of (problem, score) tuples sorted by score descending.
         """
-        scored = [
-            (problem, self.score_problem(problem, **kwargs))
-            for problem in problems
-        ]
+        scored = [(problem, self.score_problem(problem, **kwargs)) for problem in problems]
         scored.sort(key=lambda x: x[1], reverse=True)
 
         self._log.info(
@@ -124,11 +122,7 @@ class ResearchPrioritizer:
         Only returns problems that score above ``min_score``.
         """
         ranked = self.rank_problems(problems, **kwargs)
-        targets = [
-            (problem, score)
-            for problem, score in ranked
-            if score >= min_score
-        ][:budget]
+        targets = [(problem, score) for problem, score in ranked if score >= min_score][:budget]
 
         self._log.info(
             "research_targets_selected",

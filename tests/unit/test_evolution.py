@@ -7,7 +7,6 @@ import pytest
 from kodiak.orchestration.evolution.capability import (
     Capability,
     CapabilityCategory,
-    CapabilityEvaluation,
     CapabilityPerformance,
     CapabilityTracker,
 )
@@ -20,7 +19,6 @@ from kodiak.orchestration.evolution.health import (
     HealthDimension,
     HealthMetric,
     HealthStatus,
-    SystemHealth,
     SystemHealthDashboard,
 )
 from kodiak.orchestration.evolution.improvement_queue import (
@@ -36,7 +34,6 @@ from kodiak.orchestration.evolution.models import (
     TaskEvaluation,
 )
 from kodiak.orchestration.evolution.self_evaluation import SelfEvaluationEngine
-
 
 # ---------------------------------------------------------------------------
 # Models tests
@@ -80,8 +77,16 @@ class TestTaskEvaluation:
     def test_avg_score(self) -> None:
         te = TaskEvaluation(
             dimension_scores=(
-                DimensionScore(dimension=EvaluationDimension.PLANNING_QUALITY, score=0.8, verdict=EvaluationVerdict.STRONG),
-                DimensionScore(dimension=EvaluationDimension.CODE_GENERATION, score=0.6, verdict=EvaluationVerdict.ADEQUATE),
+                DimensionScore(
+                    dimension=EvaluationDimension.PLANNING_QUALITY,
+                    score=0.8,
+                    verdict=EvaluationVerdict.STRONG,
+                ),
+                DimensionScore(
+                    dimension=EvaluationDimension.CODE_GENERATION,
+                    score=0.6,
+                    verdict=EvaluationVerdict.ADEQUATE,
+                ),
             ),
         )
         assert te.avg_score == pytest.approx(0.7)
@@ -89,8 +94,16 @@ class TestTaskEvaluation:
     def test_weak_dimensions(self) -> None:
         te = TaskEvaluation(
             dimension_scores=(
-                DimensionScore(dimension=EvaluationDimension.PLANNING_QUALITY, score=0.8, verdict=EvaluationVerdict.STRONG),
-                DimensionScore(dimension=EvaluationDimension.MEMORY_RETRIEVAL, score=0.3, verdict=EvaluationVerdict.WEAK),
+                DimensionScore(
+                    dimension=EvaluationDimension.PLANNING_QUALITY,
+                    score=0.8,
+                    verdict=EvaluationVerdict.STRONG,
+                ),
+                DimensionScore(
+                    dimension=EvaluationDimension.MEMORY_RETRIEVAL,
+                    score=0.3,
+                    verdict=EvaluationVerdict.WEAK,
+                ),
             ),
         )
         assert EvaluationDimension.MEMORY_RETRIEVAL in te.weak_dimensions
@@ -112,7 +125,9 @@ class TestSystemEvaluation:
         assert se.task_evaluations_count == 10
 
     def test_to_dict(self) -> None:
-        se = SystemEvaluation(overall_score=0.6, weakest_dimensions=(EvaluationDimension.PLANNING_QUALITY,))
+        se = SystemEvaluation(
+            overall_score=0.6, weakest_dimensions=(EvaluationDimension.PLANNING_QUALITY,)
+        )
         d = se.to_dict()
         assert d["overall_score"] == 0.6
 
@@ -174,8 +189,7 @@ class TestSelfEvaluationEngine:
 
         # Planning quality should be lower due to replans
         planning_scores = [
-            d for d in eval_.dimension_scores
-            if d.dimension == EvaluationDimension.PLANNING_QUALITY
+            d for d in eval_.dimension_scores if d.dimension == EvaluationDimension.PLANNING_QUALITY
         ]
         assert len(planning_scores) == 1
         assert planning_scores[0].score < 0.8
@@ -207,14 +221,21 @@ class TestSelfEvaluationEngine:
         engine = SelfEvaluationEngine()
         for i in range(5):
             engine.evaluate_task(
-                task_id=f"t{i}", goal=f"T{i}", success=True, attempts=1, replans=0, duration_seconds=1.0
+                task_id=f"t{i}",
+                goal=f"T{i}",
+                success=True,
+                attempts=1,
+                replans=0,
+                duration_seconds=1.0,
             )
         recent = engine.recent_evaluations(limit=3)
         assert len(recent) == 3
 
     def test_clear(self) -> None:
         engine = SelfEvaluationEngine()
-        engine.evaluate_task(task_id="t1", goal="T", success=True, attempts=1, replans=0, duration_seconds=1.0)
+        engine.evaluate_task(
+            task_id="t1", goal="T", success=True, attempts=1, replans=0, duration_seconds=1.0
+        )
         assert len(engine.recent_evaluations()) == 1
         engine.clear()
         assert len(engine.recent_evaluations()) == 0
@@ -248,9 +269,7 @@ class TestCapability:
     def test_health_score(self) -> None:
         cap = Capability(
             name="test",
-            performance=CapabilityPerformance(
-                total_attempts=10, successful_attempts=8
-            ),
+            performance=CapabilityPerformance(total_attempts=10, successful_attempts=8),
             evidence=("Evidence 1", "Evidence 2"),
         )
         assert cap.health_score > 0.5
@@ -258,17 +277,13 @@ class TestCapability:
     def test_health_score_with_limitations(self) -> None:
         cap = Capability(
             name="test",
-            performance=CapabilityPerformance(
-                total_attempts=10, successful_attempts=8
-            ),
+            performance=CapabilityPerformance(total_attempts=10, successful_attempts=8),
             known_limitations=("Limitation 1", "Limitation 2", "Limitation 3"),
         )
         # Limitations reduce health
         cap_no_lim = Capability(
             name="test",
-            performance=CapabilityPerformance(
-                total_attempts=10, successful_attempts=8
-            ),
+            performance=CapabilityPerformance(total_attempts=10, successful_attempts=8),
         )
         assert cap.health_score < cap_no_lim.health_score
 
@@ -423,7 +438,9 @@ class TestImprovementQueue:
         assert updated is not None
         assert updated.status == ImprovementStatus.PROPOSED
 
-        updated = queue.update_status(p.proposal_id, ImprovementStatus.REJECTED, rejection_reason="Too risky")
+        updated = queue.update_status(
+            p.proposal_id, ImprovementStatus.REJECTED, rejection_reason="Too risky"
+        )
         assert updated.status == ImprovementStatus.REJECTED
         assert updated.rejection_reason == "Too risky"
         assert updated.resolved_at is not None
@@ -439,8 +456,12 @@ class TestImprovementQueue:
 
     def test_ranked_proposals(self) -> None:
         queue = ImprovementQueue()
-        queue.add(ImprovementProposal(title="High", expected_impact_score=0.9, implementation_cost=0.1))
-        queue.add(ImprovementProposal(title="Low", expected_impact_score=0.2, implementation_cost=0.8))
+        queue.add(
+            ImprovementProposal(title="High", expected_impact_score=0.9, implementation_cost=0.1)
+        )
+        queue.add(
+            ImprovementProposal(title="Low", expected_impact_score=0.2, implementation_cost=0.8)
+        )
 
         ranked = queue.ranked_proposals(limit=2)
         assert ranked[0].title == "High"
@@ -482,7 +503,9 @@ class TestFailurePattern:
         assert not p.is_recurring
 
     def test_to_dict(self) -> None:
-        p = FailurePattern(description="test", category="test_cat", severity=FailurePatternSeverity.HIGH)
+        p = FailurePattern(
+            description="test", category="test_cat", severity=FailurePatternSeverity.HIGH
+        )
         d = p.to_dict()
         assert d["description"] == "test"
         assert d["severity"] == "high"
@@ -492,16 +515,38 @@ class TestFailurePatternMiner:
     def test_analyze_recurring_failures(self) -> None:
         miner = FailurePatternMiner(min_occurrences=2)
         evaluations = [
-            {"task_id": "t1", "failure_component": "planner", "what_failed": ["Plan was too broad"], "wasted_effort": [], "dimension_scores": []},
-            {"task_id": "t2", "failure_component": "planner", "what_failed": ["Plan was too broad"], "wasted_effort": [], "dimension_scores": []},
-            {"task_id": "t3", "failure_component": "planner", "what_failed": ["Plan was too broad"], "wasted_effort": [], "dimension_scores": []},
+            {
+                "task_id": "t1",
+                "failure_component": "planner",
+                "what_failed": ["Plan was too broad"],
+                "wasted_effort": [],
+                "dimension_scores": [],
+            },
+            {
+                "task_id": "t2",
+                "failure_component": "planner",
+                "what_failed": ["Plan was too broad"],
+                "wasted_effort": [],
+                "dimension_scores": [],
+            },
+            {
+                "task_id": "t3",
+                "failure_component": "planner",
+                "what_failed": ["Plan was too broad"],
+                "wasted_effort": [],
+                "dimension_scores": [],
+            },
         ]
 
         patterns = miner.analyze_evaluations(evaluations)
         assert len(patterns) > 0
 
         # Should detect recurring planner failure
-        planner_patterns = [p for p in patterns if "planner" in p.description.lower() or "planner" in str(p.affected_components)]
+        planner_patterns = [
+            p
+            for p in patterns
+            if "planner" in p.description.lower() or "planner" in str(p.affected_components)
+        ]
         assert len(planner_patterns) > 0
 
     def test_analyze_empty(self) -> None:
@@ -512,8 +557,20 @@ class TestFailurePatternMiner:
     def test_analyze_waste_patterns(self) -> None:
         miner = FailurePatternMiner(min_occurrences=2)
         evaluations = [
-            {"task_id": "t1", "failure_component": "", "what_failed": [], "wasted_effort": ["Retried without changing approach"], "dimension_scores": []},
-            {"task_id": "t2", "failure_component": "", "what_failed": [], "wasted_effort": ["Retried without changing approach"], "dimension_scores": []},
+            {
+                "task_id": "t1",
+                "failure_component": "",
+                "what_failed": [],
+                "wasted_effort": ["Retried without changing approach"],
+                "dimension_scores": [],
+            },
+            {
+                "task_id": "t2",
+                "failure_component": "",
+                "what_failed": [],
+                "wasted_effort": ["Retried without changing approach"],
+                "dimension_scores": [],
+            },
         ]
 
         patterns = miner.analyze_evaluations(evaluations)
@@ -523,8 +580,20 @@ class TestFailurePatternMiner:
     def test_recurring_patterns(self) -> None:
         miner = FailurePatternMiner(min_occurrences=2)
         evaluations = [
-            {"task_id": "t1", "failure_component": "x", "what_failed": [], "wasted_effort": [], "dimension_scores": []},
-            {"task_id": "t2", "failure_component": "x", "what_failed": [], "wasted_effort": [], "dimension_scores": []},
+            {
+                "task_id": "t1",
+                "failure_component": "x",
+                "what_failed": [],
+                "wasted_effort": [],
+                "dimension_scores": [],
+            },
+            {
+                "task_id": "t2",
+                "failure_component": "x",
+                "what_failed": [],
+                "wasted_effort": [],
+                "dimension_scores": [],
+            },
         ]
         miner.analyze_evaluations(evaluations)
         assert len(miner.recurring_patterns()) > 0
@@ -532,7 +601,13 @@ class TestFailurePatternMiner:
     def test_critical_patterns(self) -> None:
         miner = FailurePatternMiner(min_occurrences=1)
         evaluations = [
-            {"task_id": f"t{i}", "failure_component": "critical_comp", "what_failed": [], "wasted_effort": [], "dimension_scores": []}
+            {
+                "task_id": f"t{i}",
+                "failure_component": "critical_comp",
+                "what_failed": [],
+                "wasted_effort": [],
+                "dimension_scores": [],
+            }
             for i in range(6)
         ]
         miner.analyze_evaluations(evaluations)
@@ -601,8 +676,12 @@ class TestSystemHealthDashboard:
 
     def test_trend(self) -> None:
         dashboard = SystemHealthDashboard()
-        dashboard.compute_health(total_tasks=5, successful_tasks=3, dimension_scores={"reliability": 0.6})
-        dashboard.compute_health(total_tasks=5, successful_tasks=5, dimension_scores={"reliability": 0.9})
+        dashboard.compute_health(
+            total_tasks=5, successful_tasks=3, dimension_scores={"reliability": 0.6}
+        )
+        dashboard.compute_health(
+            total_tasks=5, successful_tasks=5, dimension_scores={"reliability": 0.9}
+        )
 
         trend = dashboard.trend(HealthDimension.RELIABILITY)
         assert trend == "improving"

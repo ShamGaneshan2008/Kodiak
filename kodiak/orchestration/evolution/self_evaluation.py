@@ -190,9 +190,7 @@ class SelfEvaluationEngine:
         overall_score = sum(overall_scores) / len(overall_scores)
 
         weakest = tuple(d.dimension for d in dimension_averages[:3] if d.score < 0.6)
-        strongest = tuple(
-            d.dimension for d in reversed(dimension_averages[:3]) if d.score >= 0.7
-        )
+        strongest = tuple(d.dimension for d in reversed(dimension_averages[:3]) if d.score >= 0.7)
 
         # Collect recurring failures
         all_failures: list[str] = []
@@ -250,64 +248,85 @@ class SelfEvaluationEngine:
 
         # Planning quality: high if no replans needed
         planning_score = max(0.0, 1.0 - replans * 0.25)
-        scores.append(DimensionScore(
-            dimension=EvaluationDimension.PLANNING_QUALITY,
-            score=planning_score,
-            verdict=_verdict_for_score(planning_score),
-            evidence=f"{replans} replan(s) needed" if replans else "No replanning required",
-            measurements={"replans": replans, "attempts": attempts},
-        ))
+        scores.append(
+            DimensionScore(
+                dimension=EvaluationDimension.PLANNING_QUALITY,
+                score=planning_score,
+                verdict=_verdict_for_score(planning_score),
+                evidence=f"{replans} replan(s) needed" if replans else "No replanning required",
+                measurements={"replans": replans, "attempts": attempts},
+            )
+        )
 
         # Strategy selection: inferred from attempt count and success
         strategy_score = 1.0 if success and attempts == 1 else max(0.3, 1.0 - (attempts - 1) * 0.2)
-        scores.append(DimensionScore(
-            dimension=EvaluationDimension.STRATEGY_SELECTION,
-            score=strategy_score,
-            verdict=_verdict_for_score(strategy_score),
-            evidence=f"Succeeded in {attempts} attempt(s)" if success else f"Failed after {attempts} attempt(s)",
-            measurements={"attempts": attempts, "success": success},
-        ))
+        scores.append(
+            DimensionScore(
+                dimension=EvaluationDimension.STRATEGY_SELECTION,
+                score=strategy_score,
+                verdict=_verdict_for_score(strategy_score),
+                evidence=f"Succeeded in {attempts} attempt(s)"
+                if success
+                else f"Failed after {attempts} attempt(s)",
+                measurements={"attempts": attempts, "success": success},
+            )
+        )
 
         # Agent selection: based on success
         agent_score = 1.0 if success else 0.4
-        scores.append(DimensionScore(
-            dimension=EvaluationDimension.AGENT_SELECTION,
-            score=agent_score,
-            verdict=_verdict_for_score(agent_score),
-            evidence="Agent completed task successfully" if success else "Agent did not complete task",
-        ))
+        scores.append(
+            DimensionScore(
+                dimension=EvaluationDimension.AGENT_SELECTION,
+                score=agent_score,
+                verdict=_verdict_for_score(agent_score),
+                evidence="Agent completed task successfully"
+                if success
+                else "Agent did not complete task",
+            )
+        )
 
         # Tool selection: based on success and no tool errors
         tool_score = 1.0 if success else 0.5
-        scores.append(DimensionScore(
-            dimension=EvaluationDimension.TOOL_SELECTION,
-            score=tool_score,
-            verdict=_verdict_for_score(tool_score),
-            evidence="No tool selection errors detected",
-        ))
+        scores.append(
+            DimensionScore(
+                dimension=EvaluationDimension.TOOL_SELECTION,
+                score=tool_score,
+                verdict=_verdict_for_score(tool_score),
+                evidence="No tool selection errors detected",
+            )
+        )
 
         # Memory retrieval
         memory_score = 0.7 if memory_recalled else 0.4
-        scores.append(DimensionScore(
-            dimension=EvaluationDimension.MEMORY_RETRIEVAL,
-            score=memory_score,
-            verdict=_verdict_for_score(memory_score),
-            evidence="Memory recalled and helped" if memory_recalled else "No memory recall or recall did not help",
-        ))
+        scores.append(
+            DimensionScore(
+                dimension=EvaluationDimension.MEMORY_RETRIEVAL,
+                score=memory_score,
+                verdict=_verdict_for_score(memory_score),
+                evidence="Memory recalled and helped"
+                if memory_recalled
+                else "No memory recall or recall did not help",
+            )
+        )
 
         # Verification quality
         verification_score = (
-            0.9 if verification_status == "verified"
-            else 0.5 if verification_status == "inconclusive"
-            else 0.3 if verification_status == "failed"
+            0.9
+            if verification_status == "verified"
+            else 0.5
+            if verification_status == "inconclusive"
+            else 0.3
+            if verification_status == "failed"
             else 0.4
         )
-        scores.append(DimensionScore(
-            dimension=EvaluationDimension.VERIFICATION_QUALITY,
-            score=verification_score,
-            verdict=_verdict_for_score(verification_score),
-            evidence=f"Verification status: {verification_status}",
-        ))
+        scores.append(
+            DimensionScore(
+                dimension=EvaluationDimension.VERIFICATION_QUALITY,
+                score=verification_score,
+                verdict=_verdict_for_score(verification_score),
+                evidence=f"Verification status: {verification_status}",
+            )
+        )
 
         # Recovery behavior
         if success and attempts > 1:
@@ -316,40 +335,58 @@ class SelfEvaluationEngine:
             recovery_score = 0.3  # Tried but failed to recover
         else:
             recovery_score = 0.6  # No recovery needed or attempted
-        scores.append(DimensionScore(
-            dimension=EvaluationDimension.RECOVERY_BEHAVIOR,
-            score=recovery_score,
-            verdict=_verdict_for_score(recovery_score),
-            evidence=f"Recovery {'succeeded' if success and attempts > 1 else 'not needed' if attempts == 1 else 'failed'}",
-        ))
+        if success and attempts > 1:
+            recovery_evidence = "Recovery succeeded"
+        elif attempts == 1:
+            recovery_evidence = "Recovery not needed"
+        else:
+            recovery_evidence = "Recovery failed"
+        scores.append(
+            DimensionScore(
+                dimension=EvaluationDimension.RECOVERY_BEHAVIOR,
+                score=recovery_score,
+                verdict=_verdict_for_score(recovery_score),
+                evidence=recovery_evidence,
+            )
+        )
 
         # Code generation: inferred from success
         code_score = 0.9 if success else 0.3
-        scores.append(DimensionScore(
-            dimension=EvaluationDimension.CODE_GENERATION,
-            score=code_score,
-            verdict=_verdict_for_score(code_score),
-            evidence="Generated code satisfied requirements" if success else "Generated code did not satisfy requirements",
-        ))
+        scores.append(
+            DimensionScore(
+                dimension=EvaluationDimension.CODE_GENERATION,
+                score=code_score,
+                verdict=_verdict_for_score(code_score),
+                evidence="Generated code satisfied requirements"
+                if success
+                else "Generated code did not satisfy requirements",
+            )
+        )
 
         # Resource efficiency
         efficiency_score = max(0.2, 1.0 - (attempts - 1) * 0.15 - replans * 0.1)
-        scores.append(DimensionScore(
-            dimension=EvaluationDimension.RESOURCE_EFFICIENCY,
-            score=efficiency_score,
-            verdict=_verdict_for_score(efficiency_score),
-            evidence=f"Duration: {duration_seconds:.1f}s, {attempts} attempt(s)",
-            measurements={"duration_seconds": duration_seconds, "attempts": attempts},
-        ))
+        scores.append(
+            DimensionScore(
+                dimension=EvaluationDimension.RESOURCE_EFFICIENCY,
+                score=efficiency_score,
+                verdict=_verdict_for_score(efficiency_score),
+                evidence=f"Duration: {duration_seconds:.1f}s, {attempts} attempt(s)",
+                measurements={"duration_seconds": duration_seconds, "attempts": attempts},
+            )
+        )
 
         # Execution reliability
         reliability_score = 1.0 if success else 0.2
-        scores.append(DimensionScore(
-            dimension=EvaluationDimension.EXECUTION_RELIABILITY,
-            score=reliability_score,
-            verdict=_verdict_for_score(reliability_score),
-            evidence="Execution succeeded" if success else f"Execution failed: {error_message or 'unknown'}",
-        ))
+        scores.append(
+            DimensionScore(
+                dimension=EvaluationDimension.EXECUTION_RELIABILITY,
+                score=reliability_score,
+                verdict=_verdict_for_score(reliability_score),
+                evidence="Execution succeeded"
+                if success
+                else f"Execution failed: {error_message or 'unknown'}",
+            )
+        )
 
         return scores
 

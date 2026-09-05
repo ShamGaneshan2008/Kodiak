@@ -42,7 +42,9 @@ class BaseAgentAdapter:
         )
         output = await self._agent.run(agent_input)
         if isinstance(output, AgentOutput):
-            return output.result if output.success else output
+            if output.success:
+                return output.result
+            raise RuntimeError(output.error or f"Agent {self.agent_id} failed.")
         return output
 
     async def health_check(self) -> bool:

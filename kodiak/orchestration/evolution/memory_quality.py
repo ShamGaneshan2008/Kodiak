@@ -50,6 +50,7 @@ class MemoryEntry:
         age_hours = (datetime.now(UTC) - self.last_accessed).total_seconds() / 3600
         # Exponential decay: half-life of 168 hours (1 week)
         import math
+
         return math.exp(-age_hours / 168.0)
 
     @property
@@ -246,17 +247,11 @@ class MemoryQualityController:
 
     def find_stale_entries(self) -> list[MemoryEntry]:
         """Find entries that have decayed below the freshness threshold."""
-        return [
-            e for e in self._entries.values()
-            if e.freshness < self._freshness_threshold
-        ]
+        return [e for e in self._entries.values() if e.freshness < self._freshness_threshold]
 
     def find_low_quality(self) -> list[MemoryEntry]:
         """Find entries with low quality scores."""
-        return [
-            e for e in self._entries.values()
-            if e.quality_score < self._confidence_threshold
-        ]
+        return [e for e in self._entries.values() if e.quality_score < self._confidence_threshold]
 
     def compute_quality_report(self) -> QualityReport:
         """Compute a comprehensive quality report."""
@@ -288,9 +283,7 @@ class MemoryQualityController:
                 f"({low_quality / total:.0%} of total)."
             )
         if stale > total * 0.3:
-            recommendations.append(
-                f"{stale} entries are stale. Consider refreshing or archiving."
-            )
+            recommendations.append(f"{stale} entries are stale. Consider refreshing or archiving.")
         if duplicates > 0:
             recommendations.append(
                 f"{duplicates} duplicate pair(s) detected. Consider deduplication."
@@ -337,9 +330,7 @@ class MemoryQualityController:
     # Internal
     # ------------------------------------------------------------------
 
-    def _check_contradiction(
-        self, a: MemoryEntry, b: MemoryEntry
-    ) -> Contradiction | None:
+    def _check_contradiction(self, a: MemoryEntry, b: MemoryEntry) -> Contradiction | None:
         """Check if two entries contradict each other."""
         # Must share some context to be a meaningful contradiction
         shared_tags = set(a.tags) & set(b.tags)
@@ -394,9 +385,7 @@ class MemoryQualityController:
         return None
 
     @staticmethod
-    def _infer_contradiction_reasons(
-        a: MemoryEntry, b: MemoryEntry
-    ) -> tuple[str, ...]:
+    def _infer_contradiction_reasons(a: MemoryEntry, b: MemoryEntry) -> tuple[str, ...]:
         reasons: list[str] = []
         if a.task_context != b.task_context and a.task_context and b.task_context:
             reasons.append("Different task contexts")

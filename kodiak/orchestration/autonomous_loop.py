@@ -32,6 +32,14 @@ from kodiak.orchestration.verification import (
     VerificationResult,
     VerificationStatus,
 )
+from kodiak.orchestration.workflow_engine import (
+    InMemoryWorkflowStateStore,
+    WorkflowContext,
+    WorkflowEngine,
+    WorkflowNode,
+    WorkflowState,
+    WorkflowStatus,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -74,6 +82,7 @@ class AutonomousTaskLoop:
         memory_service: MemoryService,
         agent_manager: AgentManager,
         execution_engine: ExecutionEngine,
+        workflow_engine: WorkflowEngine | None = None,
         verifier: VerificationEngine | None = None,
         reflection: ReflectionEngine | None = None,
         tool_router: ToolRouter | None = None,
@@ -85,6 +94,10 @@ class AutonomousTaskLoop:
         self._memory = memory_service
         self._agent_manager = agent_manager
         self._engine = execution_engine
+        self._workflow_engine = workflow_engine or WorkflowEngine(
+            state_store=InMemoryWorkflowStateStore(),
+            max_concurrency=1,
+        )
         self._verifier = verifier or VerificationEngine()
         self._reflection = reflection or ReflectionEngine()
         self._tool_router = tool_router
@@ -99,6 +112,18 @@ class AutonomousTaskLoop:
         self._cancellation_token.cancel()
         if self._active_task_state is not None:
             self._engine.cancel(self._active_task_state.task_id)
+            workflow_id = self._active_task_state.metadata.get("workflow_id")
+            if workflow_id:
+                # Workflow cancellation is cooperative; schedule it without
+                # requiring callers to await the synchronous cancel request.
+                import asyncio
+
+                try:
+                    asyncio.get_running_loop().create_task(
+                        self._workflow_engine.cancel(str(workflow_id))
+                    )
+                except RuntimeError:
+                    pass
 
     async def run(
         self,
@@ -268,6 +293,12 @@ class AutonomousTaskLoop:
                 elapsed_seconds=elapsed,
                 memory_stored=memory_stored,
             )
+        except Exception as exc:
+            state.error = str(exc)
+            state.metadata["failed_stage"] = state.status.value
+            if not state.is_terminal:
+                self._force_terminal_status(state, TaskStatus.FAILED)
+            raise
         finally:
             self._active_task_state = None
 
@@ -335,19 +366,43 @@ class AutonomousTaskLoop:
         loop_attempt: int,
     ) -> ExecutionResult:
         self._set_status(state, TaskStatus.RUNNING)
-        last_result: ExecutionResult | None = None
+        if not plan.tasks:
+            return ExecutionResult(
+                task_id=state.task_id,
+                outcome=ExecutionOutcome.FAILURE,
+                attempts=loop_attempt,
+                duration_seconds=0.0,
+                error={"type": "PlanningError", "message": "Planner produced no executable tasks."},
+                final_status=DbTaskStatus.FAILED,
+            )
 
-        for executable in self._ordered_tasks(plan):
+        task_by_id = {str(task.id): task for task in plan.tasks}
+        workflow = WorkflowState.from_execution_tasks(
+            name=goal[:80],
+            description=goal,
+            tasks=plan.tasks,
+            workflow_id=state.run_id,
+            metadata={"orchestration_task_id": state.task_id, "attempt": loop_attempt},
+        )
+        state.metadata["workflow_id"] = workflow.workflow_id
+
+        last_execution_result: ExecutionResult | None = None
+
+        async def execute_node(context: WorkflowContext, node: WorkflowNode) -> dict[str, Any]:
+            nonlocal last_execution_result
             if self._cancellation_token.is_cancelled:
-                return ExecutionResult(
-                    task_id=state.task_id,
-                    outcome=ExecutionOutcome.CANCELLED,
-                    attempts=loop_attempt,
-                    duration_seconds=0.0,
-                    error={"type": "ExecutionCancelledError", "message": "Loop cancelled."},
-                    final_status=DbTaskStatus.CANCELLED,
+                raise _WorkflowTaskFailed(
+                    ExecutionResult(
+                        task_id=state.task_id,
+                        outcome=ExecutionOutcome.CANCELLED,
+                        attempts=loop_attempt,
+                        duration_seconds=0.0,
+                        error={"type": "ExecutionCancelledError", "message": "Loop cancelled."},
+                        final_status=DbTaskStatus.CANCELLED,
+                    )
                 )
 
+            executable = task_by_id[node.id]
             db_task = self._build_db_task(
                 goal=goal,
                 executable=executable,
@@ -357,30 +412,81 @@ class AutonomousTaskLoop:
                 memory_context=memory_context,
                 loop_attempt=loop_attempt,
             )
-            last_result = await self._engine.execute(
+            result = await self._engine.execute(
                 db_task,
                 retry_policy=RetryPolicy(max_attempts=1),
             )
-            state.metadata["last_execution"] = _serialize_execution_result(last_result)
-            if not last_result.is_success:
-                return last_result
-            explicit_status = str((last_result.result or {}).get("verification_status", "")).lower()
+            serialized = _serialize_execution_result(result)
+            context.shared.setdefault("execution_results", {})[node.id] = serialized
+            context.shared["last_execution_result"] = result
+            workflow.metadata["last_execution_result"] = serialized
+            last_execution_result = result
+            state.metadata["last_execution"] = serialized
+
+            if not result.is_success:
+                raise _WorkflowTaskFailed(result)
+
+            explicit_status = str((result.result or {}).get("verification_status", "")).lower()
             if explicit_status in {
                 VerificationStatus.FAILED.value,
                 VerificationStatus.INCONCLUSIVE.value,
             }:
-                return last_result
+                raise _WorkflowTaskFailed(result)
 
-        if last_result is None:
+            return {"execution_result": serialized}
+
+        self._workflow_engine.register_executor("coder", execute_node)
+        self._workflow_engine.register_executor("tester", execute_node)
+        self._workflow_engine.register_executor("reviewer", execute_node)
+        self._workflow_engine.register_executor("research", execute_node)
+        self._workflow_engine.register_executor("retrieval", execute_node)
+        self._workflow_engine.register_executor("planner", execute_node)
+        self._workflow_engine.register_executor("debugger", execute_node)
+
+        shared_context: dict[str, Any] = {"execution_results": {}}
+        try:
+            finished = await self._workflow_engine.run(workflow, shared_context=shared_context)
+        except _WorkflowTaskFailed as exc:
+            if exc.result.outcome is ExecutionOutcome.CANCELLED:
+                return exc.result
+            return exc.result
+
+        state.metadata["workflow"] = finished.summary()
+        if last_execution_result is not None:
+            return last_execution_result
+
+        if finished.status is WorkflowStatus.CANCELLED:
+            return ExecutionResult(
+                task_id=state.task_id,
+                outcome=ExecutionOutcome.CANCELLED,
+                attempts=loop_attempt,
+                duration_seconds=0.0,
+                error={"type": "ExecutionCancelledError", "message": "Workflow cancelled."},
+                final_status=DbTaskStatus.CANCELLED,
+            )
+
+        if finished.status is WorkflowStatus.FAILED:
             return ExecutionResult(
                 task_id=state.task_id,
                 outcome=ExecutionOutcome.FAILURE,
                 attempts=loop_attempt,
                 duration_seconds=0.0,
-                error={"type": "PlanningError", "message": "Planner produced no executable tasks."},
+                error={
+                    "type": "WorkflowExecutionError",
+                    "message": finished.error or "Workflow execution failed.",
+                    "workflow": finished.summary(),
+                },
                 final_status=DbTaskStatus.FAILED,
             )
-        return last_result
+
+        return ExecutionResult(
+            task_id=state.task_id,
+            outcome=ExecutionOutcome.FAILURE,
+            attempts=loop_attempt,
+            duration_seconds=0.0,
+            error={"type": "WorkflowExecutionError", "message": "Workflow produced no result."},
+            final_status=DbTaskStatus.FAILED,
+        )
 
     async def _execute_repair(
         self,
@@ -493,6 +599,7 @@ class AutonomousTaskLoop:
             "goal": goal,
             "workspace": str(workspace) if workspace is not None else None,
             "agent_type": executable.agent_type,
+            "input_data": dict(executable.input_data),
             "required_capabilities": capabilities,
             "tool_names": executable.tool_names,
             "memory_context": memory_context,
@@ -501,6 +608,15 @@ class AutonomousTaskLoop:
             "execution_id": state.run_id,
             "repair": repair,
         }
+        if executable.input_data:
+            context.update(
+                {key: value for key, value in executable.input_data.items() if key not in context}
+            )
+        verification = context.get("verification")
+        if verification is None and plan is not None:
+            verification = plan.metadata.get("verification")
+        if verification is not None:
+            context["verification"] = verification
         if plan is not None:
             context["plan"] = plan.machine_readable()
         if self._tool_router is not None:
@@ -543,6 +659,13 @@ class AutonomousTaskLoop:
 
             state.finished_at = datetime.now(UTC)
 
+    @staticmethod
+    def _force_terminal_status(state: TaskState, new_status: TaskStatus) -> None:
+        state.status = new_status
+        from datetime import UTC, datetime
+
+        state.finished_at = datetime.now(UTC)
+
 
 def _serialize_execution_result(result: ExecutionResult) -> dict[str, Any]:
     return {
@@ -553,7 +676,21 @@ def _serialize_execution_result(result: ExecutionResult) -> dict[str, Any]:
         "result": result.result,
         "error": result.error,
         "final_status": result.final_status.value,
+        "verification": result.verification,
+        "reflection": result.reflection,
     }
+
+
+class _WorkflowTaskFailed(Exception):
+    """Internal signal carrying the failed node's structured execution result."""
+
+    def __init__(self, result: ExecutionResult) -> None:
+        super().__init__(
+            (result.error or {}).get("message")
+            or (result.result or {}).get("verification_message")
+            or result.outcome.value
+        )
+        self.result = result
 
 
 def build_autonomous_loop(

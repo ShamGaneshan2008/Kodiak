@@ -32,7 +32,6 @@ from kodiak.orchestration.research.models import (
     Conclusion,
     Evidence,
     EvidenceStrength,
-    ExperimentResult,
     Hypothesis,
     HypothesisStatus,
     KnowledgeClassification,

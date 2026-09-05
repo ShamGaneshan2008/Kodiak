@@ -124,9 +124,7 @@ class TaskEvaluation:
     @property
     def strong_dimensions(self) -> tuple[EvaluationDimension, ...]:
         return tuple(
-            d.dimension
-            for d in self.dimension_scores
-            if d.verdict == EvaluationVerdict.STRONG
+            d.dimension for d in self.dimension_scores if d.verdict == EvaluationVerdict.STRONG
         )
 
     def to_dict(self) -> dict[str, Any]:

@@ -134,9 +134,7 @@ class BenchmarkSuite:
     def categories(self) -> tuple[str, ...]:
         return tuple(sorted({t.category.value for t in self.tasks}))
 
-    def tasks_by_category(
-        self, category: BenchmarkTaskCategory
-    ) -> tuple[BenchmarkTask, ...]:
+    def tasks_by_category(self, category: BenchmarkTaskCategory) -> tuple[BenchmarkTask, ...]:
         return tuple(t for t in self.tasks if t.category == category)
 
     def to_dict(self) -> dict[str, Any]:
@@ -162,9 +160,7 @@ class BenchmarkRunner:
     def __init__(self) -> None:
         self._log = logger.bind(component="benchmark_runner")
 
-    def aggregate_results(
-        self, results: list[BenchmarkResult]
-    ) -> ExperimentResult:
+    def aggregate_results(self, results: list[BenchmarkResult]) -> ExperimentResult:
         """Aggregate benchmark results into an ExperimentResult."""
         if not results:
             return ExperimentResult(
@@ -179,9 +175,7 @@ class BenchmarkRunner:
 
         primary_metric = successful / total if total > 0 else 0.0
 
-        failures = tuple(
-            r.error_message for r in results if not r.success and r.error_message
-        )
+        failures = tuple(r.error_message for r in results if not r.success and r.error_message)
 
         strategy_name = results[0].strategy_name if results else "unknown"
         strategy_id = results[0].strategy_id if results else ""
@@ -212,9 +206,8 @@ class BenchmarkRunner:
         improvement = 0.0
         if baseline_agg.primary_metric > 0:
             improvement = (
-                (candidate_agg.primary_metric - baseline_agg.primary_metric)
-                / baseline_agg.primary_metric
-            )
+                candidate_agg.primary_metric - baseline_agg.primary_metric
+            ) / baseline_agg.primary_metric
 
         return {
             "baseline": baseline_agg.to_dict(),

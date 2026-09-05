@@ -62,9 +62,7 @@ class NegativeKnowledgeStore:
         candidates = list(self._entries.values())
 
         if problem_class:
-            candidates = [
-                n for n in candidates if n.problem_class == problem_class
-            ]
+            candidates = [n for n in candidates if n.problem_class == problem_class]
 
         if strategy_description:
             # Fuzzy match: check if the description appears in any entry
@@ -72,8 +70,7 @@ class NegativeKnowledgeStore:
             candidates = [
                 n
                 for n in candidates
-                if search in n.strategy_description.lower()
-                or search in n.conclusion.lower()
+                if search in n.strategy_description.lower() or search in n.conclusion.lower()
             ]
 
         candidates = [n for n in candidates if n.confidence >= min_confidence]

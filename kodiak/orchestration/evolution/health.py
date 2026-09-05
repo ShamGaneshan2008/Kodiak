@@ -94,9 +94,7 @@ class SystemHealth:
             "overall_score": self.overall_score,
             "overall_status": self.overall_status.value,
             "metrics": [m.to_dict() for m in self.metrics],
-            "weakest_dimension": self.weakest_dimension.value
-            if self.weakest_dimension
-            else None,
+            "weakest_dimension": self.weakest_dimension.value if self.weakest_dimension else None,
             "strongest_dimension": self.strongest_dimension.value
             if self.strongest_dimension
             else None,
@@ -137,102 +135,124 @@ class SystemHealthDashboard:
 
         # Reliability
         reliability = successful_tasks / total_tasks if total_tasks > 0 else 0.0
-        metrics.append(HealthMetric(
-            dimension=HealthDimension.RELIABILITY,
-            score=reliability,
-            status=_status_for_score(reliability),
-            evidence=f"{successful_tasks}/{total_tasks} tasks succeeded",
-            measurements={"success_rate": reliability, "total": total_tasks},
-        ))
+        metrics.append(
+            HealthMetric(
+                dimension=HealthDimension.RELIABILITY,
+                score=reliability,
+                status=_status_for_score(reliability),
+                evidence=f"{successful_tasks}/{total_tasks} tasks succeeded",
+                measurements={"success_rate": reliability, "total": total_tasks},
+            )
+        )
 
         # Adaptability (inferred from replan rate)
         if total_tasks > 0:
             adaptability = max(0.0, 1.0 - (total_replans / total_tasks) * 0.5)
         else:
             adaptability = 0.5
-        metrics.append(HealthMetric(
-            dimension=HealthDimension.ADAPTABILITY,
-            score=adaptability,
-            status=_status_for_score(adaptability),
-            evidence=f"{total_replans} replan(s) across {total_tasks} tasks",
-            measurements={"replan_rate": total_replans / max(total_tasks, 1)},
-        ))
+        metrics.append(
+            HealthMetric(
+                dimension=HealthDimension.ADAPTABILITY,
+                score=adaptability,
+                status=_status_for_score(adaptability),
+                evidence=f"{total_replans} replan(s) across {total_tasks} tasks",
+                measurements={"replan_rate": total_replans / max(total_tasks, 1)},
+            )
+        )
 
         # Autonomy (inferred from human intervention rate)
         if total_tasks > 0:
             autonomy = max(0.0, 1.0 - (human_interventions / total_tasks))
         else:
             autonomy = 0.8
-        metrics.append(HealthMetric(
-            dimension=HealthDimension.AUTONOMY,
-            score=autonomy,
-            status=_status_for_score(autonomy),
-            evidence=f"{human_interventions} human intervention(s) in {total_tasks} tasks",
-            measurements={"intervention_rate": human_interventions / max(total_tasks, 1)},
-        ))
+        metrics.append(
+            HealthMetric(
+                dimension=HealthDimension.AUTONOMY,
+                score=autonomy,
+                status=_status_for_score(autonomy),
+                evidence=f"{human_interventions} human intervention(s) in {total_tasks} tasks",
+                measurements={"intervention_rate": human_interventions / max(total_tasks, 1)},
+            )
+        )
 
         # Verification quality
-        metrics.append(HealthMetric(
-            dimension=HealthDimension.VERIFICATION_QUALITY,
-            score=verification_pass_rate,
-            status=_status_for_score(verification_pass_rate),
-            evidence=f"Verification pass rate: {verification_pass_rate:.1%}",
-        ))
+        metrics.append(
+            HealthMetric(
+                dimension=HealthDimension.VERIFICATION_QUALITY,
+                score=verification_pass_rate,
+                status=_status_for_score(verification_pass_rate),
+                evidence=f"Verification pass rate: {verification_pass_rate:.1%}",
+            )
+        )
 
         # Memory quality
-        metrics.append(HealthMetric(
-            dimension=HealthDimension.MEMORY_QUALITY,
-            score=memory_usefulness,
-            status=_status_for_score(memory_usefulness),
-            evidence=f"Memory usefulness: {memory_usefulness:.1%}",
-        ))
+        metrics.append(
+            HealthMetric(
+                dimension=HealthDimension.MEMORY_QUALITY,
+                score=memory_usefulness,
+                status=_status_for_score(memory_usefulness),
+                evidence=f"Memory usefulness: {memory_usefulness:.1%}",
+            )
+        )
 
         # Research effectiveness
         research_score = min(research_tasks / max(total_tasks, 1) * 2, 1.0)
-        metrics.append(HealthMetric(
-            dimension=HealthDimension.RESEARCH_EFFECTIVENESS,
-            score=research_score,
-            status=_status_for_score(research_score),
-            evidence=f"{research_tasks} research tasks completed",
-        ))
+        metrics.append(
+            HealthMetric(
+                dimension=HealthDimension.RESEARCH_EFFECTIVENESS,
+                score=research_score,
+                status=_status_for_score(research_score),
+                evidence=f"{research_tasks} research tasks completed",
+            )
+        )
 
         # Strategy quality
         strategy_score = min(strategy_use_count / max(total_tasks, 1), 1.0)
-        metrics.append(HealthMetric(
-            dimension=HealthDimension.STRATEGY_QUALITY,
-            score=strategy_score,
-            status=_status_for_score(strategy_score),
-            evidence=f"Strategy used in {strategy_use_count} of {total_tasks} tasks",
-        ))
+        metrics.append(
+            HealthMetric(
+                dimension=HealthDimension.STRATEGY_QUALITY,
+                score=strategy_score,
+                status=_status_for_score(strategy_score),
+                evidence=f"Strategy used in {strategy_use_count} of {total_tasks} tasks",
+            )
+        )
 
         # Resource efficiency
-        efficiency = max(0.0, 1.0 - avg_duration_seconds / 300.0) if avg_duration_seconds > 0 else 0.7
-        metrics.append(HealthMetric(
-            dimension=HealthDimension.RESOURCE_EFFICIENCY,
-            score=efficiency,
-            status=_status_for_score(efficiency),
-            evidence=f"Average duration: {avg_duration_seconds:.1f}s",
-            measurements={"avg_duration_seconds": avg_duration_seconds},
-        ))
+        efficiency = (
+            max(0.0, 1.0 - avg_duration_seconds / 300.0) if avg_duration_seconds > 0 else 0.7
+        )
+        metrics.append(
+            HealthMetric(
+                dimension=HealthDimension.RESOURCE_EFFICIENCY,
+                score=efficiency,
+                status=_status_for_score(efficiency),
+                evidence=f"Average duration: {avg_duration_seconds:.1f}s",
+                measurements={"avg_duration_seconds": avg_duration_seconds},
+            )
+        )
 
         # Regression rate
         regression_rate = failed_tasks / total_tasks if total_tasks > 0 else 0.0
         regression_health = 1.0 - regression_rate
-        metrics.append(HealthMetric(
-            dimension=HealthDimension.REGRESSION_RATE,
-            score=regression_health,
-            status=_status_for_score(regression_health),
-            evidence=f"Failure rate: {regression_rate:.1%}",
-        ))
+        metrics.append(
+            HealthMetric(
+                dimension=HealthDimension.REGRESSION_RATE,
+                score=regression_health,
+                status=_status_for_score(regression_health),
+                evidence=f"Failure rate: {regression_rate:.1%}",
+            )
+        )
 
         # Human intervention
         intervention_health = autonomy  # Same calculation
-        metrics.append(HealthMetric(
-            dimension=HealthDimension.HUMAN_INTERVENTION,
-            score=intervention_health,
-            status=_status_for_score(intervention_health),
-            evidence=f"{human_interventions} intervention(s)",
-        ))
+        metrics.append(
+            HealthMetric(
+                dimension=HealthDimension.HUMAN_INTERVENTION,
+                score=intervention_health,
+                status=_status_for_score(intervention_health),
+                evidence=f"{human_interventions} intervention(s)",
+            )
+        )
 
         # Override with dimension_scores if provided
         if dimension_scores:

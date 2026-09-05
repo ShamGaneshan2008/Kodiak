@@ -19,7 +19,6 @@ from kodiak.orchestration.evolution.capability_composer import (
 )
 from kodiak.orchestration.evolution.improvement_queue import (
     ImprovementQueue,
-    ImprovementStatus,
 )
 from kodiak.orchestration.evolution.memory_quality import (
     Contradiction,
@@ -36,7 +35,6 @@ from kodiak.orchestration.evolution.meta_strategies import (
     TaskComplexity,
 )
 from kodiak.orchestration.evolution.research_bridge import (
-    BridgeResult,
     ResearchDiscovery,
     ResearchEvolutionBridge,
 )
@@ -45,9 +43,7 @@ from kodiak.orchestration.evolution.resource_aware import (
     ResourceAwareEngine,
     ResourceProfile,
     TaskComplexityAssessment,
-    VerificationLevel,
 )
-
 
 # ======================================================================
 # MetaStrategySelector tests
@@ -310,7 +306,7 @@ class TestMemoryQualityController:
 
     def test_prune_low_quality(self) -> None:
         controller = MemoryQualityController(confidence_threshold=0.5)
-        for i in range(5):
+        for _ in range(5):
             controller.add_entry(MemoryEntry(confidence=0.1, importance=0.1))
         controller.add_entry(MemoryEntry(confidence=0.9, importance=0.9))
 
@@ -321,7 +317,7 @@ class TestMemoryQualityController:
     def test_quality_report_with_recommendations(self) -> None:
         controller = MemoryQualityController(confidence_threshold=0.5)
         # Add many low-quality entries
-        for i in range(10):
+        for _ in range(10):
             controller.add_entry(MemoryEntry(confidence=0.1, importance=0.1))
 
         report = controller.compute_quality_report()
@@ -377,23 +373,29 @@ class TestContradiction:
 class TestCapabilityComposer:
     def _make_tracker(self) -> CapabilityTracker:
         tracker = CapabilityTracker()
-        tracker.register(Capability(
-            name="planning",
-            category=CapabilityCategory.PLANNING,
-            performance=CapabilityPerformance(total_attempts=10, successful_attempts=8),
-            evidence=("Evidence 1",),
-        ))
-        tracker.register(Capability(
-            name="testing",
-            category=CapabilityCategory.TESTING,
-            performance=CapabilityPerformance(total_attempts=10, successful_attempts=9),
-            evidence=("Evidence 2", "Evidence 3"),
-        ))
-        tracker.register(Capability(
-            name="debugging",
-            category=CapabilityCategory.DEBUGGING,
-            performance=CapabilityPerformance(total_attempts=5, successful_attempts=3),
-        ))
+        tracker.register(
+            Capability(
+                name="planning",
+                category=CapabilityCategory.PLANNING,
+                performance=CapabilityPerformance(total_attempts=10, successful_attempts=8),
+                evidence=("Evidence 1",),
+            )
+        )
+        tracker.register(
+            Capability(
+                name="testing",
+                category=CapabilityCategory.TESTING,
+                performance=CapabilityPerformance(total_attempts=10, successful_attempts=9),
+                evidence=("Evidence 2", "Evidence 3"),
+            )
+        )
+        tracker.register(
+            Capability(
+                name="debugging",
+                category=CapabilityCategory.DEBUGGING,
+                performance=CapabilityPerformance(total_attempts=5, successful_attempts=3),
+            )
+        )
         return tracker
 
     def test_compose_two_capabilities(self) -> None:
@@ -533,10 +535,7 @@ class TestResearchEvolutionBridge:
 
     def test_bridge_multiple(self) -> None:
         bridge = self._make_bridge()
-        discoveries = [
-            ResearchDiscovery(title=f"Discovery {i}", confidence=0.7)
-            for i in range(3)
-        ]
+        discoveries = [ResearchDiscovery(title=f"Discovery {i}", confidence=0.7) for i in range(3)]
         results = bridge.bridge_multiple(discoveries)
         assert len(results) == 3
 
@@ -611,7 +610,11 @@ class TestResourceAwareEngine:
         engine = ResourceAwareEngine()
         assessment = engine.assess_task(
             task_id="t2",
-            goal="Implement a complex multi-module architecture refactor with dependency injection, event-driven communication, and comprehensive test coverage",
+            goal=(
+                "Implement a complex multi-module architecture refactor with "
+                "dependency injection, event-driven communication, and "
+                "comprehensive test coverage"
+            ),
             has_known_strategies=False,
             strategy_confidence=0.2,
             previous_failures=3,

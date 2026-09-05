@@ -22,19 +22,43 @@ try:
         multiprocess,
     )
 except ImportError:
-    Counter = None
-    Gauge = None
-    Histogram = None
-    Info = None
+
+    class _NoopMetric:
+        def labels(self, *args: Any, **kwargs: Any) -> _NoopMetric:
+            return self
+
+        def inc(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def dec(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def observe(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def set(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def info(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+    def _noop_metric(*args: Any, **kwargs: Any) -> _NoopMetric:
+        return _NoopMetric()
+
+    Counter = _noop_metric
+    Gauge = _noop_metric
+    Histogram = _noop_metric
+    Info = _noop_metric
     CollectorRegistry = None
-    CONTENT_TYPE_LATEST = None
     REGISTRY = None
-    generate_latest = None
+    CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
+
+    def generate_latest(*args: Any, **kwargs: Any) -> bytes:
+        return b""
+
     multiprocess = None
 
-REQUESTS_TOTAL = (
-    Counter("kodiak_requests_total", "Total API requests") if Counter is not None else None
-)
+REQUESTS_TOTAL = Counter("kodiak_requests_total", "Total API requests")
 
 # ── Application info ──────────────────────────────────────────────────────────
 APP_INFO = Info("kodiak_app", "Kodiak application metadata")
