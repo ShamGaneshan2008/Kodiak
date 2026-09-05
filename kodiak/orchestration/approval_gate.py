@@ -29,12 +29,14 @@ class ApprovalGate:
             "overwrite_file",
             "git_push",
             "create_pr",
+            "create_issue",
             "execute_shell",
             "database_modify",
         }
         self._high_risk_operations = {
             "delete_file",
             "git_push",
+            "create_issue",
             "execute_shell",
             "database_modify",
         }
