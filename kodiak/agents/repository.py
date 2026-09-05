@@ -15,6 +15,7 @@ from kodiak.agents.base import (
     AgentRole,
     BaseAgent,
 )
+from kodiak.agents.repository_intelligence import RepositoryIntelligenceService
 
 _LANGUAGE_EXTENSION_MAP = {
     ".py": "Python",
@@ -88,9 +89,15 @@ class RepositoryAnalyzerAgent(BaseAgent):
 
     role = AgentRole.REPOSITORY
 
-    def __init__(self, tool_router: Any | None = None, llm_client: Any | None = None) -> None:
+    def __init__(
+        self,
+        tool_router: Any | None = None,
+        llm_client: Any | None = None,
+        intelligence: RepositoryIntelligenceService | None = None,
+    ) -> None:
         super().__init__(tool_router=tool_router)
         self._llm = llm_client
+        self._intelligence = intelligence
 
     async def _run(self, input_: AgentInput) -> AgentOutput:
         repository = input_.context.get("repository_path")
@@ -108,6 +115,25 @@ class RepositoryAnalyzerAgent(BaseAgent):
             token_usage = await self._enrich_with_llm(analysis, input_.task_id)
 
         result_payload: dict[str, Any] = {"analysis": analysis}
+        if bool(input_.context.get("discover_issues", False)):
+            intelligence = self._intelligence or RepositoryIntelligenceService(
+                tool_router=self._tool_router
+            )
+            snapshot = await intelligence.scan(
+                str(input_.context.get("repository_id", input_.task_id)),
+                analysis.root_path,
+                incremental=bool(input_.context.get("incremental", True)),
+                run_tests=bool(input_.context.get("run_tests", False)),
+                test_target=str(input_.context.get("test_target", "tests")),
+                ci_failures=list(input_.context.get("ci_failures", [])),
+            )
+            result_payload["repository_intelligence"] = {
+                "scan_id": snapshot.scan_id,
+                "findings": [finding.to_dict() for finding in snapshot.findings],
+                "files_processed": list(snapshot.files_processed),
+                "files_unchanged": list(snapshot.files_unchanged),
+                "dimensions": snapshot.dimensions,
+            }
         if self._tool_router is not None:
             listing = await self.invoke_tool(
                 "list_dir",
