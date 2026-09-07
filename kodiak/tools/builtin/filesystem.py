@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
 from kodiak.tools.base import ToolAdapter
 from kodiak.tools.models import PermissionLevel, ToolDefinition, ToolExecutionContext, ToolResult
+
+_WRITE_LOCKS: dict[Path, threading.Lock] = {}
+_WRITE_LOCKS_GUARD = threading.Lock()
+
+
+def _write_lock(path: Path) -> threading.Lock:
+    with _WRITE_LOCKS_GUARD:
+        return _WRITE_LOCKS.setdefault(path, threading.Lock())
 
 
 def _is_path_safe(target_path: Path, base_dir: Path | None = None) -> bool:
@@ -146,7 +157,27 @@ class WriteFileTool(ToolAdapter):
 
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
+            resolved = path.resolve()
+            with _write_lock(resolved):
+                temporary_name: str | None = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        mode="w",
+                        encoding="utf-8",
+                        dir=resolved.parent,
+                        prefix=f".{resolved.name}.",
+                        suffix=".tmp",
+                        delete=False,
+                    ) as temporary:
+                        temporary_name = temporary.name
+                        temporary.write(content)
+                        temporary.flush()
+                        os.fsync(temporary.fileno())
+                    os.replace(temporary_name, resolved)
+                    temporary_name = None
+                finally:
+                    if temporary_name is not None:
+                        Path(temporary_name).unlink(missing_ok=True)  # noqa: ASYNC240
             return ToolResult(
                 success=True,
                 output={"path": str(path), "bytes_written": len(content.encode("utf-8"))},
