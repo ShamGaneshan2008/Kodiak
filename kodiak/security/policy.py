@@ -22,11 +22,15 @@ class PolicyEngine:
     def __init__(self) -> None:
         self._policies: list[SecurityPolicy] = []
         self._blocked_commands: list[re.Pattern[str]] = [
-            re.compile(r"\brm\s+-rf\s+/\b"),
-            re.compile(r"\bmkfs\b"),
-            re.compile(r"\bdd\s+if=/dev/zero\b"),
+            re.compile(r"\brm\s+-rf(?:\s+--)?\s+/"),
+            re.compile(r"\bmkfs(?:\.|\s)"),
+            re.compile(r"\bdd\s+.*\bof=/dev/"),
             re.compile(r">\s/dev/sd[a-z]"),
             re.compile(r"chmod\s+-R\s+777\s+/"),
+            re.compile(r"\bgit\s+reset\s+--hard\b", re.IGNORECASE),
+            re.compile(r"\bgit\s+clean\s+-[^\s]*f", re.IGNORECASE),
+            re.compile(r"\bgit\s+push\b[^\n]*(?:--force|-f\b)", re.IGNORECASE),
+            re.compile(r"\bgit\s+branch\s+-[dD]\b", re.IGNORECASE),
         ]
         self._blocked_paths = {
             "/etc/passwd",
@@ -42,9 +46,8 @@ class PolicyEngine:
         logger.info("policy_added", name=policy.name, enabled=policy.enabled)
 
     async def evaluate_command(self, command: str) -> PolicyDecision:
-        if not any(p.enabled for p in self._policies):
-            return PolicyDecision(allowed=True, reason="No active policies")
-
+        # Baseline destructive-operation protections remain active even when
+        # no optional custom policy has been registered.
         for pattern in self._blocked_commands:
             if pattern.search(command):
                 logger.warning("command_blocked", command=command)
@@ -55,9 +58,6 @@ class PolicyEngine:
         return PolicyDecision(allowed=True, reason="Command allowed")
 
     async def evaluate_file_access(self, path: str, write: bool = False) -> PolicyDecision:
-        if not any(p.enabled for p in self._policies):
-            return PolicyDecision(allowed=True, reason="No active policies")
-
         for blocked in self._blocked_paths:
             if path.startswith(blocked) or path == blocked:
                 return PolicyDecision(
@@ -74,9 +74,6 @@ class PolicyEngine:
         return PolicyDecision(allowed=True, reason="File access allowed")
 
     async def evaluate_network_access(self, url: str) -> PolicyDecision:
-        if not any(p.enabled for p in self._policies):
-            return PolicyDecision(allowed=True, reason="No active policies")
-
         for domain in self._blocked_domains:
             if domain in url:
                 return PolicyDecision(
@@ -92,9 +89,6 @@ class PolicyEngine:
     async def evaluate_operation(
         self, operation: str, context: dict[str, Any] | None = None
     ) -> PolicyDecision:
-        if not any(p.enabled for p in self._policies):
-            return PolicyDecision(allowed=True, reason="No active policies")
-
         op_upper = operation.upper().strip()
         for blocked in self._blocked_operations:
             if blocked in op_upper:
