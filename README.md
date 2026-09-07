@@ -9,18 +9,14 @@
 
 # kodiak
 
-**Autonomous AI software engineer.**<br/>
-Give it a GitHub issue. It plans, codes, tests, and opens a PR.
+**Experimental autonomous software-engineering toolkit.**<br/>
+Repository analysis and approval-gated planning, execution, verification, and Git workflows.
 
 <br/>
 
-[![CI](https://github.com/your-org/kodiak/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/kodiak/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![LangGraph](https://img.shields.io/badge/LangGraph-orchestration-8B5CF6)](https://langchain-ai.github.io/langgraph/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-F59E0B.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/your-org/kodiak?style=social)](https://github.com/your-org/kodiak/stargazers)
-[![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/your-invite)
 
 <br/>
 
@@ -39,19 +35,19 @@ Give it a GitHub issue. It plans, codes, tests, and opens a PR.
 
 ## Overview
 
-Kodiak is a self-contained autonomous software engineering agent. Install it as a GitHub App, and it handles the entire development cycle without human intervention.
+Kodiak is alpha software for experimenting with repository-aware software-engineering agents. It provides planning, specialized agents, controlled tools, verification, reflection, repository intelligence, and approval-gated Git/GitHub workflows.
 
 When an issue is opened, Kodiak reads it, searches your codebase for relevant context, writes a structured implementation plan, generates the code, self-reviews the diff, runs your test suite inside an isolated Docker container, and opens a pull request — complete with tests and a written explanation of every decision it made.
 
-No prompt engineering per repository. No branch to create. No tests to run manually. No PR to open.
+Capabilities vary by provider, repository, and configuration. Review generated changes and verification evidence before accepting them.
 
 <br/>
 
 <table>
 <tr>
 <td align="center" width="33%">
-<strong>Fully Autonomous</strong><br/><br/>
-Issue to merged PR with no human step in between. Kodiak manages the branch, writes the code, runs the tests, and opens the PR.
+<strong>Approval gated</strong><br/><br/>
+Potentially dangerous local and remote actions are subject to permission and approval policy.
 </td>
 <td align="center" width="33%">
 <strong>Codebase-Aware</strong><br/><br/>
@@ -77,11 +73,13 @@ Runs your real test suite in an isolated sandbox. If tests fail, the coder retri
 | Self-reviews its own output | — | — | Yes |
 | Runs your real test suite to validate | — | — | Yes |
 | Opens a pull request autonomously | — | — | Yes |
-| Requires a human in the loop | Yes | Yes | **No** |
+| Requires a human in the loop | Yes | Yes | **Yes for review and protected actions** |
 
 ---
 
 ## Demo
+
+The following is an illustrative target workflow, not a benchmark result or guarantee:
 
 ```
 $ # Issue #142: "Add rate limiting to /api/v1/auth/login"
@@ -111,37 +109,37 @@ Every PR includes a decision log documenting which files were changed, why each 
 
 ## Quickstart
 
-**Prerequisites:** Python 3.12 &nbsp;&middot;&nbsp; Docker &nbsp;&middot;&nbsp; [`uv`](https://docs.astral.sh/uv/)
+**Prerequisites:** Python 3.12 and Git. Docker is needed only for infrastructure features.
 
 **1 &mdash; Install**
 
 ```bash
-git clone https://github.com/your-org/kodiak
+git clone <your-kodiak-repository-url>
 cd kodiak
-uv sync --all-extras
+python -m venv .venv
+# PowerShell: .\.venv\Scripts\Activate.ps1
+# POSIX: source .venv/bin/activate
+python -m pip install -e ".[dev]"
 ```
 
-**2 &mdash; Configure**
+**2 &mdash; Verify the CLI**
 
 ```bash
-cp .env.example .env
+kodiak --help
+kodiak version
 ```
 
-> [!IMPORTANT]
-> Open `.env` and fill in `SECRET_KEY`, `ANTHROPIC_API_KEY`, and all `GITHUB_APP_*` values. Kodiak will not start without them. See [Environment Variables](#environment-variables) for the full reference.
+CLI help and read-only repository analysis do not require provider or GitHub credentials.
 
-**3 &mdash; Start**
+**3 &mdash; Run a safe first analysis**
 
 ```bash
-make up           # Start Postgres 16, Redis 7, ChromaDB
-make db-migrate   # Apply Alembic migrations
-make dev          # API on :8080
+kodiak analyze analyze examples/quickstart --json
 ```
 
-> [!TIP]
-> Run `make worker` in a second terminal to process GitHub events asynchronously via Celery.
+This reads repository structure and does not push, open a PR, or modify remote state.
 
-API at `http://localhost:8080` &nbsp;&middot;&nbsp; Interactive docs at `http://localhost:8080/docs`
+For API, provider, database, worker, and GitHub setup, see [Public alpha guide](docs/PUBLIC_ALPHA.md).
 
 ---
 
@@ -368,15 +366,15 @@ Full reference with defaults and descriptions: [.env.example](.env.example)
 
 ## Roadmap
 
-- [x] GitHub issue to PR autonomous pipeline
-- [x] LangGraph orchestration with full checkpointing
-- [x] Rootless Docker sandbox
+- [x] Approval-gated Git/PR workflow with mocked remote integration coverage
+- [x] Typed workflow execution with in-memory checkpoint support
+- [x] Controlled tool routing and verification
 - [x] RAG-powered codebase search
 - [x] OpenTelemetry tracing across all agents
 - [ ] Multi-repository support
 - [ ] Slack and Linear as issue sources
 - [ ] Web UI for run inspection and step replay
-- [ ] Self-hosted model support (Ollama, vLLM, DeepSeek)
+- [ ] Broader validated local-model support
 - [ ] Fine-tuned reviewer model trained on merged PRs
 - [ ] Auto-labeling and issue triage agent
 
