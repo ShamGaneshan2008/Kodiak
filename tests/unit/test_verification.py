@@ -114,6 +114,34 @@ async def test_file_verifier_unexpected_file(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_file_verifier_rejects_expected_path_escape(tmp_path: Path) -> None:
+    task = _task(
+        verification={
+            "workspace_root": str(tmp_path),
+            "required_artifacts": [str(tmp_path.parent)],
+        }
+    )
+    context = VerificationContext.from_execution(task, _execution_result({"ok": True}))
+    evidence = await FileVerifier().verify(context)
+    assert evidence.status is VerificationStatus.FAILED
+    assert "escapes workspace" in (evidence.message or "")
+
+
+@pytest.mark.asyncio
+async def test_file_verifier_rejects_unexpected_path_escape(tmp_path: Path) -> None:
+    task = _task(
+        verification={
+            "workspace_root": str(tmp_path),
+            "unexpected_files": [".."],
+        }
+    )
+    context = VerificationContext.from_execution(task, _execution_result({"ok": True}))
+    evidence = await FileVerifier().verify(context)
+    assert evidence.status is VerificationStatus.FAILED
+    assert "escapes workspace" in (evidence.message or "")
+
+
+@pytest.mark.asyncio
 async def test_test_verifier_success(tmp_path: Path) -> None:
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()
