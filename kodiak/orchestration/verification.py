@@ -324,7 +324,7 @@ class FileVerifier(Verifier):
 
     async def verify(self, context: VerificationContext) -> VerificationEvidence:
         start = time.monotonic()
-        root = context.workspace_root or Path.cwd()
+        root = (context.workspace_root or Path.cwd()).resolve()
         criteria = context.success_criteria
 
         expected = list(criteria.get("expected_files") or [])
@@ -335,9 +335,15 @@ class FileVerifier(Verifier):
         missing: list[str] = []
 
         for rel_path in expected + artifacts:
-            path = Path(rel_path)
-            if not path.is_absolute():
-                path = root / path
+            path = self._resolve_workspace_path(root, str(rel_path))
+            if path is None:
+                return VerificationEvidence(
+                    verifier=self.name,
+                    status=VerificationStatus.FAILED,
+                    duration_seconds=time.monotonic() - start,
+                    message=f"Verification path escapes workspace: {rel_path}",
+                    metadata={"unsafe_path": str(rel_path), "workspace_root": str(root)},
+                )
             checked.append(str(path))
             if not path.exists():
                 missing.append(str(rel_path))
@@ -352,7 +358,19 @@ class FileVerifier(Verifier):
                 artifacts_checked=tuple(artifacts),
             )
 
-        changed_unexpected = [rel for rel in unexpected if (root / rel).exists()]
+        changed_unexpected: list[str] = []
+        for rel_path in unexpected:
+            path = self._resolve_workspace_path(root, str(rel_path))
+            if path is None:
+                return VerificationEvidence(
+                    verifier=self.name,
+                    status=VerificationStatus.FAILED,
+                    duration_seconds=time.monotonic() - start,
+                    message=f"Verification path escapes workspace: {rel_path}",
+                    metadata={"unsafe_path": str(rel_path), "workspace_root": str(root)},
+                )
+            if path.exists():
+                changed_unexpected.append(str(rel_path))
         if changed_unexpected:
             return VerificationEvidence(
                 verifier=self.name,
@@ -371,6 +389,19 @@ class FileVerifier(Verifier):
             files_checked=tuple(checked),
             artifacts_checked=tuple(artifacts),
         )
+
+    @staticmethod
+    def _resolve_workspace_path(root: Path, raw_path: str) -> Path | None:
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = root / path
+        try:
+            resolved = path.resolve()
+        except Exception:
+            return None
+        if resolved == root or root in resolved.parents:
+            return resolved
+        return None
 
 
 class TestVerifier(Verifier):
