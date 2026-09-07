@@ -13,6 +13,7 @@ from typing import Final
 import typer
 
 from kodiak.cli.commands.analyze import app as analyze_app
+from kodiak.cli.commands.doctor import doctor
 
 # from kodiak.cli.commands.config import app as config_app
 # from kodiak.cli.commands.doctor import app as doctor_app
@@ -28,7 +29,7 @@ from kodiak.cli.commands.task import app as task_app
 from kodiak.cli.commands.version import app as version_app
 
 APP_NAME: Final[str] = "kodiak"
-APP_HELP: Final[str] = "Kodiak: an autonomous AI software engineering platform."
+APP_HELP: Final[str] = "Kodiak: an experimental, approval-gated software engineering toolkit."
 
 _RICH_MARKUP_MODE: Final[str] = "rich"
 _PRETTY_EXCEPTIONS_ENABLE: Final[bool] = True
@@ -77,7 +78,7 @@ def create_app() -> typer.Typer:
 app: Final[typer.Typer] = create_app()
 app.add_typer(analyze_app, name="analyze")
 # app.add_typer(config_app, name="config")
-# app.add_typer(doctor_app, name="doctor")
+app.command("doctor")(doctor)
 
 # app.add_typer(init_app, name="init")
 # app.add_typer(login_app, name="login")
