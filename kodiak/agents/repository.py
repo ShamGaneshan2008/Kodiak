@@ -54,12 +54,21 @@ _IGNORED_DIRECTORIES = {
     ".mypy_cache",
     ".pytest_cache",
     ".ruff_cache",
+    ".tmp",
+    ".tox",
+    ".nox",
     ".idea",
     ".vscode",
     "node_modules",
     "dist",
     "build",
+    "coverage",
 }
+
+
+def _is_ignored_directory(name: str) -> bool:
+    normalized = name.casefold()
+    return normalized in _IGNORED_DIRECTORIES or normalized.startswith((".venv", "venv"))
 
 
 @dataclass(slots=True)
@@ -162,7 +171,7 @@ class RepositoryAnalyzerAgent(BaseAgent):
         directory_count = 0
 
         for current, dirs, filenames in os.walk(root):
-            dirs[:] = [d for d in dirs if d not in _IGNORED_DIRECTORIES]
+            dirs[:] = [directory for directory in dirs if not _is_ignored_directory(directory)]
 
             if Path(current) != root:
                 directory_count += 1
