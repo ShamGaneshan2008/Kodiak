@@ -104,7 +104,10 @@ class DockerBackend:
 
         def _exec() -> tuple[int, str, str]:
             c = client.containers.get(container.container_id)
-            exec_result = c.exec_run(cmd=command, demux=True, shell=True)
+            # docker-py's exec API has no ``shell`` keyword.  Invoke the
+            # container shell explicitly so string commands behave
+            # consistently without relying on a host shell.
+            exec_result = c.exec_run(cmd=["/bin/sh", "-lc", command], demux=True)
             stdout = (
                 exec_result.output[0].decode("utf-8")
                 if exec_result.output and exec_result.output[0]
