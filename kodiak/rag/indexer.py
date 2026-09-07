@@ -10,7 +10,6 @@ Supports incremental indexing via file-hash change detection.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -21,6 +20,7 @@ import structlog
 
 from kodiak.rag.chunker import Chunk, Chunker, detect_language
 from kodiak.rag.embedder import Embedder
+from kodiak.rag.hash_tracker import FileHashTracker
 from kodiak.rag.symbol_index import SymbolIndex
 from kodiak.rag.vector_store import VectorStore
 
@@ -152,30 +152,6 @@ class IndexingReport:
 # ---------------------------------------------------------------------------
 # File hash tracker (in-memory; swap for Redis in production)
 # ---------------------------------------------------------------------------
-
-
-class FileHashTracker:
-    def __init__(self) -> None:
-        self._hashes: dict[str, str] = {}
-
-    def compute(self, content: str) -> str:
-        return hashlib.sha256(content.encode()).hexdigest()
-
-    def has_changed(self, repo_id: str, file_path: str, content: str) -> bool:
-        key = f"{repo_id}:{file_path}"
-        new_hash = self.compute(content)
-        old_hash = self._hashes.get(key)
-        if old_hash == new_hash:
-            return False
-        self._hashes[key] = new_hash
-        return True
-
-    def mark(self, repo_id: str, file_path: str, content: str) -> None:
-        key = f"{repo_id}:{file_path}"
-        self._hashes[key] = self.compute(content)
-
-    def remove(self, repo_id: str, file_path: str) -> None:
-        self._hashes.pop(f"{repo_id}:{file_path}", None)
 
 
 # ---------------------------------------------------------------------------
