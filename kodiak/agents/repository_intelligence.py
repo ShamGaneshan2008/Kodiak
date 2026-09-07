@@ -19,7 +19,7 @@ from kodiak.db.models.task import Task, TaskPriority, TaskSource, TaskStatus
 from kodiak.memory.service import MemoryService
 from kodiak.orchestration.approval_gate import ApprovalGate, ApprovalStatus
 from kodiak.rag.dependency_graph import DependencyGraph
-from kodiak.rag.indexer import FileHashTracker
+from kodiak.rag.hash_tracker import FileHashTracker
 from kodiak.rag.repository_index import ModuleInfo, RepositoryIndex, RepositoryIndexer
 from kodiak.security.secrets import SecretManager
 from kodiak.tools.models import ToolExecutionContext
@@ -210,6 +210,23 @@ class RepositoryIntelligenceService:
         self._module_cache: dict[str, dict[str, ModuleInfo]] = {}
         self._static_cache: dict[str, dict[str, list[RepositoryFinding]]] = {}
         self._remote_issue_counts: Counter[str] = Counter()
+
+    def analyze_architecture(
+        self,
+        root_path: str | Path,
+        *,
+        rules: tuple[Any, ...] = (),
+    ) -> Any:
+        """Build architecture intelligence from this service's canonical index."""
+        # Local import avoids a model-level cycle: architecture findings adapt
+        # back into RepositoryFinding, which is owned by this module.
+        from kodiak.agents.architecture_intelligence import ArchitectureIntelligenceService
+
+        index = self._indexer.index(root_path)
+        return ArchitectureIntelligenceService(indexer=self._indexer, rules=rules).analyze_index(
+            index,
+            files_processed=tuple(item.relative_path.as_posix() for item in index.modules),
+        )
 
     async def scan(
         self,
