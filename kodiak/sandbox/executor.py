@@ -1,3 +1,4 @@
+import asyncio
 import re
 import shlex
 import time
@@ -10,7 +11,8 @@ from kodiak.sandbox.docker_backend import DockerBackend, SandboxContainer
 logger = structlog.get_logger(__name__)
 
 DANGEROUS_COMMANDS = re.compile(
-    r"(\b rm -rf \b|\b mkfs\. \b|\b dd if= \b|\b :(){ :|:& };: \b)",
+    r"(?:^|[;&|]\s*|\s)(?:rm\s+(?=[^\r\n;&|]*-[a-z]*r)(?=[^\r\n;&|]*-[a-z]*f)"
+    r"|mkfs(?:\.|\s)|dd\s+if=|:\(\)\s*\{)",
     re.IGNORECASE,
 )
 
@@ -35,7 +37,7 @@ class SandboxExecutor:
 
     def validate_command(self, command: str) -> bool:
         if DANGEROUS_COMMANDS.search(command):
-            logger.warning("dangerous_command_blocked", command=command)
+            logger.warning("dangerous_command_blocked")
             return False
         if not command.strip():
             return False
@@ -49,8 +51,9 @@ class SandboxExecutor:
 
         start = time.perf_counter()
         try:
-            exit_code, stdout, stderr = await self._backend.execute_command(
-                container, request.command
+            exit_code, stdout, stderr = await asyncio.wait_for(
+                self._backend.execute_command(container, request.command),
+                timeout=request.timeout_seconds,
             )
             duration = (time.perf_counter() - start) * 1000
             return ExecutionResult(
@@ -58,6 +61,14 @@ class SandboxExecutor:
                 exit_code=exit_code,
                 stdout=stdout,
                 stderr=stderr,
+                duration_ms=duration,
+            )
+        except TimeoutError:
+            duration = (time.perf_counter() - start) * 1000
+            return ExecutionResult(
+                success=False,
+                exit_code=-1,
+                stderr=f"Command timed out after {request.timeout_seconds:g} seconds",
                 duration_ms=duration,
             )
         except Exception as e:
