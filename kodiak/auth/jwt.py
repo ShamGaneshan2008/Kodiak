@@ -15,18 +15,15 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import ExpiredSignatureError, JWTError, jwt
 from pydantic import BaseModel, ValidationError
 
-try:
-    from kodiak.config.settings import settings
+from kodiak.config.settings import settings
 
-    SECRET_KEY: str = settings.SECRET_KEY
-    ALGORITHM: str = settings.ALGORITHM
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    REFRESH_TOKEN_EXPIRE_DAYS: int = settings.REFRESH_TOKEN_EXPIRE_DAYS
-except (ImportError, AttributeError):
-    SECRET_KEY = "change-me"
-    ALGORITHM = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES = 30
-    REFRESH_TOKEN_EXPIRE_DAYS = 30
+# Authentication must never silently fall back to a public signing key.  A
+# generated development key is supplied by Settings when SECRET_KEY is absent;
+# production deployments should provide a stable secret through configuration.
+SECRET_KEY: str = settings.SECRET_KEY
+ALGORITHM: str = settings.JWT_ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES: int = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS: int = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
 _TOKEN_TYPE_ACCESS = "access"
 _TOKEN_TYPE_REFRESH = "refresh"
