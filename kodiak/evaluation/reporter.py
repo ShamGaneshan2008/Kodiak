@@ -1,9 +1,9 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .harness import EvaluationResult
+from .harness import EvaluationHarness, EvaluationResult
 
 
 class EvaluationReporter:
@@ -23,8 +23,9 @@ class EvaluationReporter:
         execution_times = [r.execution_time for r in results]
         avg_time = sum(execution_times) / len(execution_times) if execution_times else 0
 
+        scorecard = EvaluationHarness().scorecard(results)
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "total_cases": len(results),
             "passed": passed,
             "failed": failed,
@@ -32,6 +33,7 @@ class EvaluationReporter:
             "avg_execution_time": round(avg_time, 3),
             "min_execution_time": round(min(execution_times), 3) if execution_times else 0,
             "max_execution_time": round(max(execution_times), 3) if execution_times else 0,
+            **scorecard,
         }
 
     def generate_json_report(
@@ -40,23 +42,12 @@ class EvaluationReporter:
         filename: str | None = None,
     ) -> str:
         if not filename:
-            filename = f"evaluation_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+            filename = f"evaluation_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.json"
 
         summary = self.generate_summary(results)
         report_data = {
             "summary": summary,
-            "results": [
-                {
-                    "case_id": r.case_id,
-                    "case_name": r.case_name,
-                    "passed": r.passed,
-                    "execution_time": round(r.execution_time, 3),
-                    "error": r.error,
-                    "metrics": r.metrics,
-                    "timestamp": r.timestamp.isoformat(),
-                }
-                for r in results
-            ],
+            "results": [r.to_dict() for r in results],
         }
 
         filepath = self.output_dir / filename
@@ -72,7 +63,7 @@ class EvaluationReporter:
         filename: str | None = None,
     ) -> str:
         if not filename:
-            filename = f"evaluation_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.md"
+            filename = f"evaluation_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.md"
 
         summary = self.generate_summary(results)
 
@@ -131,7 +122,7 @@ class EvaluationReporter:
         filename: str | None = None,
     ) -> str:
         if not filename:
-            filename = f"evaluation_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+            filename = f"evaluation_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.csv"
 
         filepath = self.output_dir / filename
         with open(filepath, "w") as f:
