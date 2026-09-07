@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from kodiak.tools.base import ToolAdapter
-from kodiak.tools.builtin import ListDirTool, ReadFileTool, WriteFileTool, register_builtin_tools
+from kodiak.tools.builtin import (
+    CommandExecutionTool,
+    ListDirTool,
+    ReadFileTool,
+    WriteFileTool,
+    register_builtin_tools,
+)
 from kodiak.tools.exceptions import (
     ToolExecutionError,
     ToolNotFoundError,
@@ -169,6 +176,32 @@ async def test_tool_timeout() -> None:
     result = await router.execute("slow", {"message": "hi"})
     assert result.success is False
     assert "timed out" in (result.error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_command_runner_rejects_cwd_escape(tmp_path: Path) -> None:
+    tool = CommandExecutionTool(workspace_root=tmp_path)
+    result = await tool.execute(
+        {"command": sys.executable, "args": ["-c", "print('nope')"], "cwd": ".."}
+    )
+    assert result.success is False
+    assert "outside workspace" in (result.error or "")
+
+
+@pytest.mark.asyncio
+async def test_command_runner_redacts_and_bounds_output(tmp_path: Path) -> None:
+    tool = CommandExecutionTool(workspace_root=tmp_path)
+    token = "ghp_" + ("A" * 40)
+    result = await tool.execute(
+        {
+            "command": sys.executable,
+            "args": ["-c", f"print({(token + 'x' * 25000)!r})"],
+        }
+    )
+    assert result.success is True
+    assert token not in result.output["stdout"]
+    assert "[REDACTED_GITHUB_TOKEN]" in result.output["stdout"]
+    assert "[TRUNCATED]" in result.output["stdout"]
 
 
 @pytest.mark.asyncio
