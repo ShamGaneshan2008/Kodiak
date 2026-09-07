@@ -106,7 +106,7 @@ Because Kodiak plans and executes actions autonomously using LLMs, it introduces
 For all security-related matters, please use:
 
 - GitHub Security Advisories: [Report a vulnerability](../../security/advisories/new)
-- Email: **[INSERT SECURITY CONTACT EMAIL]**
+- If private advisories are unavailable, contact a repository maintainer privately through an address published on their verified GitHub profile. Do not include secrets in an initial report.
 
 For general (non-security) questions or bugs, please use the standard [issue tracker](../../issues) instead.
 
