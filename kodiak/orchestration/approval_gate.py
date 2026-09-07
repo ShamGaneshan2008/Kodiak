@@ -30,6 +30,7 @@ class ApprovalGate:
             "git_push",
             "create_pr",
             "create_issue",
+            "architecture_refactor",
             "execute_shell",
             "database_modify",
         }
@@ -37,6 +38,7 @@ class ApprovalGate:
             "delete_file",
             "git_push",
             "create_issue",
+            "architecture_refactor",
             "execute_shell",
             "database_modify",
         }
