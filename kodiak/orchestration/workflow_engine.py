@@ -398,8 +398,12 @@ class WorkflowEngine:
             shared=shared_context or {},
         )
 
-        await self._persist_and_emit(workflow, WorkflowEventType.WORKFLOW_STARTED)
-        await self._run_hooks("workflow_started", context)
+        try:
+            await self._persist_and_emit(workflow, WorkflowEventType.WORKFLOW_STARTED)
+            await self._run_hooks("workflow_started", context)
+        except Exception as exc:
+            self._fail_workflow(workflow, f"Workflow startup persistence failed: {exc}")
+            raise
 
         try:
             while not workflow.is_terminal:
@@ -595,9 +599,13 @@ class WorkflowEngine:
                 return False
             if dependency.status == WorkflowNodeStatus.COMPLETED:
                 continue
-            if dependency.status == WorkflowNodeStatus.FAILED:
-                continue
-            if dependency.status == WorkflowNodeStatus.TIMED_OUT:
+            if dependency.status in {
+                WorkflowNodeStatus.FAILED,
+                WorkflowNodeStatus.TIMED_OUT,
+            } and (
+                node.node_type == WorkflowNodeType.RECOVERY
+                or dependency.failure_policy.continue_on_failure
+            ):
                 continue
             return False
         return True
