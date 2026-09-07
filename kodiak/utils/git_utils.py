@@ -139,6 +139,24 @@ def repo_root(cwd: str | Path = ".") -> Path:
 
 def inspect_repository(cwd: str | Path = ".") -> GitRepositoryState:
     root = repo_root(cwd).resolve()
+    git_dir_value = run_git(["rev-parse", "--git-dir"], root)
+    git_dir = Path(git_dir_value)
+    if not git_dir.is_absolute():
+        git_dir = (root / git_dir).resolve()
+    interrupted = {
+        "merge": git_dir / "MERGE_HEAD",
+        "cherry-pick": git_dir / "CHERRY_PICK_HEAD",
+        "revert": git_dir / "REVERT_HEAD",
+        "rebase": git_dir / "rebase-merge",
+        "rebase-apply": git_dir / "rebase-apply",
+        "index lock": git_dir / "index.lock",
+    }
+    active = tuple(name for name, marker in interrupted.items() if marker.exists())
+    if active:
+        raise GitOperationError(
+            "Repository has interrupted or locked Git state; manual recovery required: "
+            + ", ".join(active)
+        )
     branch = current_branch(root)
     status = run_git(["status", "--porcelain=v1"], root)
     staged: list[str] = []
