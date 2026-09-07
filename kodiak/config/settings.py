@@ -8,6 +8,8 @@ from typing import Any
 from pydantic import AnyHttpUrl, Field, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from kodiak import __version__
+
 
 class Environment(StrEnum):
     DEVELOPMENT = "development"
@@ -43,7 +45,7 @@ class Settings(BaseSettings):
 
     # ================= APP =================
     APP_NAME: str = "Kodiak"
-    APP_VERSION: str = "0.1.0"
+    APP_VERSION: str = __version__
     ENVIRONMENT: Environment = Environment.DEVELOPMENT
     DEBUG: bool = False
 
@@ -61,6 +63,8 @@ class Settings(BaseSettings):
 
     # ================= AUTH =================
     JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, gt=0)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=30, gt=0)
 
     # ================= LLM =================
     OPENAI_API_KEY: str | None = None
