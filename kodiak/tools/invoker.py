@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from typing import Any
 
 import structlog
 
+from kodiak.security.secrets import SecretManager
 from kodiak.tools.exceptions import (
     ToolError,
     ToolExecutionError,
@@ -34,9 +36,13 @@ class ToolInvoker:
         self,
         registry: ToolRegistry,
         permission_engine: PermissionEngine | None = None,
+        secret_manager: SecretManager | None = None,
+        max_output_chars: int = 100_000,
     ) -> None:
         self._registry = registry
         self._permission_engine = permission_engine or PermissionEngine()
+        self._secret_manager = secret_manager or SecretManager()
+        self._max_output_chars = max(1_000, max_output_chars)
         self._logger = logger.bind(component="tool_invoker")
 
     async def invoke(
@@ -106,10 +112,14 @@ class ToolInvoker:
             duration = time.monotonic() - start_time
 
             # Construct finalized ToolResult preserving metadata
+            sanitized_output = await self._sanitize(result.output)
+            sanitized_error = (
+                await self._sanitize_text(result.error) if result.error is not None else None
+            )
             final_result = ToolResult(
                 success=result.success,
-                output=result.output,
-                error=result.error,
+                output=sanitized_output,
+                error=sanitized_error,
                 execution_metadata=result.execution_metadata,
                 duration_seconds=duration,
                 tool_name=tool_name,
@@ -136,10 +146,32 @@ class ToolInvoker:
 
         except Exception as exc:
             duration = time.monotonic() - start_time
-            log.exception("tool_execution_unhandled_error", error=str(exc))
+            safe_error = await self._sanitize_text(str(exc))
+            log.exception("tool_execution_unhandled_error", error=safe_error)
             raise ToolExecutionError(
-                f"Unhandled error executing tool {tool_name!r}: {exc}"
+                f"Unhandled error executing tool {tool_name!r}: {safe_error}"
             ) from exc
+
+    async def _sanitize(self, value: Any) -> Any:
+        """Normalize untrusted tool payloads before agent or persistence use."""
+        if isinstance(value, str):
+            return await self._sanitize_text(value)
+        if isinstance(value, dict):
+            return {str(key): await self._sanitize(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [await self._sanitize(item) for item in value]
+        if value is None or isinstance(value, (bool, int, float)):
+            return value
+        return await self._sanitize_text(repr(value))
+
+    async def _sanitize_text(self, value: str) -> str:
+        value = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", value)
+        value = "".join(char for char in value if char in "\n\r\t" or ord(char) >= 32)
+        value = await self._secret_manager.mask_secrets(value)
+        if len(value) > self._max_output_chars:
+            omitted = len(value) - self._max_output_chars
+            return f"{value[: self._max_output_chars]}\n[TRUNCATED {omitted} CHARACTERS]"
+        return value
 
 
 __all__ = ["ToolInvoker"]
