@@ -174,7 +174,7 @@ Verify your setup with the built-in diagnostic command:
 kodiak doctor
 ```
 
-`kodiak doctor` checks database connectivity, Redis availability, vector store health, and LLM provider configuration, and is usually the fastest way to diagnose a broken local setup.
+`kodiak doctor` checks the installed version, Python, Git, and whether the selected hosted provider has a configured key. It never prints key values. Database, Redis, vector-store, and network connectivity are not currently checked.
 
 ## Code Style Guidelines
 
