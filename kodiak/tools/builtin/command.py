@@ -6,6 +6,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+from kodiak.security.output_filter import OutputFilter
 from kodiak.tools.base import ToolAdapter
 from kodiak.tools.models import PermissionLevel, ToolDefinition, ToolExecutionContext, ToolResult
 
@@ -22,6 +23,15 @@ DEFAULT_ALLOWED_COMMANDS: set[str] = {
     "dir",
     "echo",
 }
+
+_MAX_STREAM_CHARS = 20_000
+
+
+def _decode_and_bound(data: bytes) -> str:
+    text = data.decode("utf-8", errors="replace")
+    if len(text) <= _MAX_STREAM_CHARS:
+        return text
+    return text[:_MAX_STREAM_CHARS] + "\n[TRUNCATED]"
 
 
 class CommandExecutionTool(ToolAdapter):
@@ -78,6 +88,13 @@ class CommandExecutionTool(ToolAdapter):
                 tool_name=self.definition.name,
             )
 
+        if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+            return ToolResult(
+                success=False,
+                error="Command args must be a list of strings.",
+                tool_name=self.definition.name,
+            )
+
         # Check allowed commands whitelist
         base_cmd = Path(cmd_name).name.lower().replace(".exe", "")
         if base_cmd not in self._allowed_commands:
@@ -92,12 +109,26 @@ class CommandExecutionTool(ToolAdapter):
             target_cwd = Path(raw_cwd)
             if not target_cwd.is_absolute():
                 target_cwd = self._workspace_root / target_cwd
+            try:
+                resolved_cwd = target_cwd.resolve()
+            except Exception as exc:
+                return ToolResult(
+                    success=False,
+                    error=f"Invalid cwd {raw_cwd!r}: {exc}",
+                    tool_name=self.definition.name,
+                )
             if (
-                self._workspace_root in target_cwd.resolve().parents
-                or target_cwd.resolve() == self._workspace_root
+                self._workspace_root not in resolved_cwd.parents
+                and resolved_cwd != self._workspace_root
             ):
-                cwd = target_cwd.resolve()
+                return ToolResult(
+                    success=False,
+                    error=f"Access denied: cwd {raw_cwd!r} is outside workspace boundary.",
+                    tool_name=self.definition.name,
+                )
+            cwd = resolved_cwd
 
+        proc: asyncio.subprocess.Process | None = None
         try:
             # Run command directly without shell=True to eliminate injection vulnerability
             proc = await asyncio.create_subprocess_exec(
@@ -112,14 +143,16 @@ class CommandExecutionTool(ToolAdapter):
                 (context and context.timeout_seconds) or self.definition.timeout_seconds or 30.0
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            stdout_text = await OutputFilter().redact_secrets(_decode_and_bound(stdout))
+            stderr_text = await OutputFilter().redact_secrets(_decode_and_bound(stderr))
 
             success = proc.returncode == 0
             return ToolResult(
                 success=success,
                 output={
                     "returncode": proc.returncode,
-                    "stdout": stdout.decode("utf-8", errors="replace"),
-                    "stderr": stderr.decode("utf-8", errors="replace"),
+                    "stdout": stdout_text,
+                    "stderr": stderr_text,
                     "command": cmd_name,
                     "args": args,
                 },
@@ -127,6 +160,9 @@ class CommandExecutionTool(ToolAdapter):
                 tool_name=self.definition.name,
             )
         except TimeoutError:
+            if proc is not None and proc.returncode is None:
+                proc.kill()
+                await proc.wait()
             return ToolResult(
                 success=False,
                 error=f"Command execution timed out after {timeout} seconds.",
