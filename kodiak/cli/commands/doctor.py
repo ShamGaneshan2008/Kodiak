@@ -13,9 +13,16 @@ command reports the limitation clearly.
 
 from __future__ import annotations
 
+import json
+import os
+import platform
+import shutil
+import sys
+from importlib import metadata
+
 import typer
 from rich.console import Console
-from rich.panel import Panel
+from rich.table import Table
 
 console = Console()
 error_console = Console(stderr=True)
@@ -31,18 +38,62 @@ _UNAVAILABLE_MESSAGE = (
 
 
 @app.command("doctor")
-def doctor() -> None:
-    """Report that health checks are not available from the CLI.
+def doctor(
+    json_output: bool = typer.Option(False, "--json", help="Emit sanitized machine-readable JSON."),
+) -> None:
+    """Check the minimal installation without printing secret values."""
+    python_ok = sys.version_info >= (3, 12)
+    git_path = shutil.which("git")
+    provider = os.getenv("DEFAULT_LLM_PROVIDER", "local")
+    provider_key = {
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "qwen": "QWEN_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+    }.get(provider.lower())
+    provider_ready = provider_key is None or bool(os.getenv(provider_key))
+    try:
+        version = metadata.version("kodiak")
+    except metadata.PackageNotFoundError:
+        from kodiak import __version__
 
-    Raises:
-        typer.Exit: Always, with code ``2``.
-    """
-    error_console.print(
-        Panel(
-            _UNAVAILABLE_MESSAGE,
-            title="Feature Not Available",
-            border_style="yellow",
-            title_align="left",
+        version = __version__
+
+    diagnostic = {
+        "kodiak_version": version,
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "git": {"available": git_path is not None},
+        "provider": {
+            "name": provider,
+            "configured": provider_ready,
+            "required_variable": provider_key,
+        },
+        "optional_components": {"rag": _package_available("chromadb")},
+    }
+    if json_output:
+        console.print_json(json.dumps(diagnostic))
+    else:
+        table = Table(title="Kodiak diagnostics")
+        table.add_column("Check")
+        table.add_column("Status")
+        table.add_column("Detail")
+        table.add_row("Kodiak", "OK", version)
+        table.add_row("Python", "OK" if python_ok else "FAIL", platform.python_version())
+        table.add_row("Git", "OK" if git_path else "FAIL", git_path or "Install Git and retry.")
+        table.add_row(
+            "Provider",
+            "OK" if provider_ready else "OPTIONAL CONFIG MISSING",
+            provider if provider_ready else f"Set {provider_key} to use {provider}.",
         )
-    )
-    raise typer.Exit(code=2)
+        console.print(table)
+    if not python_ok or git_path is None:
+        raise typer.Exit(code=1)
+
+
+def _package_available(package: str) -> bool:
+    try:
+        metadata.version(package)
+    except metadata.PackageNotFoundError:
+        return False
+    return True
