@@ -340,3 +340,8 @@ class RepositoryAnalyzerAgent(BaseAgent):
             "static_findings": analysis.findings,
         }
         return json.dumps(payload, sort_keys=True, default=str)[:48_000]
+
+
+# Public role name used by the v1 agent inventory. Keep the original name for
+# compatibility with existing imports.
+RepositoryAgent = RepositoryAnalyzerAgent
