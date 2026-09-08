@@ -12,8 +12,11 @@ from typing import Final
 
 import typer
 
+from kodiak.cli.commands.agents import app as agents_app
 from kodiak.cli.commands.analyze import app as analyze_app
+from kodiak.cli.commands.approval import app as approval_app
 from kodiak.cli.commands.doctor import doctor
+from kodiak.cli.commands.git import app as git_app
 
 # from kodiak.cli.commands.config import app as config_app
 # from kodiak.cli.commands.doctor import app as doctor_app
@@ -25,7 +28,7 @@ from kodiak.cli.commands.plan import app as plan_app
 
 # from kodiak.cli.commands.review import app as review_app
 # from kodiak.cli.commands.status import app as status_app
-from kodiak.cli.commands.task import app as task_app
+from kodiak.cli.commands.task_v1 import app as task_app
 from kodiak.cli.commands.version import app as version_app
 
 APP_NAME: Final[str] = "kodiak"
@@ -77,12 +80,15 @@ def create_app() -> typer.Typer:
 
 app: Final[typer.Typer] = create_app()
 app.add_typer(analyze_app, name="analyze")
+app.add_typer(agents_app, name="agents")
+app.add_typer(approval_app, name="approval")
 # app.add_typer(config_app, name="config")
 app.command("doctor")(doctor)
 
 # app.add_typer(init_app, name="init")
 # app.add_typer(login_app, name="login")
 app.add_typer(logout_app, name="logout")
+app.add_typer(git_app, name="git")
 app.add_typer(memory_app, name="memory")
 app.add_typer(plan_app, name="plan")
 # app.add_typer(review_app, name="review")
