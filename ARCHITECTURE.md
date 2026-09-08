@@ -11,34 +11,33 @@ implement arbitrary software tasks or operate as an unattended AI engineer.
 
 ```mermaid
 flowchart TD
-    A["User instruction"] --> B["CLI / API"]
+    A["User instruction"] --> B["CLI"]
     B --> C["TaskOrchestrator"]
-    C --> D["RepositoryAnalyzer"]
-    D --> E["PlannerAgent"]
-    E --> F["RepositoryAgent / FileSelector"]
-    F --> G["CoderAgent"]
-    G --> H["TesterAgent"]
-    H --> I["ReviewerAgent"]
+    C --> D["RepositoryInspector"]
+    D --> E["DeterministicPlanner"]
+    E --> F["SafeEditor"]
+    F --> H["LocalTester"]
+    H --> I["DiffReviewer"]
     I --> J["ApprovalManager"]
     J --> K["GitService"]
-    K --> L["MemoryManager"]
+    K --> L["LocalStateStore"]
 ```
 
-The CLI and `POST /tasks/run` use the same `TaskOrchestrator`. API task runs always use
-`no_commit=True`. The local v1 workflow never pushes to a remote.
+The CLI uses `TaskOrchestrator`. The database-backed task API is separate and experimental; it does
+not currently expose this local file-editing workflow. The local v1 workflow never pushes to a
+remote.
 
 ## Components
 
 | Component | Current v1 responsibility |
 |---|---|
-| CLI / API | Validate user-facing input, call services, and render or serialize results. |
+| CLI | Validate user-facing input, call services, and render or serialize results. |
 | `TaskOrchestrator` | Coordinate the complete local workflow and return a typed `TaskRunResult`. |
 | `RepositoryAnalyzer` | Validate the repository, inventory files, identify project signals, and inspect Git state. |
-| `PlannerAgent` | Classify supported tasks and produce a typed deterministic plan. |
-| `RepositoryAgent / FileSelector` | Rank repository-relative files relevant to the instruction. |
-| `CoderAgent` | Apply only known templates and refuse writes outside the selected repository. |
-| `TesterAgent` | Run pytest and Ruff with argument lists, a repository `cwd`, `shell=False`, and timeouts. |
-| `ReviewerAgent` | Summarize changes, checks, risk, Git diff information, and next actions. |
+| `DeterministicPlanner` | Classify supported tasks and produce a typed deterministic plan. |
+| `SafeEditor` | Apply only known templates and refuse writes outside the selected repository. |
+| `LocalTester` | Run pytest and Ruff with argument lists, a repository `cwd`, `shell=False`, and timeouts. |
+| `DiffReviewer` | Summarize changes, checks, and Git diff information. |
 | `ApprovalManager` | Persist pending decisions and enforce approval policy for risky actions. |
 | `GitService` | Perform read-only inspection and explicitly executed, approved local commits. |
 | `MemoryManager` | Store sanitized JSONL history and per-run JSON under `.kodiak/`. |
@@ -47,26 +46,14 @@ The CLI and `POST /tasks/run` use the same `TaskOrchestrator`. API task runs alw
 
 - Improve a README quickstart without duplicating Kodiak's marker.
 - Add or improve the known FastAPI health endpoint test.
-- Add a basic package unit test.
-- Add a missing `__init__.py` package marker.
-- Add an explicit missing import to a named Python file when the instruction is unambiguous.
-- Generate a bounded `PROJECT_STRUCTURE.md` file listing repository-relative paths.
-- Generate concise CLI help documentation.
 
 Other instructions produce a plan with `manual_required`; they do not fabricate an edit.
 
 ## Approval and Git safety
 
-Risky plans stop before editing. Successful changes run with commit disabled unless the caller
-explicitly requests the standard flow, which creates a `git_commit` approval instead of committing.
-`approval approve` records consent only. `approval execute` is a separate explicit step that:
-
-1. Requires an approved `git_commit` request.
-2. Confirms the approval belongs to the selected repository.
-3. Revalidates every approved file against its recorded SHA-256 hash.
-4. Rejects unrelated staged files.
-5. Stages only the approved repository-relative paths and creates a local commit.
-
+Risky plans stop before editing. Successful changes run with commit disabled when `--no-commit` is
+used. Standard mode records a `git_commit` approval instead of committing. `approval approve` and
+`approval reject` record decisions only; v1 does not expose commit execution or task resumption.
 There is no v1 push implementation. Destructive reset, clean, checkout, branch deletion, and force
 push are not used by this local workflow.
 
@@ -87,10 +74,10 @@ and display only `present` or `missing`.
 
 ## API boundary
 
-The FastAPI application exposes `/health`, `/agents`, `/tasks/run`, `/tasks/{task_id}`,
-`/approvals`, approval decision routes, and `/memory/history`. Repository paths are constrained to
-the server workspace. The API is a local interface; authentication, multi-user authorization, and
-remote deployment hardening remain outside the v1 scope.
+The FastAPI application exposes `/health`, `/agents`, `/approvals`, approval decision routes, and
+`/memory/history`, along with experimental database-backed project/task routes. The API does not
+currently run the local `TaskOrchestrator`. Authentication, multi-user authorization, and remote
+deployment hardening remain outside the local v1 scope.
 
 ## Experimental packages
 
