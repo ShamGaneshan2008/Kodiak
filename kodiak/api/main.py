@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="Kodiak API",
-    description="Autonomous AI Coding Agent Backend",
+    description="Early-stage, approval-gated Kodiak software engineering API",
     version="1.0.0",
     lifespan=lifespan,
 )
