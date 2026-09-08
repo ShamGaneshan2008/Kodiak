@@ -407,6 +407,7 @@ class FileVerifier(Verifier):
 class TestVerifier(Verifier):
     """Run configured tests through the existing ToolRouter boundary."""
 
+    __test__ = False
     name = "test"
 
     def __init__(self, tool_router: Any | None = None) -> None:
