@@ -9,8 +9,8 @@
 
 # kodiak
 
-**Experimental autonomous software-engineering toolkit.**<br/>
-Repository analysis and approval-gated planning, execution, verification, and Git workflows.
+**Early-stage, approval-gated software-engineering framework.**<br/>
+Local repository analysis, deterministic planning, safe edits, checks, review, and task history.
 
 <br/>
 
@@ -35,11 +35,11 @@ Repository analysis and approval-gated planning, execution, verification, and Gi
 
 ## Overview
 
-Kodiak is alpha software for experimenting with repository-aware software-engineering agents. It provides planning, specialized agents, controlled tools, verification, reflection, repository intelligence, and approval-gated Git/GitHub workflows.
+Kodiak is an open-source AI software engineering framework that uses specialized agents to analyze repositories, plan code changes, apply safe edits, run tests, review diffs, and manage task memory. It is designed to turn high-level software tasks into safer, test-backed code changes with explicit approval gates for risky operations.
 
-When an issue is opened, Kodiak reads it, searches your codebase for relevant context, writes a structured implementation plan, generates the code, self-reviews the diff, runs your test suite inside an isolated Docker container, and opens a pull request — complete with tests and a written explanation of every decision it made.
+**Current status:** Kodiak v1 is an early-stage local agentic coding workflow. It currently focuses on repository analysis, deterministic planning, safe task execution, testing, review, and approval-gated changes.
 
-Capabilities vary by provider, repository, and configuration. Review generated changes and verification evidence before accepting them.
+The local workflow works without an LLM key and deliberately handles only known, bounded edit templates. Unsupported work produces a plan and a `manual_required` result instead of fabricated code. Review every generated change before accepting it.
 
 <br/>
 
@@ -51,63 +51,50 @@ Potentially dangerous local and remote actions are subject to permission and app
 </td>
 <td align="center" width="33%">
 <strong>Codebase-Aware</strong><br/><br/>
-Semantic search across your full repository before writing a single line. Plans are grounded in your actual code, not invented from scratch.
+Deterministic filesystem search identifies candidate files before a supported local edit.
 </td>
 <td align="center" width="33%">
 <strong>Self-Validating</strong><br/><br/>
-Runs your real test suite in an isolated sandbox. If tests fail, the coder retries with the failure output as additional context.
+Runs pytest and Ruff locally, captures results, and reports failures without hiding them.
 </td>
 </tr>
 </table>
 
 ---
 
-## Why Kodiak
+## Current v1 features
 
-| Capability | GitHub Copilot | ChatGPT | Kodiak |
-|---|:---:|:---:|:---:|
-| Reads and understands GitHub issues | — | Yes | Yes |
-| Searches your codebase for context | — | — | Yes |
-| Produces a structured implementation plan | — | Partial | Yes |
-| Generates code | Yes | Yes | Yes |
-| Self-reviews its own output | — | — | Yes |
-| Runs your real test suite to validate | — | — | Yes |
-| Opens a pull request autonomously | — | — | Yes |
-| Requires a human in the loop | Yes | Yes | **Yes for review and protected actions** |
+- Repository context discovery and keyword-based file selection
+- Structured deterministic plans for bounded task types
+- Safe templates for health tests, README quickstarts, package markers, basic unit tests,
+  explicit imports, and CLI documentation
+- pytest and Ruff execution with captured output and graceful missing-tool handling
+- Review reports, local JSONL task history, and per-run JSON records
+- File-backed approval requests for sensitive changes and local commits
+- Shared `TaskOrchestrator` service for the CLI and API
+- Explicit approved-commit execution with file-hash and staged-file revalidation
+- Deterministic project-structure summaries
+
+The advanced agents, RAG, workers, databases, and GitHub modules elsewhere in this repository remain
+experimental and are not all connected to the local v1 path.
 
 ---
 
 ## Demo
 
-The following is an illustrative target workflow, not a benchmark result or guarantee:
+The runnable local workflow is:
 
 ```
-$ # Issue #142: "Add rate limiting to /api/v1/auth/login"
+kodiak task run "Add a simple health check test" --path . --no-commit
 
-[kodiak]  Reading issue #142...
-[kodiak]  Searching codebase — 847 chunks across 203 files indexed
-[kodiak]  Plan ready: 4 files · 2 new · 2 modified
-
-[kodiak]  Writing  src/api/middleware/rate_limit.py     new       89 lines
-[kodiak]  Writing  src/api/routes/auth.py               modified  +12 lines
-[kodiak]  Writing  tests/unit/test_rate_limit.py        new       61 lines
-[kodiak]  Writing  config/settings.py                   modified  +4 lines
-
-[kodiak]  Self-review complete — all issue requirements met
-[kodiak]  Running test suite in isolated sandbox...
-[kodiak]  47 passed · 0 failed · 0 errors · 12.3s
-
-[kodiak]  Opening PR #143...
-
-  PR opened  feat: add rate limiting to auth login endpoint (#142)
-             4 files changed · +166 · -3 · elapsed 4m 12s
+repository -> plan -> select files -> safe edit -> pytest/Ruff -> review -> local history
 ```
-
-Every PR includes a decision log documenting which files were changed, why each choice was made, and the test result. See [Decision Log](#decision-log).
 
 ---
 
 ## Quickstart
+
+<!-- kodiak-v1-quickstart -->
 
 **Prerequisites:** Python 3.12 and Git. Docker is needed only for infrastructure features.
 
@@ -131,13 +118,57 @@ kodiak version
 
 CLI help and read-only repository analysis do not require provider or GitHub credentials.
 
-**3 &mdash; Run a safe first analysis**
+**3 &mdash; Run the local workflow**
 
-```bash
-kodiak analyze analyze examples/quickstart --json
+```powershell
+.\.venv\Scripts\Activate.ps1
+kodiak analyze analyze . --deep
+kodiak task run "Add a simple health check test" --path . --dry-run
 ```
 
-This reads repository structure and does not push, open a PR, or modify remote state.
+Run the optional local API with `uvicorn kodiak.api.main:app --reload`, then open `/docs`. Docker and
+external services are not required for the local CLI workflow or these local API routes.
+
+Useful commands:
+
+```powershell
+kodiak task --help
+kodiak agents list
+kodiak approval list
+kodiak memory history
+kodiak git diff-summary
+kodiak doctor
+python -m pytest -ra -vv --tb=short
+ruff check .
+```
+
+Runtime state is written beneath the selected repository in `.kodiak/`. No provider key is required.
+Kodiak never pushes or force-resets. Sensitive planned edits stop before mutation. Approval records
+consent but does not execute or commit an action automatically.
+
+## Safety and Approvals
+
+Kodiak v1 stores approval requests locally in `.kodiak/approvals.json`. Git commits, deletions,
+changes spanning more than five files, dependency and lock-file edits, CI/CD workflows,
+authentication or security code, database migrations, risky shell commands, and every remote push
+require explicit approval. Remote push is disabled in v1 even when an approval exists.
+
+Approving or rejecting updates the local request status only; Kodiak does not silently resume or
+execute the action. An approved local commit must then be executed as a separate command. Inspect
+and resolve requests with:
+
+```powershell
+kodiak approval list --path .
+kodiak approval approve <approval_id> --path .
+kodiak approval reject <approval_id> --path .
+kodiak approval execute <approval_id> --path .
+kodiak git diff-summary --path .
+kodiak memory history --path .
+kodiak doctor
+```
+
+Task history is appended to `.kodiak/task_history.jsonl`. Stored check summaries omit command output
+to reduce the chance of persisting secrets.
 
 For API, provider, database, worker, and GitHub setup, see [Public alpha guide](docs/PUBLIC_ALPHA.md).
 
@@ -145,24 +176,32 @@ For API, provider, database, worker, and GitHub setup, see [Public alpha guide](
 
 ## How It Works
 
-An issue opens. The GitHub App webhook fires. A LangGraph state machine takes over and does not stop until there is a pull request.
+The v1 CLI and API call the same local service. Each stage produces typed data for the next stage.
 
 ```mermaid
-flowchart LR
-    A([GitHub Issue]) --> B[Orchestrator]
-    B --> C[Planner]
-    C --> D[Coder]
-    D --> E[Reviewer]
-    E --> F{Tests pass?}
-    F -- retry --> D
-    F -- yes --> G([Pull Request])
+flowchart TD
+    A([User instruction]) --> B[CLI or API]
+    B --> C[TaskOrchestrator]
+    C --> D[RepositoryAnalyzer]
+    D --> E[PlannerAgent]
+    E --> F[RepositoryAgent]
+    F --> G[CoderAgent]
+    G --> H[TesterAgent]
+    H --> I[ReviewerAgent]
+    I --> J[ApprovalManager]
+    J --> K[GitAgent]
+    K --> L[MemoryManager]
 ```
 
-Each step produces structured output consumed by the next. If the Tester fails, the Coder receives the failure output as additional context and retries — up to `MAX_RETRIES` attempts before the run is marked failed and left for human review.
+The deterministic coder does not retry or synthesize arbitrary implementations. Failed checks are
+reported with a non-zero CLI exit. Unsupported tasks remain manual.
 
 ---
 
 ## Architecture
+
+The diagram below describes the broader experimental subsystem inventory. It is not a claim that every
+component is connected to the local v1 workflow.
 
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
@@ -248,6 +287,10 @@ no new infrastructure required.
 
 ## Stack
 
+The runnable local v1 path uses Python, Typer/Rich, FastAPI, pathlib, subprocess, JSON/JSONL, pytest,
+Ruff, and the local Git executable. The table below describes the broader experimental repository;
+those services are not required by the local workflow.
+
 | Layer | Technology | Reason |
 |---|---|---|
 | API | FastAPI + Uvicorn | Async-native, auto-typed, fast |
@@ -265,6 +308,16 @@ no new infrastructure required.
 
 ## Development
 
+The portable verification commands are:
+
+```powershell
+ruff check .
+ruff format --check .
+python -m pytest -ra -vv --tb=short
+```
+
+The Make targets below are convenience wrappers for environments with `make` installed.
+
 ```bash
 make test                              # Full test suite
 make check                             # Ruff lint + mypy typecheck
@@ -279,6 +332,12 @@ make test-unit         # Fast — no infrastructure required
 make test-integration  # Requires running infra (make up)
 make test-ci           # Spin up infra, run suite, tear down
 ```
+
+The checked-in pytest suite does not require internet access, paid provider keys, or a running
+Docker daemon.
+
+The following layout sketch includes experimental packages and is not an exact inventory of the
+runnable local v1 path. See [ARCHITECTURE.md](ARCHITECTURE.md) for the authoritative v1 structure.
 
 <details>
 <summary><strong>Project structure</strong></summary>
@@ -311,6 +370,9 @@ kodiak/
 
 ## Environment Variables
 
+No environment variable or provider key is required for the local v1 workflow. The variables below
+belong to optional or experimental API, worker, database, GitHub, and LLM configurations.
+
 <details>
 <summary><strong>View all variables</strong></summary>
 
@@ -319,7 +381,7 @@ kodiak/
 | Variable | Required | Description |
 |---|:---:|---|
 | `SECRET_KEY` | Yes | App secret — `openssl rand -hex 32` |
-| `ANTHROPIC_API_KEY` | Yes | Claude API key |
+| `ANTHROPIC_API_KEY` | No | Optional Claude API key |
 | `OPENAI_API_KEY` | No | GPT-4o key (optional if using Claude only) |
 | `GITHUB_APP_ID` | Yes | Your GitHub App numeric ID |
 | `GITHUB_APP_PRIVATE_KEY` | Yes | Path to downloaded `.pem` file |
@@ -338,7 +400,10 @@ Full reference with defaults and descriptions: [.env.example](.env.example)
 
 ---
 
-## GitHub App Setup
+## Experimental GitHub App Setup
+
+This configuration belongs to the experimental GitHub modules and is not connected to the local v1
+task workflow. Kodiak v1 does not automatically push branches or create pull requests.
 
 1. Create an app at [github.com/settings/apps/new](https://github.com/settings/apps/new)
 
@@ -352,8 +417,8 @@ Full reference with defaults and descriptions: [.env.example](.env.example)
    | Permission | Level | Reason |
    |---|---|---|
    | Issues | Read | Receive `issue.opened` events |
-   | Pull requests | Write | Open PRs on your behalf |
-   | Contents | Write | Push generated code to branches |
+   | Pull requests | Write | Required only by the experimental PR client |
+   | Contents | Write | Required only by the experimental remote Git client |
 
 4. Download the private key and set `GITHUB_APP_PRIVATE_KEY` in `.env`
 
@@ -366,23 +431,29 @@ Full reference with defaults and descriptions: [.env.example](.env.example)
 
 ## Roadmap
 
-- [x] Approval-gated Git/PR workflow with mocked remote integration coverage
-- [x] Typed workflow execution with in-memory checkpoint support
-- [x] Controlled tool routing and verification
-- [x] RAG-powered codebase search
-- [x] OpenTelemetry tracing across all agents
+### Current limitations
+
+- The deterministic coder supports a small set of known task templates, not arbitrary code changes.
+- Approval of a risky pre-edit plan records consent, but the task must be rerun to apply it.
+- API task paths are restricted to the server working directory and API runs never commit.
+- The local tester runs in the current environment; Docker isolation belongs to the experimental path.
+- LLM providers, semantic retrieval, workers, GitHub automation, and database-backed workflows are
+  present but are not required or fully integrated into the local v1 flow.
+
+### v2 direction
+
+- [ ] Resume approved pre-edit plans without replanning
+- [ ] Connect validated LLM-generated patches to the same safety and review contracts
+- [ ] Add isolated execution with explicit resource and network policies
 - [ ] Multi-repository support
-- [ ] Slack and Linear as issue sources
 - [ ] Web UI for run inspection and step replay
-- [ ] Broader validated local-model support
-- [ ] Fine-tuned reviewer model trained on merged PRs
-- [ ] Auto-labeling and issue triage agent
+- [ ] Stronger diff-aware rollback, recovery, and task resumption
 
 ---
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR. Kodiak will review it before a human does.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
 
 ```bash
 git checkout -b feat/your-feature
