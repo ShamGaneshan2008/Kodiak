@@ -293,7 +293,7 @@ def push_branch(branch: str, cwd: str | Path = ".", remote: str = "origin") -> N
         raise GitOperationError(f"Current branch {state.branch!r} is not {branch!r}.")
     if remote not in state.remotes:
         raise GitOperationError(f"Git remote {remote!r} is not configured.")
-    run_git(["push", "--set-upstream", remote, branch], state.root)
+    raise GitOperationError("Remote pushes are disabled in Kodiak v1.")
 
 
 def _parse_status(raw: str) -> dict[str, str]:
