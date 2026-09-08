@@ -1,7 +1,7 @@
 [project]
 name = "kodiak"
 dynamic = ["version"]
-description = "Experimental approval-gated toolkit for repository analysis and software-engineering workflows"
+description = "Open-source, approval-gated AI software engineering framework"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -91,6 +91,7 @@ ignore = ["B008", "UP047"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+cache_dir = ".kodiak/pytest_cache"
 
 [tool.mypy]
 python_version = "3.12"
