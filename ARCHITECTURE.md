@@ -1,188 +1,99 @@
 # Kodiak Architecture
 
-## Overview
+## Current scope
 
-Kodiak is an autonomous AI software engineer built on a multi-agent orchestration architecture. It accepts GitHub issues as input and produces merged pull requests as output, handling the full software development lifecycle autonomously with human-in-the-loop approval gates.
+Kodiak v1 is an early-stage local agentic coding workflow. It provides repository analysis,
+deterministic planning and file selection, a bounded set of safe edit templates, local tests and
+linting, Git diff review, approval-gated actions, and sanitized local history. It does not claim to
+implement arbitrary software tasks or operate as an unattended AI engineer.
 
-## System diagram
+## Runnable v1 pipeline
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          External Interface                          │
-│   GitHub Webhook  ──►  API (FastAPI)  ◄──  Web UI (Next.js)        │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────────┐
-│                        Orchestration Layer                           │
-│                                                                      │
-│   Supervisor (LangGraph)                                             │
-│   ├── Task Planner       — decomposes issue into subtasks           │
-│   ├── Context Manager    — assembles RAG context per step           │
-│   ├── Approval Gate      — human-in-the-loop checkpoints           │
-│   ├── Reflection Loop    — self-critique and correction             │
-│   └── Tool Router        — dispatches to agents                     │
-└──────────┬──────────────────────────────────────────────────────────┘
-           │
-┌──────────▼──────────────────────────────────────────────────────────┐
-│                           Agent Layer                                │
-│                                                                      │
-│  Planner ──► Repository ──► Architect ──► Coder ──► Reviewer       │
-│                                               │                      │
-│                              Tester ◄─────────┘                     │
-│                                │                                     │
-│                           Debugger ◄── (on failure)                 │
-│                                                                      │
-│  Supporting: Research, Retrieval, Git, Memory, Learning             │
-└──────────┬──────────────────────────────────────────────────────────┘
-           │
-┌──────────▼──────────────────────────────────────────────────────────┐
-│                       Infrastructure Layer                           │
-│                                                                      │
-│  LLM Router          Redis Cache          PostgreSQL                 │
-│  ├── Anthropic        ├── Embeddings       ├── Tasks                │
-│  └── OpenAI           ├── Sessions         ├── Projects             │
-│                       └── Rate limits      └── Users                │
-│                                                                      │
-│  ChromaDB             Docker Sandbox       GitHub API                │
-│  └── Per-project      ├── Code execution   ├── Issues               │
-│      collections      ├── Test runs        ├── PRs                  │
-│                       └── Resource limits  └── Webhooks             │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["User instruction"] --> B["CLI / API"]
+    B --> C["TaskOrchestrator"]
+    C --> D["RepositoryAnalyzer"]
+    D --> E["PlannerAgent"]
+    E --> F["RepositoryAgent / FileSelector"]
+    F --> G["CoderAgent"]
+    G --> H["TesterAgent"]
+    H --> I["ReviewerAgent"]
+    I --> J["ApprovalManager"]
+    J --> K["GitService"]
+    K --> L["MemoryManager"]
 ```
 
-## Agent descriptions
+The CLI and `POST /tasks/run` use the same `TaskOrchestrator`. API task runs always use
+`no_commit=True`. The local v1 workflow never pushes to a remote.
 
-### Planner
-Converts a GitHub issue into a structured task plan: goal, constraints, acceptance criteria, ordered subtasks. Uses the issue body, repo context (README, recent commits), and similar past tasks from episodic memory.
+## Components
 
-### Repository
-Clones or refreshes the repository, identifies relevant files, and builds the initial RAG index. Manages the working branch lifecycle.
-
-### Architect
-For large features, designs the implementation approach before any code is written. Produces a diff-level plan specifying which files to create/modify and the interfaces between them.
-
-### Coder
-Executes the implementation. Operates on one subtask at a time, writes code, runs it through the sandbox, and iterates until tests pass or the reflection loop flags a problem.
-
-### Reviewer
-Applies static analysis, checks against the project's coding standards, and evaluates the diff for correctness, security, and maintainability. Produces structured feedback consumed by Coder.
-
-### Tester
-Writes and runs tests. Reads existing test patterns to maintain consistency. Reports coverage delta and flags uncovered code paths.
-
-### Debugger
-Activated when the Coder or Tester encounters a persistent failure. Performs root cause analysis on stack traces, proposes a minimal fix, and hands back to Coder.
-
-### Reflection
-Cross-cuts all agents. After each major step, scores the output against the original goal. If the score falls below threshold, re-queues the step with a critique prompt.
-
-## RAG pipeline
-
-```
-Repository files
-      │
-      ▼
-  Parser Registry  (tree-sitter: Python, TS, JS; generic: Go, Rust, etc.)
-      │
-      ▼
-  Code Chunker     (symbol-boundary chunks, 1500 tokens, 200 overlap)
-      │
-      ▼
-  Embedder         (sentence-transformers/all-MiniLM-L6-v2, batch 64)
-      │             cached in Redis (7-day TTL, msgpack)
-      ▼
-  ChromaDB         (per-project collection, cosine distance)
-      │
-      ▼
-  Retriever        (top-20 by similarity, metadata filters)
-      │
-      ▼
-  Reranker         (cross-encoder/ms-marco-MiniLM-L-6-v2, top-5)
-      │
-      ▼
-  Context Packer   (token-budget assembly with file headers)
-      │
-      ▼
-  LLM prompt
-```
-
-In-memory indexes (rebuilt per session):
-- **Symbol Index** — exact and prefix lookup of functions/classes by name
-- **Call Graph** — caller/callee relationships extracted from AST
-- **Dependency Graph** — import-level file dependencies
-
-## LLM routing
-
-```
-Request
-  │
-  ├── complexity: high  ──►  claude-opus-4-5  (planning, architecture)
-  ├── complexity: medium ──► claude-sonnet    (coding, review)
-  └── complexity: low   ──►  claude-haiku     (classification, summaries)
-
-Fallback chain: Anthropic → OpenAI → cached response
-Cost optimizer: tracks token spend per task, switches to cheaper model
-                when budget threshold is reached
-```
-
-## Task state machine
-
-```
-PENDING
-  │
-  ▼
-PLANNING ──(fail)──► FAILED ──► PENDING (retry)
-  │
-  ▼
-IN_PROGRESS ──(fail)──► FAILED
-  │
-  ▼
-AWAITING_APPROVAL
-  ├──(approve)──► APPROVED ──► COMPLETED
-  └──(reject) ──► REJECTED ──► PENDING (revision)
-```
-
-## Data flow for a GitHub issue
-
-1. Webhook received at `POST /api/v1/github/webhook`
-2. `IssueParser` extracts title, body, labels, assignees
-3. `Task` row created with `status=PENDING`
-4. Celery task dispatched to worker pool
-5. Supervisor initialises LangGraph execution graph
-6. Repository agent clones repo, indexes codebase
-7. Planner agent produces subtask list
-8. Coder/Tester/Reviewer loop until all subtasks pass
-9. Approval gate notifies user (webhook or UI)
-10. On approval: Git agent commits, pushes branch, opens PR
-11. Task transitions to `COMPLETED`
-
-## Security model
-
-- **Sandbox isolation**: all code execution in Docker containers with no network, read-only mounts outside the work directory, memory and CPU quotas
-- **Secret scanning**: output filter strips API keys, tokens, and credentials before storing results
-- **Code scanner**: runs Bandit and semgrep on generated code before it reaches the reviewer
-- **Policy engine**: configurable rules for what changes are auto-approved vs. require human review (e.g. no changes to auth, payments, or infra without explicit approval)
-
-## Observability
-
-- **Structured logs**: JSON via structlog, request context (request_id, user_id) bound per request
-- **Traces**: OpenTelemetry spans for every agent step, LLM call, and DB query; exported via OTLP
-- **Metrics**: Prometheus counters/histograms for HTTP, LLM tokens/cost, RAG latency, task throughput
-- **Alerting**: configurable thresholds on task failure rate, LLM error rate, sandbox timeout rate
-
-## Directory structure
-
-See the full file tree in the project root. Key packages:
-
-| Path | Responsibility |
+| Component | Current v1 responsibility |
 |---|---|
-| `kodiak/config/` | Settings, logging, tracing, metrics, feature flags |
-| `kodiak/api/` | FastAPI routers, schemas, middleware, dependencies |
-| `kodiak/orchestration/` | LangGraph supervisor, state, scheduler |
-| `kodiak/agents/` | All agent implementations |
-| `kodiak/llm/` | LLM client, router, cost optimizer |
-| `kodiak/rag/` | Full RAG pipeline (index → retrieve → rerank → pack) |
-| `kodiak/memory/` | Working, episodic, semantic, procedural memory |
-| `kodiak/sandbox/` | Docker execution backend |
-| `kodiak/github/` | GitHub App client, webhook handler, PR manager |
-| `kodiak/workers/` | Celery app, beat schedule, async tasks |
+| CLI / API | Validate user-facing input, call services, and render or serialize results. |
+| `TaskOrchestrator` | Coordinate the complete local workflow and return a typed `TaskRunResult`. |
+| `RepositoryAnalyzer` | Validate the repository, inventory files, identify project signals, and inspect Git state. |
+| `PlannerAgent` | Classify supported tasks and produce a typed deterministic plan. |
+| `RepositoryAgent / FileSelector` | Rank repository-relative files relevant to the instruction. |
+| `CoderAgent` | Apply only known templates and refuse writes outside the selected repository. |
+| `TesterAgent` | Run pytest and Ruff with argument lists, a repository `cwd`, `shell=False`, and timeouts. |
+| `ReviewerAgent` | Summarize changes, checks, risk, Git diff information, and next actions. |
+| `ApprovalManager` | Persist pending decisions and enforce approval policy for risky actions. |
+| `GitService` | Perform read-only inspection and explicitly executed, approved local commits. |
+| `MemoryManager` | Store sanitized JSONL history and per-run JSON under `.kodiak/`. |
+
+## Supported deterministic tasks
+
+- Improve a README quickstart without duplicating Kodiak's marker.
+- Add or improve the known FastAPI health endpoint test.
+- Add a basic package unit test.
+- Add a missing `__init__.py` package marker.
+- Add an explicit missing import to a named Python file when the instruction is unambiguous.
+- Generate a bounded `PROJECT_STRUCTURE.md` file listing repository-relative paths.
+- Generate concise CLI help documentation.
+
+Other instructions produce a plan with `manual_required`; they do not fabricate an edit.
+
+## Approval and Git safety
+
+Risky plans stop before editing. Successful changes run with commit disabled unless the caller
+explicitly requests the standard flow, which creates a `git_commit` approval instead of committing.
+`approval approve` records consent only. `approval execute` is a separate explicit step that:
+
+1. Requires an approved `git_commit` request.
+2. Confirms the approval belongs to the selected repository.
+3. Revalidates every approved file against its recorded SHA-256 hash.
+4. Rejects unrelated staged files.
+5. Stages only the approved repository-relative paths and creates a local commit.
+
+There is no v1 push implementation. Destructive reset, clean, checkout, branch deletion, and force
+push are not used by this local workflow.
+
+## Local state
+
+```text
+.kodiak/
+|-- approvals.json
+|-- task_history.jsonl
+|-- memory.jsonl
+|-- pytest_cache/
+`-- runs/
+    `-- <task_id>.json
+```
+
+History stores check status summaries, not subprocess stdout/stderr. Provider key diagnostics store
+and display only `present` or `missing`.
+
+## API boundary
+
+The FastAPI application exposes `/health`, `/agents`, `/tasks/run`, `/tasks/{task_id}`,
+`/approvals`, approval decision routes, and `/memory/history`. Repository paths are constrained to
+the server workspace. The API is a local interface; authentication, multi-user authorization, and
+remote deployment hardening remain outside the v1 scope.
+
+## Experimental packages
+
+The repository contains broader orchestration, LLM, RAG, sandbox, worker, and GitHub modules with
+their own tests. They are not all connected to the runnable local workflow described above and are
+not required for offline v1 operation.
