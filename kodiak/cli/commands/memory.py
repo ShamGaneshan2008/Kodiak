@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime
+from pathlib import Path
 
 import structlog
 import typer
@@ -27,6 +28,7 @@ from rich.text import Text
 from kodiak.memory.errors import MemoryNotFoundError, MemoryServiceError
 from kodiak.memory.models import Memory, SearchResult
 from kodiak.memory.service import MemoryService
+from kodiak.orchestration.local_storage import LocalStateStore
 
 logger = structlog.get_logger(__name__)
 console = Console()
@@ -262,6 +264,50 @@ async def _delete_one(memory_id: str) -> None:
 async def _delete_by_tag(tags: list[str]) -> int:
     service = MemoryService()
     return await service.delete_by_tags(tags)
+
+
+@app.command("history")
+def history(
+    path: Path = typer.Option(Path.cwd(), "--path", "-p", help="Repository path."),
+    limit: int = typer.Option(10, "--limit", "-n", min=1, max=1000),
+    json_output: bool = _JSON_OPTION,
+) -> None:
+    """Show recent local task runs from .kodiak/task_history.jsonl."""
+    root = path.expanduser().resolve()
+    if not root.is_dir():
+        _fail(f"Repository path is not a directory: {root}")
+    records = LocalStateStore(root).history(limit)
+    if json_output:
+        _print_json(records)
+        return
+    if not records:
+        console.print("[dim]No local task history found.[/dim]")
+        return
+    table = Table(title="Kodiak task history")
+    table.add_column("Task")
+    table.add_column("Status")
+    table.add_column("Instruction")
+    table.add_column("Mode")
+    table.add_column("Changes")
+    table.add_column("Approval")
+    table.add_column("Recorded")
+    for record in records:
+        table.add_row(
+            str(record.get("task_id", "")),
+            str(record.get("final_status", "")),
+            str(record.get("instruction", "")),
+            (
+                "dry-run"
+                if record.get("dry_run")
+                else "no-commit"
+                if record.get("no_commit")
+                else "standard"
+            ),
+            str(len(record.get("changed_files", []))),
+            str(record.get("approval_id") or "-"),
+            str(record.get("timestamp", record.get("recorded_at", ""))),
+        )
+    console.print(table)
 
 
 # Shared rendering helpers
