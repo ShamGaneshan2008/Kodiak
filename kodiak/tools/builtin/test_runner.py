@@ -14,6 +14,8 @@ from kodiak.tools.models import PermissionLevel, ToolDefinition, ToolExecutionCo
 class TestRunnerTool(ToolAdapter):
     """Tool abstraction for executing test suites safely."""
 
+    __test__ = False
+
     def __init__(self, workspace_root: Path | None = None) -> None:
         self._workspace_root = (workspace_root or Path.cwd()).resolve()
         self._definition = ToolDefinition(
