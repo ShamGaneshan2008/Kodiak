@@ -224,9 +224,29 @@ CLI instruction
 behavior is deterministic or LLM-backed. Those advanced implementations are an inventory, not a
 claim that every one participates in the deterministic local runner.
 
-The FastAPI application has a working `/health` route and file-backed `/agents`, `/approvals`, and
-`/memory/history` routes. The database-backed project and task API remains part of the experimental
-platform rather than the local task workflow.
+### Local API
+
+The FastAPI application exposes the same deterministic task service used by the CLI. Start it only
+on a trusted local interface because v1 accepts a local repository path and does not yet add
+repository-scoped API authentication.
+
+```powershell
+python -m uvicorn kodiak.api.main:app --host 127.0.0.1 --port 8000
+```
+
+Working local routes include `GET /health`, `GET /agents`, `POST /tasks/run`,
+`GET /tasks/{task_id}`, `GET /approvals`, approval/rejection actions, and
+`GET /memory/history`. The task, approval, and history routes accept a repository path; task runs
+are persisted under that repository's `.kodiak` directory. The separate database-backed project
+API remains experimental.
+
+Example dry run:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/tasks/run `
+  -ContentType 'application/json' `
+  -Body '{"instruction":"Improve the README quickstart section","path":".","dry_run":true}'
+```
 
 ## Local storage
 
@@ -247,6 +267,7 @@ and checked against that root before writing. `.kodiak/` is ignored by this repo
 - Automatic editing supports only README Quickstart updates and verified FastAPI health tests.
 - The deterministic runner does not generate arbitrary patches from an LLM.
 - Approval records decisions but does not resume a task or execute a commit.
+- The local-path API is intended for a trusted loopback environment and is not authenticated in v1.
 - Checks run in the current Python environment, not in an isolated Docker sandbox.
 - The v1 workflow does not create branches, commits, pushes, pull requests, or GitHub issues.
 - Existing unrelated working-tree changes are included in the Git summary; review the final diff.
