@@ -14,12 +14,21 @@ Typical usage example:
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.tree import Tree
+
+from kodiak.agents.base import AgentInput
+from kodiak.agents.planner import PlannerAgent, TaskPlan
+from kodiak.cli.services.planner_service import (
+    InvalidIssueError,
+    PlanGenerationFailedError,
+    PlannerService,
+)
 
 app = typer.Typer(name="plan", help="Generate an implementation plan for an issue or task.")
 
@@ -48,7 +57,7 @@ def _render_error_panel(title: str, message: str) -> None:
     )
 
 
-def _render_plan(plan: Plan) -> None:  # noqa: F821
+def _render_plan(plan: TaskPlan) -> None:
     """Render a generated plan using Rich panels and trees.
 
     Args:
@@ -62,45 +71,66 @@ def _render_plan(plan: Plan) -> None:  # noqa: F821
         )
     )
 
-    files_tree = Tree("[bold cyan]Files to Modify[/bold cyan]")
-    if plan.files_to_modify:
-        for file_path in plan.files_to_modify:
+    likely_files = list(
+        dict.fromkeys(file_path for subtask in plan.subtasks for file_path in subtask.likely_files)
+    )
+    files_tree = Tree("[bold cyan]Likely Files[/bold cyan]")
+    if likely_files:
+        for file_path in likely_files:
             files_tree.add(file_path)
     else:
         files_tree.add("[dim]None[/dim]")
     console.print(files_tree)
 
-    new_files_tree = Tree("[bold cyan]New Files[/bold cyan]")
-    if plan.new_files:
-        for file_path in plan.new_files:
-            new_files_tree.add(file_path)
+    subtasks_tree = Tree("[bold cyan]Subtasks[/bold cyan]")
+    if plan.subtasks:
+        for subtask in plan.subtasks:
+            subtasks_tree.add(f"[bold]{subtask.title}[/bold]: {subtask.description}")
     else:
-        new_files_tree.add("[dim]None[/dim]")
-    console.print(new_files_tree)
+        subtasks_tree.add("[dim]None[/dim]")
+    console.print(subtasks_tree)
 
-    risks_tree = Tree("[bold yellow]Risks[/bold yellow]")
-    if plan.risks:
-        for risk in plan.risks:
-            risks_tree.add(risk)
+    criteria_tree = Tree("[bold cyan]Acceptance Criteria[/bold cyan]")
+    if plan.acceptance_criteria:
+        for criterion in plan.acceptance_criteria:
+            criteria_tree.add(criterion)
     else:
-        risks_tree.add("[dim]None identified[/dim]")
-    console.print(risks_tree)
+        criteria_tree.add("[dim]None specified[/dim]")
+    console.print(criteria_tree)
 
-    complexity_style = _COMPLEXITY_STYLES.get(plan.complexity.lower(), "white")
+    complexity = plan.estimated_total_complexity
+    complexity_style = _COMPLEXITY_STYLES.get(complexity.lower(), "white")
     console.print(
         Panel.fit(
-            f"Complexity: [{complexity_style}]{plan.complexity}[/{complexity_style}]\n"
-            f"Estimated time: [bold]{plan.estimated_time}[/bold]",
+            f"Complexity: [{complexity_style}]{complexity}[/{complexity_style}]\n"
+            f"Architecture review: "
+            f"[bold]{'required' if plan.requires_architecture_review else 'not required'}[/bold]",
             title="[bold cyan]Estimate[/bold cyan]",
             border_style="cyan",
         )
     )
 
-    console.print(
-        Panel(
-            plan.reasoning,
-            title="[bold cyan]AI Reasoning[/bold cyan]",
-            border_style="cyan",
+
+async def _generate_plan(issue: str | None, task_id: str | None) -> TaskPlan:
+    from kodiak.llm.client import get_llm_client
+
+    reference = issue if issue is not None else task_id
+    if reference is None:
+        raise InvalidIssueError("A planning reference is required.")
+
+    plan_task_id = task_id or f"issue-{issue}"
+    instruction = (
+        f"Plan the implementation for GitHub issue {issue}"
+        if issue is not None
+        else f"Plan the implementation for Kodiak task {task_id}"
+    )
+    service = PlannerService(PlannerAgent(get_llm_client(plan_task_id)))
+    return await service.create_plan(
+        AgentInput(
+            task_id=plan_task_id,
+            project_id="local",
+            instruction=instruction,
+            context={"issue": issue, "task_id": task_id},
         )
     )
 
@@ -141,22 +171,17 @@ def plan(
         )
         raise typer.Exit(code=1)
 
-    plan_service = PlanService()  # noqa: F821
-
     try:
         with console.status(
             "[bold cyan]Generating implementation plan...[/bold cyan]", spinner="dots"
         ):
-            if issue:
-                generated_plan = plan_service.generate_plan_from_issue(issue)
-            else:
-                generated_plan = plan_service.generate_plan_from_task(task_id)
+            generated_plan = asyncio.run(_generate_plan(issue, task_id))
 
-    except PlanGenerationError as exc:  # noqa: F821
+    except PlanGenerationFailedError as exc:
         _render_error_panel("Plan Generation Failed", str(exc))
         raise typer.Exit(code=1) from exc
 
-    except PlanServiceError as exc:  # noqa: F821
+    except InvalidIssueError as exc:
         _render_error_panel("Plan Service Error", str(exc))
         raise typer.Exit(code=1) from exc
 

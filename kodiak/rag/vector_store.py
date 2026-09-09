@@ -220,7 +220,7 @@ class VectorStore:
 
         merged: list[SearchResult] = []
         for repo_id, result in zip(repo_ids, per_repo, strict=False):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.warning("search_repo_error", repo_id=repo_id, error=str(result))
                 continue
             merged.extend(result)

@@ -197,14 +197,14 @@ class AgentSelector:
         if not is_available or not is_compatible:
             total_score = 0.0
         else:
-            total_score = (
+            score_components = (
                 capability_score,
                 priority_score,
                 health_score,
                 load_score,
                 confidence_score,
             )
-            total_score = sum(total_score)
+            total_score = sum(score_components)
 
         reason = self._reason(candidate, matched, missing, is_available)
         return AgentScore(

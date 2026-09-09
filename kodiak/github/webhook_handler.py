@@ -10,8 +10,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from kodiak.github.client import get_client_for_repo
-from kodiak.orchestration.reflection_loop import enqueue_revision_request
+from kodiak.github.client import get_client_for_repo  # type: ignore[attr-defined]
+from kodiak.orchestration.reflection_loop import (  # type: ignore[attr-defined]
+    enqueue_revision_request,
+)
 
 logger = logging.getLogger(__name__)
 

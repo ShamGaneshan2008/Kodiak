@@ -23,7 +23,11 @@ from kodiak.orchestration.execution.models import (
     ExecutionResult,
     RetryPolicy,
 )
-from kodiak.orchestration.reflection import ReflectionEngine, ReflectionResult, RepairStrategy
+from kodiak.orchestration.reflection import (
+    ReflectionEngine,
+    ReflectionResultDetailed,
+    RepairStrategy,
+)
 from kodiak.orchestration.state import TaskState, TaskStatus, transition_task_status
 from kodiak.orchestration.task_planner import ExecutableTask, ExecutionPlan, TaskPlanner
 from kodiak.orchestration.tool_router import ToolRouter
@@ -60,7 +64,7 @@ class AutonomousLoopResult:
     plan: ExecutionPlan | None
     execution_result: ExecutionResult | None
     verification_result: VerificationResult | None
-    reflection_results: list[ReflectionResult] = field(default_factory=list)
+    reflection_results: list[ReflectionResultDetailed] = field(default_factory=list)
     selected_agent: str | None = None
     attempts: int = 0
     replans: int = 0
@@ -106,6 +110,7 @@ class AutonomousTaskLoop:
         self._memory_recall_limit = memory_recall_limit
         self._cancellation_token = CancellationToken()
         self._active_task_state: TaskState | None = None
+        self._pending_agents: list[Any] = []
 
     def cancel(self) -> None:
         """Request cooperative cancellation of the active loop."""
@@ -147,7 +152,7 @@ class AutonomousTaskLoop:
         plan: ExecutionPlan | None = None
         execution_result: ExecutionResult | None = None
         verification_result: VerificationResult | None = None
-        reflection_results: list[ReflectionResult] = []
+        reflection_results: list[ReflectionResultDetailed] = []
         selected_agent: str | None = None
         replans = 0
         loop_attempt = 0
@@ -333,7 +338,7 @@ class AutonomousTaskLoop:
         workspace: str | Path | None,
         memory_context: dict[str, Any],
         extra_context: dict[str, Any] | None,
-        reflection_results: list[ReflectionResult],
+        reflection_results: list[ReflectionResultDetailed],
     ) -> ExecutionPlan:
         state = self._active_task_state
         if state is not None:
@@ -493,7 +498,7 @@ class AutonomousTaskLoop:
         *,
         goal: str,
         state: TaskState,
-        reflection: ReflectionResult,
+        reflection: ReflectionResultDetailed,
         workspace: str | Path | None,
         memory_context: dict[str, Any],
     ) -> ExecutionResult:

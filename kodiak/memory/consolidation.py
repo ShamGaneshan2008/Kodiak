@@ -202,9 +202,8 @@ class MemoryConsolidator:
         return 1
 
     async def _extract_semantic(self, task_id: uuid.UUID, task_data: dict[str, Any]) -> int:
-        scratchpad = (
-            task_data.get("scratchpad") if isinstance(task_data.get("scratchpad"), dict) else {}
-        )
+        raw_scratchpad = task_data.get("scratchpad")
+        scratchpad: dict[str, Any] = raw_scratchpad if isinstance(raw_scratchpad, dict) else {}
         learnings = (
             task_data.get("learnings")
             or task_data.get("facts")

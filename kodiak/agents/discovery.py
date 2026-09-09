@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -272,14 +272,15 @@ class AgentDiscovery:
                     rejections.append(rejection)
                 continue
 
-            role = obj.role
+            agent_cls = cast(type[BaseAgent], obj)
+            role = agent_cls.role
             agent_id = role.value
-            caps = self._capabilities_for(obj, role)
+            caps = self._capabilities_for(agent_cls, role)
             candidates.append(
                 _Candidate(
                     qualname=qualname,
                     module_name=module_name,
-                    agent_cls=obj,
+                    agent_cls=agent_cls,
                     agent_id=agent_id,
                     capabilities=caps,
                 )

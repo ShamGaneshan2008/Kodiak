@@ -52,6 +52,7 @@ def retry_async(config: RetryConfig | None = None) -> Callable[[F], F]:
                     await asyncio.sleep(delay)
                     delay = min(delay * cfg.backoff_factor, cfg.max_delay)
 
+            assert last_exception is not None
             raise last_exception
 
         return wrapper  # type: ignore[return-value]
@@ -92,6 +93,7 @@ def retry_sync(config: RetryConfig | None = None) -> Callable[[F], F]:
                     time.sleep(delay)
                     delay = min(delay * cfg.backoff_factor, cfg.max_delay)
 
+            assert last_exception is not None
             raise last_exception
 
         return wrapper  # type: ignore[return-value]

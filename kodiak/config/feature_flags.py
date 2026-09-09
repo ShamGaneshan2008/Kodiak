@@ -21,7 +21,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from kodiak.config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +99,7 @@ class FeatureFlags:
 
     # ── Lifecycle ─────────────────────────────────────────────────────────
 
-    def configure(self, settings: Any | None = None) -> None:
+    def configure(self, settings: Settings | None = None) -> None:
         """
         Connect to Unleash if configured, otherwise operate in offline mode.
         Safe to call multiple times; subsequent calls are no-ops.
@@ -116,7 +119,7 @@ class FeatureFlags:
 
         self._ready = True
 
-    def _setup_unleash(self, settings: Any) -> None:
+    def _setup_unleash(self, settings: Settings) -> None:
         try:
             from UnleashClient import UnleashClient  # type: ignore[import]
 
@@ -219,7 +222,11 @@ class FeatureFlags:
 flags = FeatureFlags()
 
 
-def configure_feature_flags(settings: Any | None = None) -> None:
+def get_feature_flags() -> FeatureFlags:
+    return flags
+
+
+def configure_feature_flags(settings: Settings | None = None) -> None:
     """Convenience wrapper. Call once at startup."""
     flags.configure(settings)
 

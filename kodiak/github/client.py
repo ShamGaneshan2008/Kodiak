@@ -52,7 +52,7 @@ class GitHubClient:
         labels: list[str] | None = None,
     ) -> dict[str, Any]:
         url = f"{self.base_url}/repos/{owner}/{repo}/issues"
-        data = {"title": title, "body": body}
+        data: dict[str, Any] = {"title": title, "body": body}
         if labels:
             data["labels"] = labels
         return await self._request("POST", url, json=data)

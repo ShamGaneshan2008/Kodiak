@@ -153,7 +153,7 @@ class WebhookEventBackend(EventPublisherBackend):
                     self.webhook_url,
                     json=event.to_dict(),
                     headers=self.headers,
-                    timeout=10,
+                    timeout=aiohttp.ClientTimeout(total=10),
                 ) as resp:
                     return resp.status == 200
         except Exception as e:

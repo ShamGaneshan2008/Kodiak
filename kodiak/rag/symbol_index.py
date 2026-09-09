@@ -4,6 +4,8 @@ from pathlib import Path
 import structlog
 from pydantic import BaseModel
 
+from kodiak.rag.chunker import Chunk
+
 logger = structlog.get_logger(__name__)
 
 
@@ -80,6 +82,31 @@ class SymbolIndex:
 
         logger.debug("symbols_parsed", path=str(file_path), count=count)
         return count
+
+    async def delete_file(self, repo_id: str, file_path: str) -> None:
+        """Remove symbols belonging to a file from the in-memory index."""
+        del repo_id
+        for name, symbols in list(self._symbols.items()):
+            remaining = [symbol for symbol in symbols if symbol.file_path != file_path]
+            if remaining:
+                self._symbols[name] = remaining
+            else:
+                del self._symbols[name]
+
+    async def index_chunks(self, repo_id: str, chunks: list[Chunk]) -> None:
+        """Index named code chunks produced by the legacy chunker."""
+        del repo_id
+        for chunk in chunks:
+            if chunk.name:
+                self.add_symbol(
+                    Symbol(
+                        name=chunk.name,
+                        symbol_type=chunk.chunk_type.value,
+                        file_path=chunk.file_path,
+                        start_line=chunk.start_line,
+                        end_line=chunk.end_line,
+                    )
+                )
 
     def _get_name(self, node: ast.AST) -> str:
         if isinstance(node, ast.Name):

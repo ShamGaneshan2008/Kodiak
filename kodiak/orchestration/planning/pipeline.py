@@ -312,12 +312,12 @@ class TaskDecomposer:
             if not isinstance(subtask, dict):
                 continue
             step_id = str(subtask.get("id", ""))
-            task = step_id_to_task.get(step_id)
-            if task is None:
+            current_task = step_id_to_task.get(step_id)
+            if current_task is None:
                 continue
 
             depends_on_raw = self._to_string_list(subtask.get("depends_on"))
-            task.dependencies = [
+            current_task.dependencies = [
                 step_id_to_task[dep_step].id
                 for dep_step in depends_on_raw
                 if dep_step in step_id_to_task
@@ -326,9 +326,9 @@ class TaskDecomposer:
             parent_step = subtask.get("parent_id")
             if parent_step and str(parent_step) in step_id_to_task:
                 parent_task = step_id_to_task[str(parent_step)]
-                task.parent_id = parent_task.id
-                if task.id not in parent_task.subtask_ids:
-                    parent_task.subtask_ids.append(task.id)
+                current_task.parent_id = parent_task.id
+                if current_task.id not in parent_task.subtask_ids:
+                    parent_task.subtask_ids.append(current_task.id)
 
         return list(step_id_to_task.values())
 

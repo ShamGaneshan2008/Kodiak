@@ -53,7 +53,7 @@ async def list_projects(
         base.order_by(Project.created_at.desc()).offset(pagination.offset).limit(pagination.limit)
     )
     return PaginatedResponse[ProjectResponse].build(
-        list(result.scalars().all()),
+        [ProjectResponse.model_validate(item) for item in result.scalars().all()],
         total,
         pagination.page,
         pagination.page_size,

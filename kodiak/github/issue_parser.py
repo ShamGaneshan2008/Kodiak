@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from kodiak.db.models.task import TaskSource
-from kodiak.orchestration.task_planner import enqueue_task
+from kodiak.orchestration.task_planner import enqueue_task  # type: ignore[attr-defined]
 
 logger = logging.getLogger(__name__)
 

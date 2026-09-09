@@ -622,8 +622,9 @@ class VerificationEngine:
                     "verify() requires either a Task plus ExecutionResult, or "
                     "execution_result and task_state for autonomous-loop verification."
                 )
+            resolved_goal = goal or str(getattr(task_state, "objective", ""))
             return await TaskVerifier().verify(
-                goal=goal or getattr(task_state, "objective", ""),
+                goal=resolved_goal,
                 plan=plan,
                 execution_result=execution_result,
                 task_state=task_state,

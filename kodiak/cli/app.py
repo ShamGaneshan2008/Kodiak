@@ -8,7 +8,7 @@ business logic, no command registrations, and no I/O.
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Final, Literal
 
 import typer
 
@@ -34,7 +34,7 @@ from kodiak.cli.commands.version import app as version_app
 APP_NAME: Final[str] = "kodiak"
 APP_HELP: Final[str] = "Kodiak: an experimental, approval-gated software engineering toolkit."
 
-_RICH_MARKUP_MODE: Final[str] = "rich"
+_RICH_MARKUP_MODE: Final[Literal["rich"]] = "rich"
 _PRETTY_EXCEPTIONS_ENABLE: Final[bool] = True
 _PRETTY_EXCEPTIONS_SHOW_LOCALS: Final[bool] = False
 _ADD_COMPLETION: Final[bool] = True

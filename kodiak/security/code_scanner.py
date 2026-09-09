@@ -28,10 +28,7 @@ class CodeScanner:
             "OS_SYSTEM": (ast.Call, "os.system"),
             "EVAL_USAGE": (ast.Call, "eval"),
             "EXEC_USAGE": (ast.Call, "exec"),
-            "DANGEROUS_IMPORTS": (
-                ast.Import | ast.ImportFrom,
-                "os, subprocess, shutil, socket, requests",
-            ),
+            "DANGEROUS_IMPORTS": (ast.AST, "os, subprocess, shutil, socket, requests"),
         }
         self._shell_patterns: dict[str, re.Pattern[str]] = {
             "RM_RF": re.compile(r"\brm\s+-rf\b"),

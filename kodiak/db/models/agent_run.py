@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from kodiak.db.base import KodiakBase, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from kodiak.db.models.task import Task
 
 
 class AgentType(enum.StrEnum):
@@ -96,9 +100,7 @@ class AgentRun(KodiakBase, UUIDMixin, TimestampMixin):
     reflection_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
-    task: Mapped[Task] = relationship(  # noqa: F821
-        "Task", back_populates="agent_runs", lazy="raise"
-    )
+    task: Mapped[Task] = relationship("Task", back_populates="agent_runs", lazy="raise")
     parent_run: Mapped[AgentRun | None] = relationship(
         "AgentRun", remote_side="AgentRun.id", lazy="raise"
     )

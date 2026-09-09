@@ -393,7 +393,7 @@ class ResearchMemory:
         for h in hypotheses:
             conclusions.extend(self.retrieve_conclusions_for_hypothesis(h.hypothesis_id))
 
-        strategy_ids = set()
+        strategy_ids: set[str] = set()
         for h in hypotheses:
             strategy_ids.update(h.related_strategy_ids)
 

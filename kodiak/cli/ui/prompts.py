@@ -86,9 +86,10 @@ def prompt_yes_no(
     Returns:
         True for "yes", False for "no".
     """
+    default_value = default if default is not None else False
     return Confirm.ask(
         f"[{_PROMPT_STYLE}]{question}[/{_PROMPT_STYLE}]",
-        default=default,
+        default=default_value,
         console=console,
     )
 

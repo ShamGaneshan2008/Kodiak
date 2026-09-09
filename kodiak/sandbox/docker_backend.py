@@ -34,7 +34,7 @@ class DockerBackend:
             try:
                 import docker
 
-                self._client = docker.from_env()
+                self._client = docker.from_env()  # type: ignore[attr-defined]
             except ImportError:
                 raise RuntimeError("Docker SDK is not installed") from None
             except Exception as e:
@@ -141,3 +141,5 @@ class DockerBackend:
             buf.seek(0)
             c.put_archive(dst, buf.read())
             return True
+
+        return await asyncio.to_thread(_copy)

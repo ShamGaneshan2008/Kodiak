@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
-from kodiak.github.client import GitHubClient
 from kodiak.utils.git_utils import GitChangeSet, human_summary
 
 BRANCH_PREFIX = "kodiak/task"
@@ -17,6 +16,26 @@ class PullRequestDraft:
     title: str
     body: str
     draft: bool = False
+
+
+class PullRequestClient(Protocol):
+    async def list_pull_requests(
+        self,
+        owner: str,
+        repo: str,
+        state: str = "open",
+        per_page: int = 30,
+        head: str | None = None,
+        base: str | None = None,
+    ) -> list[dict[str, Any]]: ...
+
+    async def update_pull_request(
+        self, owner: str, repo: str, pr_number: int, **kwargs: Any
+    ) -> dict[str, Any]: ...
+
+    async def create_pull_request(
+        self, owner: str, repo: str, title: str, head: str, base: str, body: str = ""
+    ) -> dict[str, Any]: ...
 
 
 def make_branch_name(task_id: str, slug: str) -> str:
@@ -50,7 +69,7 @@ def draft_pull_request(
 
 
 async def create_or_update_pull_request(
-    client: GitHubClient,
+    client: PullRequestClient,
     *,
     owner: str,
     repo: str,

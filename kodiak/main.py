@@ -39,7 +39,7 @@ async def validate_redis_connection() -> None:
 
     client = aioredis.from_url(broker_url)
     try:
-        await client.ping()
+        await client.ping()  # type: ignore[misc]
         logger.info("redis_connection_validated", broker=broker_url)
     except Exception as e:
         logger.error("redis_connection_failed", error=str(e))

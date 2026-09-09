@@ -254,7 +254,7 @@ class ResearchEvolutionBridge:
         return list(self._bridge_results)
 
     def stats(self) -> dict[str, Any]:
-        actions = {}
+        actions: dict[str, int] = {}
         for r in self._bridge_results:
             actions[r.action_taken] = actions.get(r.action_taken, 0) + 1
         return {

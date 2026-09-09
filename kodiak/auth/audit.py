@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # actor_type, action, target_type,
 # target_id, metadata, ip_address,
 # user_agent, created_at
-from kodiak.events.bus import publish
+from kodiak.events.bus import publish  # type: ignore[attr-defined]
 from kodiak.events.types import EventType
 
 

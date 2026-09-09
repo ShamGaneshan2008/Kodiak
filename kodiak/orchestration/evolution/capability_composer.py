@@ -125,7 +125,7 @@ class CapabilityComposer:
         )
 
         # Evidence from components
-        evidence_parts = []
+        evidence_parts: list[str] = []
         for c in components:
             if c.evidence:
                 evidence_parts.extend(c.evidence[:2])

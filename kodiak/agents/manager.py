@@ -27,7 +27,7 @@ import asyncio
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 import structlog
 
@@ -39,7 +39,12 @@ from kodiak.agents.registry import (
 from kodiak.agents.registry import (
     AgentNotFoundError as RegistryAgentNotFoundError,
 )
-from kodiak.agents.registry import AgentRegistry
+from kodiak.agents.registry import (
+    AgentProtocol as RegistryAgentProtocol,
+)
+from kodiak.agents.registry import (
+    AgentRegistry,
+)
 from kodiak.config.metrics import (
     ACTIVE_AGENT_TASKS,
     AGENT_SELECTIONS_TOTAL,
@@ -328,7 +333,7 @@ class AgentManager(AgentManagerProtocol):
                 try:
                     await self._registry.register(
                         agent_id,
-                        instance=agent,
+                        instance=cast(RegistryAgentProtocol, agent),
                         name=agent_name,
                         capabilities=sorted(capabilities),
                     )
@@ -651,7 +656,7 @@ class AgentManager(AgentManagerProtocol):
         results = await asyncio.gather(*(_check(name, entry) for name, entry in entries.items()))
         return dict(results)
 
-    async def metrics(self) -> dict[str, dict[str, float | int]]:
+    async def metrics(self) -> dict[str, dict[str, float | int | str | bool]]:
         """Return a snapshot of execution metrics for all registered agents.
 
         Returns:
@@ -812,7 +817,7 @@ class AgentManager(AgentManagerProtocol):
         """Return the stable registry id for an agent, adding one if needed."""
         agent_id = str(getattr(agent, "agent_id", cls._agent_name(agent)))
         if not hasattr(agent, "agent_id"):
-            agent.agent_id = agent_id
+            cast(RegistryAgentProtocol, agent).agent_id = agent_id
         return agent_id
 
     @staticmethod

@@ -228,9 +228,13 @@ class RepositoryAnalyzerAgent(BaseAgent):
                 {
                     alias.name.split(".")[0]
                     for item in ast.walk(tree)
-                    if isinstance(item, (ast.Import, ast.ImportFrom))
-                    for alias in (item.names if isinstance(item, ast.Import) else [item])
-                    if getattr(alias, "name", None)
+                    if isinstance(item, ast.Import)
+                    for alias in item.names
+                }
+                | {
+                    item.module.split(".")[0]
+                    for item in ast.walk(tree)
+                    if isinstance(item, ast.ImportFrom) and item.module
                 }
             )
             functions = [

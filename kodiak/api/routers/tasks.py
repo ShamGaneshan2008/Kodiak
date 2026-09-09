@@ -78,7 +78,10 @@ async def list_tasks(
         base.order_by(Task.created_at.desc()).offset(pagination.offset).limit(pagination.limit)
     )
     return PaginatedResponse[TaskResponse].build(
-        list(result.scalars().all()), total, pagination.page, pagination.page_size
+        [TaskResponse.model_validate(item) for item in result.scalars().all()],
+        total,
+        pagination.page,
+        pagination.page_size,
     )
 
 

@@ -147,10 +147,10 @@ class TaskPlanner:
 
         for subtask in subtasks:
             step_id = str(subtask.get("id", ""))
-            task = task_by_step_id.get(step_id)
-            if task is None:
+            current_task = task_by_step_id.get(step_id)
+            if current_task is None:
                 continue
-            task.dependencies = [
+            current_task.dependencies = [
                 task_by_step_id[dependency].id
                 for dependency in self._string_list(subtask.get("depends_on"))
                 if dependency in task_by_step_id

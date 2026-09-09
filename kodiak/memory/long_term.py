@@ -156,17 +156,21 @@ class LongTermMemory:
 
         if memory_type in (None, MemoryType.SEMANTIC):
             sem_results = await self.semantic.search_facts(query, limit=limit)
-            for res in sem_results:
-                mem = self.semantic.to_memory(res.entity)
+            for sem_result in sem_results:
+                mem = self.semantic.to_memory(sem_result.entity)
                 if self._matches_tags(mem, wanted_tags):
-                    results.append(SearchResult(memory=mem, relevance_score=res.relevance_score))
+                    results.append(
+                        SearchResult(memory=mem, relevance_score=sem_result.relevance_score)
+                    )
 
         if memory_type in (None, MemoryType.PROCEDURAL):
             proc_results = await self.procedural.search_procedures(query, limit=limit)
-            for res in proc_results:
-                mem = self.procedural.to_memory(res.procedure)
+            for proc_result in proc_results:
+                mem = self.procedural.to_memory(proc_result.procedure)
                 if self._matches_tags(mem, wanted_tags):
-                    results.append(SearchResult(memory=mem, relevance_score=res.relevance_score))
+                    results.append(
+                        SearchResult(memory=mem, relevance_score=proc_result.relevance_score)
+                    )
 
         results.sort(key=lambda r: r.relevance_score, reverse=True)
         return results[:limit]

@@ -275,7 +275,8 @@ class DependencyGraphBuilder:
             elif hasattr(t, "depends_on"):
                 deps = [str(d) for d in t.depends_on]
             elif isinstance(t, dict):
-                deps = [str(d) for d in t.get("dependencies", t.get("depends_on", []))]
+                raw_dependencies = t.get("dependencies", t.get("depends_on", [])) or []
+                deps = [str(d) for d in raw_dependencies]
 
             for dep in deps:
                 if dep in task_ids and dep != tid:

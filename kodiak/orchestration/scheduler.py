@@ -49,10 +49,10 @@ class TaskScheduler:
                 task_state = self._state.get_task(task.id)
                 if not task_state or task_state.status != TaskStatus.PENDING:
                     continue
+                dependency_states = [self._state.get_task(dep) for dep in task.dependencies]
                 deps_met = all(
-                    self._state.get_task(dep)
-                    and self._state.get_task(dep).status == TaskStatus.COMPLETED
-                    for dep in task.dependencies
+                    dependency is not None and dependency.status == TaskStatus.COMPLETED
+                    for dependency in dependency_states
                 )
                 if deps_met:
                     available.append(task)

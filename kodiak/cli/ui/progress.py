@@ -20,6 +20,7 @@ from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
     Progress,
+    ProgressColumn,
     SpinnerColumn,
     TaskID,
     TextColumn,
@@ -70,16 +71,13 @@ class ProgressHandle:
             description: New description text for the task, if any.
             total: New total count for the task, if any.
         """
-        kwargs: dict[str, object] = {}
-        if advance is not None:
-            kwargs["advance"] = advance
-        if completed is not None:
-            kwargs["completed"] = completed
-        if description is not None:
-            kwargs["description"] = description
-        if total is not None:
-            kwargs["total"] = total
-        self.progress.update(self.task_id, **kwargs)
+        self.progress.update(
+            self.task_id,
+            advance=advance,
+            completed=completed,
+            description=description,
+            total=total,
+        )
 
     def add_subtask(self, description: str, *, total: float | None = 100.0) -> TaskID:
         """Add an additional task to the same progress instance.
@@ -111,7 +109,7 @@ def _build_progress(
     Returns:
         A configured Rich Progress instance (not yet started).
     """
-    columns: list[object] = [
+    columns: list[str | ProgressColumn] = [
         SpinnerColumn(style=spinner_style),
         TextColumn("[progress.description]{task.description}"),
     ]

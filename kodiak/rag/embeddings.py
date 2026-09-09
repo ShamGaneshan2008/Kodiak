@@ -22,12 +22,16 @@ from typing import Any, Protocol, runtime_checkable
 
 import structlog
 
+from kodiak.rag.chunking import RepositoryChunk
+
 logger = structlog.get_logger(__name__)
 
 __all__ = [
     "EmbeddingProvider",
     "EmbeddingManager",
     "EmbeddingResult",
+    "ChunkEmbedding",
+    "EmbeddingService",
     "RetryConfig",
     "EmbeddingCache",
     "NullEmbeddingCache",
@@ -102,6 +106,32 @@ class EmbeddingResult:
     vector: list[float]
     model: str
     provider: str
+
+    @property
+    def embedding(self) -> list[float]:
+        """Compatibility alias used by semantic query embedding callers."""
+        return self.vector
+
+
+@dataclass(frozen=True, slots=True)
+class ChunkEmbedding:
+    """A repository chunk paired with its embedding vector."""
+
+    chunk: RepositoryChunk
+    embedding: tuple[float, ...] | list[float]
+    provider: str
+    model: str
+    dimensions: int
+    metadata: dict[str, Any]
+
+
+@runtime_checkable
+class EmbeddingService(Protocol):
+    """Embedding operations consumed by high-level semantic search."""
+
+    async def embed_chunks(self, chunks: Sequence[RepositoryChunk]) -> list[ChunkEmbedding]: ...
+
+    async def embed_query(self, text: str) -> EmbeddingResult: ...
 
 
 @dataclass(slots=True)

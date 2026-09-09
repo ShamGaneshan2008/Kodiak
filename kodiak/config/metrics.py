@@ -7,9 +7,9 @@ counters, histograms, and gauges used across Kodiak.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-try:
+if TYPE_CHECKING:
     from prometheus_client import (
         CONTENT_TYPE_LATEST,
         REGISTRY,
@@ -21,42 +21,55 @@ try:
         generate_latest,
         multiprocess,
     )
-except ImportError:
+else:
+    try:
+        from prometheus_client import (
+            CONTENT_TYPE_LATEST,
+            REGISTRY,
+            CollectorRegistry,
+            Counter,
+            Gauge,
+            Histogram,
+            Info,
+            generate_latest,
+            multiprocess,
+        )
+    except ImportError:
 
-    class _NoopMetric:
-        def labels(self, *args: Any, **kwargs: Any) -> _NoopMetric:
-            return self
+        class _NoopMetric:
+            def labels(self, *args: Any, **kwargs: Any) -> _NoopMetric:
+                return self
 
-        def inc(self, *args: Any, **kwargs: Any) -> None:
-            return None
+            def inc(self, *args: Any, **kwargs: Any) -> None:
+                return None
 
-        def dec(self, *args: Any, **kwargs: Any) -> None:
-            return None
+            def dec(self, *args: Any, **kwargs: Any) -> None:
+                return None
 
-        def observe(self, *args: Any, **kwargs: Any) -> None:
-            return None
+            def observe(self, *args: Any, **kwargs: Any) -> None:
+                return None
 
-        def set(self, *args: Any, **kwargs: Any) -> None:
-            return None
+            def set(self, *args: Any, **kwargs: Any) -> None:
+                return None
 
-        def info(self, *args: Any, **kwargs: Any) -> None:
-            return None
+            def info(self, *args: Any, **kwargs: Any) -> None:
+                return None
 
-    def _noop_metric(*args: Any, **kwargs: Any) -> _NoopMetric:
-        return _NoopMetric()
+        def _noop_metric(*args: Any, **kwargs: Any) -> _NoopMetric:
+            return _NoopMetric()
 
-    Counter = _noop_metric
-    Gauge = _noop_metric
-    Histogram = _noop_metric
-    Info = _noop_metric
-    CollectorRegistry = None
-    REGISTRY = None
-    CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
+        Counter = _noop_metric
+        Gauge = _noop_metric
+        Histogram = _noop_metric
+        Info = _noop_metric
+        CollectorRegistry = None
+        REGISTRY = None
+        CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
 
-    def generate_latest(*args: Any, **kwargs: Any) -> bytes:
-        return b""
+        def generate_latest(*args: Any, **kwargs: Any) -> bytes:
+            return b""
 
-    multiprocess = None
+        multiprocess = None
 
 REQUESTS_TOTAL = Counter("kodiak_requests_total", "Total API requests")
 
@@ -269,3 +282,6 @@ def metrics_response() -> tuple[bytes, str]:
 tasks_total = AGENT_TASKS_TOTAL
 task_duration_seconds = AGENT_TASK_DURATION_SECONDS
 active_tasks = ACTIVE_AGENT_TASKS
+llm_requests_total = LLM_REQUESTS_TOTAL
+llm_request_duration_seconds = LLM_LATENCY_SECONDS
+llm_tokens_used_total = LLM_TOKEN_USAGE

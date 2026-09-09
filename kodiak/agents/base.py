@@ -100,7 +100,7 @@ class BaseAgent(ABC):
     @classmethod
     def resolved_capabilities(cls) -> frozenset[str]:
         """Capabilities declared on the class or inferred from role."""
-        declared = getattr(cls, "capabilities", frozenset())
+        declared: frozenset[str] = getattr(cls, "capabilities", frozenset())
         if declared:
             return frozenset(str(cap) for cap in declared)
         from kodiak.agents.capabilities import default_capabilities_for_role

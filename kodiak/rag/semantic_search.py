@@ -115,7 +115,7 @@ class SemanticSearchQuery:
 
     text: str | None = None
     query_embedding: tuple[float, ...] | list[float] | None = None
-    kind: SearchKind | str = SearchKind.CODE
+    kind: SearchKind = SearchKind.CODE
     top_k: int | None = None
     min_confidence: float | None = None
     module: str | None = None
@@ -131,8 +131,8 @@ class SemanticSearchQuery:
     file_extensions: frozenset[str] = field(default_factory=frozenset)
     directory: str | Path | None = None
     directories: frozenset[str] = field(default_factory=frozenset)
-    symbol_type: ChunkSymbolType | str | None = None
-    symbol_types: frozenset[ChunkSymbolType | str] = field(default_factory=frozenset)
+    symbol_type: ChunkSymbolType | None = None
+    symbol_types: frozenset[ChunkSymbolType] = field(default_factory=frozenset)
     metadata: dict[str, Any] = field(default_factory=dict)
     use_embedding: bool | None = None
     include_dependency_context: bool | None = None

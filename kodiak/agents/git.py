@@ -23,9 +23,11 @@ class GitAgent(BaseAgent):
         repo = str(input_.context.get("repository_path", "."))
         changes = read_changes(repo)
         commit_plan = build_commit_plan(changes, input_.instruction or input_.task_id)
+        subject = commit_plan["subject"]
+        assert isinstance(subject, str)
         pr_draft = draft_pull_request(
             changes,
-            commit_plan["subject"],
+            subject,
             testing=list(input_.context.get("testing", [])) or ["Syntax compile check"],
         )
         return self._make_output(

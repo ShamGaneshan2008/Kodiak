@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from fastapi import FastAPI
     from sqlalchemy.ext.asyncio import AsyncEngine
 
+    from kodiak.config.settings import Settings
+
 F = TypeVar("F", bound=Callable[..., Any])
 
 _tracer_provider: TracerProvider | None = None
@@ -33,7 +35,7 @@ _tracer_provider: TracerProvider | None = None
 
 def configure_tracing(
     engine: AsyncEngine | None = None,
-    settings: Any | None = None,
+    settings: Settings | None = None,
 ) -> TracerProvider:
     """
     Initialise the global OpenTelemetry TracerProvider.

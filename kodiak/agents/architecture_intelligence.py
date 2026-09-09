@@ -581,7 +581,7 @@ class ArchitectureIntelligenceService:
 
     @staticmethod
     def _impact_path(graph: DependencyGraph, target: str, affected: str) -> ImpactPath | None:
-        queue = deque([(target, (target,))])
+        queue: deque[tuple[str, tuple[str, ...]]] = deque([(target, (target,))])
         visited = {target}
         while queue:
             current, path = queue.popleft()

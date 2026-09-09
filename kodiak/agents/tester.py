@@ -842,6 +842,7 @@ class TestAgent(BaseAgent):
         *,
         collect_coverage: bool,
     ) -> TestCommand:
+        command: tuple[str, ...]
         if test.runner is TestRunnerName.UNITTEST:
             command = ("python", "-m", "unittest", test.path.replace("/", ".").removesuffix(".py"))
         else:
@@ -867,6 +868,7 @@ class TestAgent(BaseAgent):
             TestScope.INTEGRATION: "tests/integration",
             TestScope.REGRESSION: "tests/regression",
         }.get(scope, "tests")
+        command: tuple[str, ...]
         if runner is TestRunnerName.UNITTEST:
             command = ("python", "-m", "unittest", "discover", "-s", target)
         else:
@@ -888,7 +890,7 @@ class TestAgent(BaseAgent):
     ) -> tuple[str, ...]:
         if runner is TestRunnerName.UNITTEST:
             return ("python", "-m", "unittest", "discover")
-        command = ("python", "-m", "pytest", "-q")
+        command: tuple[str, ...] = ("python", "-m", "pytest", "-q")
         if collect_coverage:
             command = (*command, "--cov=kodiak", "--cov-report=term")
         return command

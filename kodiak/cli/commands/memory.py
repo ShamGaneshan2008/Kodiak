@@ -17,6 +17,7 @@ import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Never
 
 import structlog
 import typer
@@ -229,9 +230,12 @@ def delete(
         _fail("Provide a memory ID or at least one --tag to delete.")
     if memory_id and tag:
         _fail("Provide either a memory ID or --tag, not both.")
+    delete_tags = tag or []
 
     if not yes:
-        target = f"memory {memory_id}" if memory_id else f"all memories tagged {', '.join(tag)}"
+        target = (
+            f"memory {memory_id}" if memory_id else f"all memories tagged {', '.join(delete_tags)}"
+        )
         confirmed = typer.confirm(f"Delete {target}? This cannot be undone.")
         if not confirmed:
             console.print("[yellow]Aborted.[/yellow]")
@@ -242,7 +246,7 @@ def delete(
             asyncio.run(_delete_one(memory_id))
             deleted_count = 1
         else:
-            deleted_count = asyncio.run(_delete_by_tag(tag))
+            deleted_count = asyncio.run(_delete_by_tag(delete_tags))
     except MemoryNotFoundError as exc:
         _fail(f"Not found: {exc}")
     except MemoryServiceError as exc:
@@ -340,8 +344,8 @@ def _truncate(text: str, width: int = 80) -> str:
     return text if len(text) <= width else text[: width - 1].rstrip() + "…"
 
 
-def _short_id(memory_id: str, width: int = 8) -> str:
-    return memory_id[:width]
+def _short_id(memory_id: object, width: int = 8) -> str:
+    return str(memory_id)[:width]
 
 
 def _format_dt(value: datetime | None) -> str:
@@ -354,7 +358,7 @@ def _print_json(payload: object) -> None:
     print(json.dumps(payload, indent=2, default=str))
 
 
-def _fail(message: str) -> None:
+def _fail(message: str) -> Never:
     err_console.print(f"[bold red]Error:[/bold red] {message}")
     raise typer.Exit(code=1)
 

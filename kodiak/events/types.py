@@ -39,6 +39,7 @@ class EventType(StrEnum):
 
     MONITORING_ALERT = "monitoring.alert"
     METRICS_RECORDED = "metrics.recorded"
+    AUDIT_LOG_CREATED = "audit.log.created"
 
     ERROR_OCCURRED = "error.occurred"
     WARNING_ISSUED = "warning.issued"

@@ -66,9 +66,9 @@ class CodeReviewHandler:
 
         try:
             url = f"{self.client.base_url}/repos/{owner}/{repo}/pulls/{pr_number}/files"
-            async with self.client._get_session() as session:
-                async with session.get(url, headers=self.client.headers) as resp:
-                    files = await resp.json()
+            payload = await self.client._request("GET", url)
+            if isinstance(payload, list):
+                files = payload
         except Exception as e:
             logger.error(f"Failed to fetch changed files: {e}")
 

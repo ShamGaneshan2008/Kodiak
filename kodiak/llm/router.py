@@ -17,7 +17,7 @@ from kodiak.config.metrics import (
     llm_tokens_used_total,
 )
 from kodiak.config.settings import LLMProvider, get_settings
-from kodiak.llm.providers.openai import OpenAIProvider
+from kodiak.llm.providers.openai import OpenAIProvider  # type: ignore[attr-defined]
 
 logger = structlog.get_logger(__name__)
 

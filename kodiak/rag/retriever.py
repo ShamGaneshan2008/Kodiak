@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter, defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -1231,7 +1231,7 @@ class Retriever:
         return tuple(float(value) for value in values)
 
     @staticmethod
-    def _cosine_similarity(left: tuple[float, ...], right: tuple[float, ...]) -> float:
+    def _cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
         if len(left) != len(right) or not left:
             return 0.0
         dot = sum(a * b for a, b in zip(left, right, strict=False))

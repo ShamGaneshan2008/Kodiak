@@ -3,7 +3,7 @@ from __future__ import annotations
 import secrets
 from enum import StrEnum
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import AnyHttpUrl, Field, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,6 +24,11 @@ class LogLevel(StrEnum):
     WARNING = "WARNING"
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
+
+
+class LLMProvider(StrEnum):
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
 
 
 class Settings(BaseSettings):
@@ -48,6 +53,8 @@ class Settings(BaseSettings):
     APP_VERSION: str = __version__
     ENVIRONMENT: Environment = Environment.DEVELOPMENT
     DEBUG: bool = False
+    LOG_LEVEL: LogLevel = LogLevel.INFO
+    LOG_FORMAT: Literal["console", "json"] = "console"
 
     SECRET_KEY: str = Field(default_factory=lambda: secrets.token_urlsafe(64))
 
@@ -57,7 +64,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[AnyHttpUrl | str] = ["http://localhost:3000"]
 
     # ================= REDIS =================
-    REDIS_URL: RedisDsn = Field(default="redis://localhost:6379/0")
+    REDIS_URL: RedisDsn = Field(default=RedisDsn("redis://localhost:6379/0"))
     REDIS_CELERY_DB: int = 1
     REDIS_CACHE_DB: int = 2
 
@@ -66,9 +73,25 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, gt=0)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=30, gt=0)
 
+    GITHUB_CLIENT_ID: str = ""
+    GITHUB_CLIENT_SECRET: str = ""
+    GITHUB_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/github/callback"
+
     # ================= LLM =================
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
+    primary_llm_provider: LLMProvider = LLMProvider.OPENAI
+    llm_max_retries: int = Field(default=2, ge=0)
+    llm_max_tokens: int = Field(default=4096, gt=0)
+
+    # ================= FEATURE FLAGS =================
+    UNLEASH_URL: str | None = None
+    UNLEASH_API_TOKEN: str | None = None
+    UNLEASH_APP_NAME: str = "kodiak"
+
+    # ================= TRACING =================
+    OTEL_SERVICE_NAME: str = "kodiak"
+    OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
 
     # ================= VALIDATORS =================
     @field_validator("CORS_ORIGINS", mode="before")
@@ -98,6 +121,10 @@ class Settings(BaseSettings):
     def celery_broker_url(self) -> str:
         base = str(self.REDIS_URL).rsplit("/", 1)[0]
         return f"{base}/{self.REDIS_CELERY_DB}"
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT == Environment.PRODUCTION
 
 
 @lru_cache(maxsize=1)

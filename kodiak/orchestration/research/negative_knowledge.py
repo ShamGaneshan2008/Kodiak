@@ -12,6 +12,8 @@ Example:
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 
 from kodiak.orchestration.research.models import NegativeKnowledge
@@ -137,9 +139,9 @@ class NegativeKnowledgeStore:
             reverse=True,
         )
 
-    def stats(self) -> dict[str, int]:
+    def stats(self) -> dict[str, Any]:
         entries = list(self._entries.values())
-        classes = {}
+        classes: dict[str, int] = {}
         for entry in entries:
             classes[entry.problem_class] = classes.get(entry.problem_class, 0) + 1
         return {

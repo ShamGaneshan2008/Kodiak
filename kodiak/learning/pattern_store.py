@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 import logging
@@ -296,14 +297,14 @@ class PatternStore:
 
     async def find_similar_by_embedding(
         self,
-        embedding: list[float],
+        embedding: builtins.list[float],
         language: str | None = None,
         limit: int = 10,
         min_similarity: float = 0.7,
-    ) -> list[SimilarityResult]:
+    ) -> builtins.list[SimilarityResult]:
         """Cosine similarity search using stored embeddings."""
         conditions = ["embedding IS NOT NULL", "status = 'active'"]
-        params: list[Any] = []
+        params: builtins.list[Any] = []
         idx = 1
 
         if language:
@@ -323,7 +324,7 @@ class PatternStore:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(query, *params)
 
-        results: list[SimilarityResult] = []
+        results: builtins.list[SimilarityResult] = []
         for row in rows:
             stored_emb = json.loads(row["embedding"])
             score = self._cosine_similarity(embedding, stored_emb)
@@ -335,8 +336,10 @@ class PatternStore:
         results.sort(key=lambda r: r.similarity_score, reverse=True)
         return results[:limit]
 
-    async def find_by_tags(self, tags: list[str], language: str | None = None) -> list[Pattern]:
-        params: list[Any] = [json.dumps(tags)]
+    async def find_by_tags(
+        self, tags: builtins.list[str], language: str | None = None
+    ) -> builtins.list[Pattern]:
+        params: builtins.list[Any] = [json.dumps(tags)]
         conditions = ["tags @> $1::jsonb", "status = 'active'"]
         idx = 2
 
@@ -352,8 +355,8 @@ class PatternStore:
         return [self._row_to_pattern(r) for r in rows]
 
     async def count(self, filters: PatternFilter | None = None) -> int:
-        conditions: list[str] = []
-        params: list[Any] = []
+        conditions: builtins.list[str] = []
+        params: builtins.list[Any] = []
         idx = 1
 
         if filters:
@@ -396,7 +399,7 @@ class PatternStore:
         }
 
     @staticmethod
-    def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    def _cosine_similarity(a: builtins.list[float], b: builtins.list[float]) -> float:
         if len(a) != len(b):
             return 0.0
         dot = sum(x * y for x, y in zip(a, b, strict=False))

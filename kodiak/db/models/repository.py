@@ -6,12 +6,17 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from kodiak.db.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from kodiak.db.models.task import Task
+    from kodiak.db.models.user import User
 
 
 class GitHubInstallation(UUIDMixin, TimestampMixin, Base):
@@ -35,7 +40,7 @@ class GitHubInstallation(UUIDMixin, TimestampMixin, Base):
     permissions: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     events: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
 
-    owner: Mapped[User] = relationship("User", back_populates="installations")  # noqa: F821
+    owner: Mapped[User] = relationship("User", back_populates="installations")
     repositories: Mapped[list[Repository]] = relationship(
         "Repository", back_populates="installation", cascade="all, delete-orphan"
     )
@@ -72,9 +77,7 @@ class Repository(UUIDMixin, TimestampMixin, Base):
     installation: Mapped[GitHubInstallation] = relationship(
         "GitHubInstallation", back_populates="repositories"
     )
-    tasks: Mapped[list[Task]] = relationship(  # noqa: F821
-        "Task", back_populates="repository"
-    )
+    tasks: Mapped[list[Task]] = relationship("Task", back_populates="repository")
 
     def __repr__(self) -> str:
         return f"<Repository full_name={self.full_name!r}>"

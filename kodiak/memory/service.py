@@ -4,6 +4,7 @@ Semantic, and Procedural Memory systems."""
 
 from __future__ import annotations
 
+import builtins
 import uuid
 from collections.abc import Sequence
 from pathlib import Path
@@ -125,23 +126,23 @@ class MemoryService:
         try:
             if memory_type is MemoryType.WORKING:
                 task_id = self._coerce_uuid(metadata.get("task_id")) or uuid.uuid4()
-                item = await self.working.create_working_memory(
+                working_item = await self.working.create_working_memory(
                     task_id=task_id,
                     goal=content,
                     context=dict(metadata.get("context") or {}),
                 )
-                return self.working.to_memory(item)
+                return self.working.to_memory(working_item)
 
             if memory_type is MemoryType.SHORT_TERM:
                 session_id = str(metadata.get("session_id", "default"))
                 role = str(metadata.get("role", "user"))
-                item = await self.short_term.add_item(
+                short_term_item = await self.short_term.add_item(
                     session_id=session_id,
                     content=content,
                     role=role,
                     metadata=metadata,
                 )
-                return self.short_term.to_memory(item)
+                return self.short_term.to_memory(short_term_item)
 
             return await self.long_term.add_memory(
                 content=content,
@@ -265,7 +266,7 @@ class MemoryService:
 
     async def delete_by_tags(
         self,
-        tags: list[str],
+        tags: builtins.list[str],
         memory_type: MemoryType | None = None,
     ) -> int:
         """Delete memories matching any of the given tags.
@@ -289,7 +290,7 @@ class MemoryService:
         memory_types: Sequence[MemoryType] | None = None,
         tags: Sequence[str] | None = None,
         limit: int = 10,
-    ) -> list[SearchResult]:
+    ) -> builtins.list[SearchResult]:
         """Perform unified retrieval across all memory systems.
 
         Args:
@@ -343,7 +344,7 @@ class MemoryService:
             token_budget=token_budget,
         )
 
-    async def consolidate(self, limit: int = 50) -> list[ConsolidationResult]:
+    async def consolidate(self, limit: int = 50) -> builtins.list[ConsolidationResult]:
         """Run pending working memory consolidation jobs.
 
         Args:

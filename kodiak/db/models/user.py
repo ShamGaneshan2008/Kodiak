@@ -6,12 +6,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from kodiak.db.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from kodiak.db.models.repository import GitHubInstallation
 
 
 class User(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
@@ -37,7 +41,7 @@ class User(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     api_keys: Mapped[list[APIKey]] = relationship(
         "APIKey", back_populates="user", cascade="all, delete-orphan"
     )
-    installations: Mapped[list[GitHubInstallation]] = relationship(  # noqa: F821
+    installations: Mapped[list[GitHubInstallation]] = relationship(
         "GitHubInstallation", back_populates="owner"
     )
 
