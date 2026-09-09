@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from kodiak.orchestration.local_storage import LocalStateStore
@@ -24,6 +25,16 @@ async def get_memory(item_id: str) -> MemoryView:
 
 
 @router.get("/history")
-async def task_history(limit: int = Query(10, ge=1, le=1000)) -> list[dict[str, object]]:
+async def task_history(
+    limit: int = Query(10, ge=1, le=1000),
+    path: Path = Query(Path("."), description="Repository path containing .kodiak state."),
+) -> list[dict[str, object]]:
     """Return recent task history rooted at the server workspace."""
-    return LocalStateStore(Path.cwd()).history(limit)
+    try:
+        return await run_in_threadpool(_task_history, path, limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _task_history(path: Path, limit: int) -> list[dict[str, object]]:
+    return LocalStateStore(path).history(limit)
