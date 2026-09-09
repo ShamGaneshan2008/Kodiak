@@ -94,13 +94,30 @@ class LocalStateStore:
 
     def save_run(self, task_id: str, record: Mapping[str, Any]) -> Path:
         """Save a sanitized per-run report under a traversal-safe filename."""
-        safe_id = re.sub(r"[^A-Za-z0-9_.-]", "-", task_id).strip(".-")
-        if not safe_id:
-            raise ValueError("Task ID does not contain a safe filename character.")
+        safe_id = self._safe_task_id(task_id)
         path = self.runs_dir / f"{safe_id}.json"
         self._assert_inside(path)
         self._write_json_atomic(path, sanitize_for_storage(dict(record)))
         return path
+
+    def load_run(self, task_id: str) -> dict[str, Any] | None:
+        """Load one valid per-run report without allowing path traversal."""
+        path = self.runs_dir / f"{self._safe_task_id(task_id)}.json"
+        self._assert_inside(path)
+        if not path.is_file():
+            return None
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return None
+        return value if isinstance(value, dict) else None
+
+    @staticmethod
+    def _safe_task_id(task_id: str) -> str:
+        safe_id = re.sub(r"[^A-Za-z0-9_.-]", "-", task_id).strip(".-")
+        if not safe_id or safe_id != task_id:
+            raise ValueError("Task ID contains unsafe filename characters.")
+        return safe_id
 
     def _write_json_atomic(self, path: Path, payload: object) -> None:
         self._assert_inside(path)
