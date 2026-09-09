@@ -43,15 +43,28 @@ experimental. They are not all connected to the local v1 task runner.
 
 ## Installation
 
-Prerequisites are Python 3.12 or newer and Git. Install the development tools to enable the task
-runner's pytest and Ruff checks.
+Kodiak requires Python 3.12 or newer. Install the published package from PyPI:
 
-```powershell
-git clone <your-kodiak-repository-url>
-cd Kodiak
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
+```console
+pip install kodiak-ai
+```
+
+No GitHub account is required to install or use Kodiak locally. Deterministic v1 mode does not
+require a paid LLM API key. A GitHub account and token are needed only when contributing to the
+project or using remote GitHub pull-request workflows.
+
+## Verify
+
+```console
+kodiak --help
+kodiak doctor
+```
+
+## Basic Usage
+
+```console
+kodiak analyze analyze . --deep
+kodiak task run "Improve the README quickstart section" --path . --dry-run
 ```
 
 ## Quickstart
@@ -202,6 +215,19 @@ python -m pytest -ra -vv --tb=short
 The task runner invokes the equivalent pytest and Ruff commands in the selected repository. A missing
 development tool is reported as unavailable; a real test or lint failure produces a non-success task
 status and is not hidden.
+
+### Local package validation
+
+Build and test the same artifacts that would be uploaded to PyPI:
+
+```console
+python -m pip install --upgrade build twine
+python -m build
+python -m twine check dist/*
+pip install dist/*.whl
+kodiak --help
+kodiak doctor
+```
 
 ## Architecture
 
