@@ -73,6 +73,19 @@ def reject(
     _resolve(path, approval_id, "rejected", json_output)
 
 
+@app.command("execute")
+def execute(
+    approval_id: str = typer.Argument(..., help="Approved request ID."),
+    path: Path = typer.Option(Path.cwd(), "--path", "-p", help="Repository path."),
+) -> None:
+    """Execute one explicitly approved local commit request."""
+    try:
+        ApprovalManager(path).execute_approved_commit(approval_id)
+    except (LookupError, RuntimeError, ValueError) as exc:
+        _fail(str(exc))
+    console.print("[bold green]Approved local commit created.[/bold green]")
+
+
 def _resolve(path: Path, approval_id: str, status: str, json_output: bool) -> None:
     try:
         item = ApprovalManager(path).resolve(approval_id, status)
@@ -83,7 +96,7 @@ def _resolve(path: Path, approval_id: str, status: str, json_output: bool) -> No
     else:
         console.print(
             f"[bold green]{item['approval_id']} marked {item['status']}.[/bold green] "
-            "No action was executed."
+            "No action was executed automatically."
         )
 
 

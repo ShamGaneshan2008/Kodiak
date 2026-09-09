@@ -38,7 +38,9 @@ class DoctorService:
         self._checks: list[DiagnosticCheck] = []
         self._provider = {name: "missing" for name in PROVIDER_KEYS}
 
-    def run(self) -> list[DiagnosticCheck]:
+    def run(self, cwd: str | Path | None = None) -> list[DiagnosticCheck]:
+        if cwd is not None:
+            self.cwd = Path(cwd).resolve()
         self._checks = []
         version_ok = sys.version_info >= (3, 12)
         self._add(
@@ -67,6 +69,10 @@ class DoctorService:
         self._provider = {
             name: "present" if bool(os.environ.get(name)) else "missing" for name in PROVIDER_KEYS
         }
+        self._checks.extend(
+            DiagnosticCheck(name, status, "value not displayed")
+            for name, status in self._provider.items()
+        )
         configured = [name for name, status in self._provider.items() if status == "present"]
         self._checks.append(
             DiagnosticCheck(

@@ -10,7 +10,11 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from kodiak.orchestration.task_orchestrator import InvalidRepositoryError, TaskOrchestrator
+from kodiak.orchestration.task_orchestrator import (
+    InvalidRepositoryError,
+    TaskOrchestrator,
+    TaskRunResult,
+)
 
 app = typer.Typer(
     help="Plan and run bounded, approval-gated local coding tasks.",
@@ -34,7 +38,7 @@ def run_task(
 ) -> None:
     """Analyze, plan, safely edit, check, review, and record one local task."""
     try:
-        result = TaskOrchestrator().run(
+        result: TaskRunResult = TaskOrchestrator().run(
             instruction,
             path,
             dry_run=dry_run,
@@ -52,7 +56,7 @@ def run_task(
         raise typer.Exit(code=1)
 
 
-def _render(result: object) -> None:
+def _render(result: TaskRunResult) -> None:
     plan = result.plan
     if plan is not None:
         plan_table = Table(title="Task plan")

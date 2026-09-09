@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from kodiak.orchestration.v1_models import ApprovalRequest
 
 _SECRET_FIELD_FRAGMENTS = (
     "api_key",
@@ -88,9 +91,72 @@ class LocalStateStore:
             return []
         return [item for item in value if isinstance(item, dict)]
 
-    def save_approvals(self, approvals: list[Mapping[str, Any]]) -> None:
+    def save_approvals(self, approvals: Sequence[Mapping[str, Any]]) -> None:
         payload = sanitize_for_storage([dict(item) for item in approvals])
         self._write_json_atomic(self.approvals_path, payload)
+
+    def approvals(self, *, status: str | None = None) -> list[dict[str, Any]]:
+        """Compatibility view of approval records, optionally filtered by status."""
+        approvals = self.load_approvals()
+        if status is not None:
+            approvals = [item for item in approvals if item.get("status") == status]
+        return approvals
+
+    def create_approval(
+        self,
+        *,
+        task_id: str,
+        action: str,
+        reason: str,
+        risk_level: str,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> ApprovalRequest:
+        from datetime import UTC, datetime
+        from uuid import uuid4
+
+        from kodiak.orchestration.v1_models import ApprovalRequest
+
+        now = datetime.now(UTC).isoformat()
+        request = ApprovalRequest(
+            approval_id=f"apr_{uuid4().hex[:12]}",
+            task_id=task_id,
+            action=action,
+            reason=reason,
+            risk_level=risk_level,
+            created_at=now,
+            updated_at=now,
+            metadata=dict(metadata or {}),
+        )
+        approvals = self.load_approvals()
+        approvals.append(request.to_dict())
+        self.save_approvals(approvals)
+        return request
+
+    def update_approval(self, approval_id: str, status: str) -> dict[str, Any] | None:
+        approvals = self.load_approvals()
+        for item in approvals:
+            if item.get("approval_id") != approval_id:
+                continue
+            item["status"] = status
+            self.save_approvals(approvals)
+            return item
+        return None
+
+    def update_approval_metadata(
+        self, approval_id: str, values: Mapping[str, Any]
+    ) -> dict[str, Any] | None:
+        approvals = self.load_approvals()
+        for item in approvals:
+            if item.get("approval_id") != approval_id:
+                continue
+            metadata = item.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+                item["metadata"] = metadata
+            metadata.update(values)
+            self.save_approvals(approvals)
+            return item
+        return None
 
     def save_run(self, task_id: str, record: Mapping[str, Any]) -> Path:
         """Save a sanitized per-run report under a traversal-safe filename."""
@@ -111,6 +177,10 @@ class LocalStateStore:
         except (OSError, UnicodeError, json.JSONDecodeError):
             return None
         return value if isinstance(value, dict) else None
+
+    def get_run(self, task_id: str) -> dict[str, Any] | None:
+        """Compatibility alias for loading one task run."""
+        return self.load_run(task_id)
 
     @staticmethod
     def _safe_task_id(task_id: str) -> str:
