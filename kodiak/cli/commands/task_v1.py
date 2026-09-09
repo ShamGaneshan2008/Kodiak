@@ -99,4 +99,8 @@ def _render(result: object) -> None:
         details.append("[bold]Dry run:[/bold] no source files were changed.")
     elif result.no_commit:
         details.append("[bold]Commit:[/bold] disabled; no commit was created.")
+        details.append(
+            f'[bold]Inspect:[/bold] kodiak git diff-summary --path "{result.repository_path}"'
+        )
+        details.append(f'[bold]Inspect:[/bold] git -C "{result.repository_path}" diff --')
     console.print(Panel("\n".join(details), title="Kodiak task report", border_style="green"))

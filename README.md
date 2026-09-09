@@ -13,7 +13,9 @@
 
 ## What Kodiak is
 
-Kodiak is an open-source AI software engineering framework that uses specialized agents to analyze repositories, plan code changes, apply safe edits, run tests, review diffs, and manage task memory. It is designed to turn high-level software tasks into safer, test-backed code changes with explicit approval gates for risky operations.
+Kodiak is an open-source AI software engineering framework that uses specialized agents to analyze
+repositories, plan safe code changes, run tests, review diffs, and store task history. Kodiak v1
+focuses on a local, deterministic, approval-aware workflow for small coding tasks.
 
 ## Current v1 status
 

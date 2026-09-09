@@ -98,7 +98,9 @@ def test_task_dry_run_plans_without_source_writes_and_records_history(tmp_path: 
     assert result.changed_files == ()
     assert (root / "README.md").read_bytes() == before
     assert "not executed" in result.review_summary
-    assert LocalStateStore(root).history(1)[0]["final_status"] == "dry_run"
+    history = LocalStateStore(root).history(1)[0]
+    assert history["final_status"] == "dry_run"
+    assert history["check_summary"] == {"dry_run": 3}
 
 
 def test_readme_no_commit_is_idempotent_and_never_duplicates_quickstart(tmp_path: Path) -> None:
@@ -109,10 +111,37 @@ def test_readme_no_commit_is_idempotent_and_never_duplicates_quickstart(tmp_path
     readme = (root / "README.md").read_text(encoding="utf-8")
     assert first.final_status == "completed"
     assert first.changed_files == ("README.md",)
-    assert second.final_status == "completed"
+    assert second.final_status == "already_satisfied"
     assert second.changed_files == ()
+    assert "already satisfied" in second.review_summary
     assert readme.casefold().count("## quickstart") == 1
     assert first.approval_id is None
+
+
+def test_no_commit_cli_prints_diff_inspection_commands(tmp_path: Path, monkeypatch: Any) -> None:
+    result = TaskOrchestrator(tester=PassingTester()).run(
+        "Improve the README quickstart section", _readme_repo(tmp_path), no_commit=True
+    )
+
+    class StubOrchestrator:
+        def run(self, *_args: Any, **_kwargs: Any) -> Any:
+            return result
+
+    monkeypatch.setattr("kodiak.cli.commands.task_v1.TaskOrchestrator", StubOrchestrator)
+    invoked = runner.invoke(
+        app,
+        [
+            "task",
+            "run",
+            "Improve the README quickstart section",
+            "--path",
+            str(tmp_path),
+            "--no-commit",
+        ],
+    )
+    assert invoked.exit_code == 0
+    assert "kodiak git diff-summary --path" in invoked.stdout
+    assert "git -C" in invoked.stdout
 
 
 def test_health_check_dry_run_verifies_import_and_proposes_test(tmp_path: Path) -> None:
@@ -318,6 +347,7 @@ def test_task_result_serializes_to_json(tmp_path: Path) -> None:
     assert payload["task_id"].startswith("task_")
     assert payload["plan"]["task_type"] == "readme_quickstart"
     assert isinstance(payload["checks"][0]["command"], list)
+    assert payload["check_summary"] == {"dry_run": 3}
 
 
 def test_malformed_local_state_is_handled_safely(tmp_path: Path) -> None:

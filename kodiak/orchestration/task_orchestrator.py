@@ -131,7 +131,13 @@ class TaskRunResult:
 
     @property
     def successful(self) -> bool:
-        return self.final_status in {"completed", "completed_with_warnings", "dry_run"}
+        return self.final_status in {
+            "already_satisfied",
+            "already_satisfied_with_warnings",
+            "completed",
+            "completed_with_warnings",
+            "dry_run",
+        }
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -147,6 +153,10 @@ class TaskRunResult:
             "proposed_changes": [change.to_dict() for change in self.proposed_changes],
             "changed_files": list(self.changed_files),
             "checks": [check.to_dict() for check in self.checks],
+            "check_summary": {
+                status: sum(check.status == status for check in self.checks)
+                for status in sorted({check.status for check in self.checks})
+            },
             "review_summary": self.review_summary,
             "approval_id": self.approval_id,
             "error": self.error,
@@ -628,12 +638,20 @@ class TaskOrchestrator:
                         checks = self.tester.run(root)
                         git = self.git_service.diff_summary(root)
                         review = self.reviewer.review(proposed, checks, git)
+                        if not proposed:
+                            review = (
+                                f"The requested repository state is already satisfied. {review}"
+                            )
                         if any(check.status in {"failed", "error"} for check in checks):
                             status = "failed_checks"
                         elif any(check.status in {"missing", "skipped"} for check in checks):
-                            status = "completed_with_warnings"
+                            status = (
+                                "completed_with_warnings"
+                                if proposed
+                                else "already_satisfied_with_warnings"
+                            )
                         else:
-                            status = "completed"
+                            status = "completed" if proposed else "already_satisfied"
 
                         if (
                             changed_files
@@ -682,6 +700,7 @@ class TaskOrchestrator:
                 "final_status",
                 "changed_files",
                 "checks",
+                "check_summary",
                 "review_summary",
                 "approval_id",
                 "error",

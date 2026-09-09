@@ -23,9 +23,8 @@ flowchart TD
     K --> L["LocalStateStore"]
 ```
 
-The CLI uses `TaskOrchestrator`. The database-backed task API is separate and experimental; it does
-not currently expose this local file-editing workflow. The local v1 workflow never pushes to a
-remote.
+The CLI and the repository-local `/tasks` API use `TaskOrchestrator`. The database-backed project
+task API remains separate and experimental. The local v1 workflow never pushes to a remote.
 
 ## Components
 
@@ -74,10 +73,11 @@ and display only `present` or `missing`.
 
 ## API boundary
 
-The FastAPI application exposes `/health`, `/agents`, `/approvals`, approval decision routes, and
-`/memory/history`, along with experimental database-backed project/task routes. The API does not
-currently run the local `TaskOrchestrator`. Authentication, multi-user authorization, and remote
-deployment hardening remain outside the local v1 scope.
+The FastAPI application exposes `/health`, `/agents`, `/approvals`, approval decision routes,
+`/memory/history`, and repository-local `/tasks/run` and `/tasks/{task_id}` routes backed by
+`TaskOrchestrator`. The separate database-backed project/task routes remain experimental.
+Authentication, multi-user authorization, and remote deployment hardening remain outside the local
+v1 scope; the local-path API is intended for trusted loopback use.
 
 ## Experimental packages
 
