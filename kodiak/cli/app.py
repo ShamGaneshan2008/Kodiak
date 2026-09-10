@@ -11,6 +11,8 @@ from __future__ import annotations
 from typing import Final, Literal
 
 import typer
+from click import Context
+from typer.core import TyperGroup
 
 from kodiak.cli.commands.agents import app as agents_app
 from kodiak.cli.commands.analyze import app as analyze_app
@@ -30,6 +32,8 @@ from kodiak.cli.commands.plan import app as plan_app
 # from kodiak.cli.commands.status import app as status_app
 from kodiak.cli.commands.task_v1 import app as task_app
 from kodiak.cli.commands.version import app as version_app
+from kodiak.cli.ui.banner import print_banner, should_show_banner
+from kodiak.cli.ui.console import get_console, terminal_width
 
 APP_NAME: Final[str] = "kodiak"
 APP_HELP: Final[str] = "Kodiak: an experimental, approval-gated software engineering toolkit."
@@ -40,21 +44,39 @@ _PRETTY_EXCEPTIONS_SHOW_LOCALS: Final[bool] = False
 _ADD_COMPLETION: Final[bool] = True
 _NO_ARGS_IS_HELP: Final[bool] = True
 _HELP_OPTION_NAMES: Final[list[str]] = ["-h", "--help"]
+_BANNER_WIDTH: Final[int] = 60
+_INVOCATION_ARGS_KEY: Final[str] = "kodiak_invocation_args"
 
 
-def _root_callback(ctx: typer.Context) -> None:
-    """Root callback and extension point for future global options.
+class _KodiakGroup(TyperGroup):
+    """Root group that retains arguments needed for output-mode detection."""
 
-    This callback intentionally performs no business logic. It exists so
-    that global options (e.g. ``--verbose``, ``--debug``, ``--config``,
-    ``--no-color``) can be added in the future without altering the
-    structure of the root application.
+    def parse_args(self, ctx: Context, args: list[str]) -> list[str]:
+        ctx.meta[_INVOCATION_ARGS_KEY] = tuple(args)
+        return super().parse_args(ctx, args)
+
+
+def _root_callback(
+    ctx: typer.Context,
+    no_banner: bool = typer.Option(
+        False,
+        "--no-banner",
+        help="Do not show the Kodiak startup banner.",
+    ),
+) -> None:
+    """Configure invocation-wide presentation options and startup branding.
 
     Args:
         ctx: The Typer context for the current invocation.
+        no_banner: Whether startup branding was disabled explicitly.
     """
     if ctx.obj is None:
         ctx.obj = {}
+    args = ctx.meta.get(_INVOCATION_ARGS_KEY, ())
+    json_mode = "--json" in args
+    help_mode = any(option in args for option in _HELP_OPTION_NAMES)
+    if not help_mode and should_show_banner(json_mode=json_mode, no_banner=no_banner):
+        print_banner(get_console(), compact=terminal_width() < _BANNER_WIDTH)
 
 
 def create_app() -> typer.Typer:
@@ -65,6 +87,7 @@ def create_app() -> typer.Typer:
         command groups attached via ``app.add_typer(...)``.
     """
     application = typer.Typer(
+        cls=_KodiakGroup,
         name=APP_NAME,
         help=APP_HELP,
         rich_markup_mode=_RICH_MARKUP_MODE,
