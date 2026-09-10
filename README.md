@@ -112,6 +112,12 @@ kodiak git diff-summary --path .
 Normal path and storage errors are reported without a traceback. `approval approve` and
 `approval reject` only update a decision record; they do not execute the requested action.
 
+Kodiak opens normal CLI commands with a terminal-native startup banner inspired by the Kodiak
+logo. The geometric mark preserves its circular core, four surrounding nodes, and paired code-like
+brackets without loading an image at runtime. Disable the banner for a command with the global
+`--no-banner` option, or for the current PowerShell session with
+`$env:KODIAK_NO_BANNER = "1"`. JSON output always suppresses it automatically.
+
 ## Task runner
 
 ### README Quickstart improvement
