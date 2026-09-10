@@ -12,6 +12,7 @@ Notes:
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Final
 
@@ -25,6 +26,9 @@ from rich.text import Text
 __all__ = [
     "KODIAK_LOGO",
     "BannerStyle",
+    "get_banner",
+    "should_show_banner",
+    "print_banner",
     "render_welcome_banner",
     "render_success_banner",
     "render_error_banner",
@@ -36,14 +40,89 @@ __all__ = [
 
 console: Final[Console] = Console()
 
-KODIAK_LOGO: Final[str] = r"""
-   ██╗  ██╗ ██████╗ ██████╗ ██╗ █████╗ ██╗  ██╗
-   ██║ ██╔╝██╔═══██╗██╔══██╗██║██╔══██╗██║ ██╔╝
-   █████╔╝ ██║   ██║██║  ██║██║███████║█████╔╝
-   ██╔═██╗ ██║   ██║██║  ██║██║██╔══██║██╔═██╗
-   ██║  ██╗╚██████╔╝██████╔╝██║██║  ██║██║  ██╗
-   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
-""".strip("\n")
+_FULL_SYMBOL: Final[tuple[str, ...]] = (
+    "●             ●",
+    "  ╲         ╱",
+    "╭╱             ╲╮",
+    "╲       ◉       ╱",
+    "╰╲             ╱╯",
+    "  ╱         ╲",
+    "●             ●",
+)
+_COMPACT_SYMBOL: Final[tuple[str, ...]] = (
+    "●         ●",
+    "   ‹  ◉  ›",
+    "●         ●",
+)
+_FULL_SYMBOL_ASCII: Final[tuple[str, ...]] = (
+    "o             o",
+    "  \\         /",
+    "+/             \\+",
+    "\\       O       /",
+    "+\\             /+",
+    "  /         \\",
+    "o             o",
+)
+_COMPACT_SYMBOL_ASCII: Final[tuple[str, ...]] = (
+    "o         o",
+    "   <  O  >",
+    "o         o",
+)
+_WORDMARK: Final[str] = "kodiak"
+_SUBTITLE: Final[str] = "Local AI software engineering agent"
+
+# Kept as a public constant for callers of the original presentation API.
+KODIAK_LOGO: Final[str] = "\n".join(_FULL_SYMBOL)
+
+
+def get_banner(compact: bool = False) -> str:
+    """Return a plain-text Kodiak startup banner.
+
+    The full mark mirrors the source logo's four nodes, circular core, and
+    opposing bracket forms. The compact mark preserves those features in a
+    three-line silhouette for narrow terminals.
+    """
+    symbol = _COMPACT_SYMBOL if compact else _FULL_SYMBOL
+    width = max(len(_SUBTITLE), *(len(line) for line in symbol))
+    lines = [line.center(width).rstrip() for line in symbol]
+    lines.extend(("", _WORDMARK.center(width).rstrip(), _SUBTITLE.center(width).rstrip()))
+    return "\n".join(lines)
+
+
+def should_show_banner(json_mode: bool = False, no_banner: bool = False) -> bool:
+    """Return whether human-oriented startup branding should be displayed."""
+    env_disabled = os.environ.get("KODIAK_NO_BANNER", "").strip() == "1"
+    return not (json_mode or no_banner or env_disabled)
+
+
+def _supports_unicode_symbol(console: Console) -> bool:
+    """Return whether the console's encoding can represent the logo glyphs."""
+    encoding = getattr(console.file, "encoding", None)
+    if not encoding:
+        return True
+    try:
+        KODIAK_LOGO.encode(encoding)
+    except (LookupError, UnicodeEncodeError):
+        return False
+    return True
+
+
+def print_banner(console: Console, compact: bool = False) -> None:
+    """Print the Kodiak startup banner with restrained, optional Rich styling."""
+    if _supports_unicode_symbol(console):
+        symbol = _COMPACT_SYMBOL if compact else _FULL_SYMBOL
+    else:
+        symbol = _COMPACT_SYMBOL_ASCII if compact else _FULL_SYMBOL_ASCII
+    styles: tuple[str, ...]
+    if compact:
+        styles = ("red", "bold white", "blue")
+    else:
+        styles = ("bright_red", "red", "red", "bold white", "blue", "blue", "bright_blue")
+    for line, style in zip(symbol, styles, strict=True):
+        console.print(Text(line, style=style, justify="center"))
+    console.print()
+    console.print(Text(_WORDMARK, style="bold", justify="center"))
+    console.print(Text(_SUBTITLE, style="dim", justify="center"))
 
 
 @dataclass(frozen=True, slots=True)
